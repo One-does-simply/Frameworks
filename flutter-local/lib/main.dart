@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'debug/debug_panel.dart';
@@ -341,9 +342,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 
   void _showCreateNew() {
-    showDialog(
-      context: context,
-      builder: (ctx) => const _CreateNewDialog(),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const _CreateNewScreen()),
     );
   }
 
@@ -887,84 +888,241 @@ class _RunOrAddDialog extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Create New dialog
+// Create New screen — Build Helper prompt with copy-to-clipboard
 // ---------------------------------------------------------------------------
 
-class _CreateNewDialog extends StatelessWidget {
-  const _CreateNewDialog();
+class _CreateNewScreen extends StatefulWidget {
+  const _CreateNewScreen();
+
+  @override
+  State<_CreateNewScreen> createState() => _CreateNewScreenState();
+}
+
+class _CreateNewScreenState extends State<_CreateNewScreen> {
+  String? _prompt;
+  bool _copied = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrompt();
+  }
+
+  Future<void> _loadPrompt() async {
+    final text = await rootBundle.loadString('assets/build-helper-prompt.txt');
+    if (mounted) setState(() => _prompt = text);
+  }
+
+  Future<void> _copyPrompt() async {
+    if (_prompt == null) return;
+    await Clipboard.setData(ClipboardData(text: _prompt!));
+    if (mounted) {
+      setState(() => _copied = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Build Helper prompt copied to clipboard!'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return AlertDialog(
-      title: Row(
-        children: [
-          Icon(Icons.auto_awesome, color: theme.colorScheme.primary),
-          const SizedBox(width: 10),
-          const Text('Create a New App'),
-        ],
-      ),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 440),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Use an ODS Build Helper to create your app spec with AI assistance.',
-              style: theme.textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 20),
-            _infoTile(
-              theme,
-              Icons.smart_toy_outlined,
-              'AI-Powered',
-              'Describe your app in plain language and get a complete ODS spec.',
-            ),
-            const SizedBox(height: 12),
-            _infoTile(
-              theme,
-              Icons.verified_outlined,
-              'Guardrails Built In',
-              'The Build Helper knows the ODS spec rules and ensures your app is valid.',
-            ),
-            const SizedBox(height: 12),
-            _infoTile(
-              theme,
-              Icons.rocket_launch_outlined,
-              'Getting Started',
-              'Use the Claude Build Helper with the ODS CLAUDE.MD prompt file. '
-                  'Visit github.com/One-does-simply/BuildHelpers for details.',
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        FilledButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Got it'),
-        ),
-      ],
-    );
-  }
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
-  static Widget _infoTile(ThemeData theme, IconData icon, String title, String body) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 22, color: theme.colorScheme.primary),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 2),
-              Text(body, style: theme.textTheme.bodySmall),
-            ],
+    return Scaffold(
+      appBar: AppBar(title: const Text('Create a New App')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Hero section
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: isDark
+                          ? [const Color(0xFF1E1B4B), const Color(0xFF312E81)]
+                          : [const Color(0xFF4F46E5), const Color(0xFF7C3AED)],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.auto_awesome, size: 36, color: Colors.white),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Build with AI Assistance',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Use any AI chatbot to create your ODS app. Just paste the Build Helper '
+                        'prompt and describe the app you want — the AI will generate a complete, '
+                        'valid spec file for you.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.85),
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 28),
+
+                // Steps
+                Text(
+                  'How It Works',
+                  style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 16),
+                _StepTile(
+                  number: '1',
+                  colorScheme: colorScheme,
+                  title: 'Copy the Build Helper Prompt',
+                  body: 'Tap the button below to copy the ODS Build Helper prompt to your clipboard.',
+                ),
+                _StepTile(
+                  number: '2',
+                  colorScheme: colorScheme,
+                  title: 'Open Any AI Chatbot',
+                  body: 'Works with ChatGPT, Claude, Gemini, Copilot, or any other AI assistant — free tiers included.',
+                ),
+                _StepTile(
+                  number: '3',
+                  colorScheme: colorScheme,
+                  title: 'Paste & Describe Your App',
+                  body: 'Paste the prompt as your first message, then describe the app you want to build. '
+                      'The AI will walk you through it step by step.',
+                ),
+                _StepTile(
+                  number: '4',
+                  colorScheme: colorScheme,
+                  title: 'Save & Load',
+                  body: 'Save the generated JSON as a .json file, then open it here with "Open Spec File".',
+                ),
+
+                const SizedBox(height: 28),
+
+                // Copy button
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _prompt == null ? null : _copyPrompt,
+                    icon: Icon(_copied ? Icons.check : Icons.copy),
+                    label: Text(_copied ? 'Copied!' : 'Copy Build Helper Prompt'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // What's in the prompt
+                Card(
+                  child: ExpansionTile(
+                    leading: Icon(Icons.visibility_outlined, color: colorScheme.primary),
+                    title: const Text('Preview the prompt'),
+                    childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.black26 : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        constraints: const BoxConstraints(maxHeight: 300),
+                        child: SingleChildScrollView(
+                          child: SelectableText(
+                            _prompt ?? 'Loading...',
+                            style: TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                              color: isDark ? Colors.white70 : Colors.black87,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 32),
+              ],
+            ),
           ),
         ),
-      ],
+      ),
+    );
+  }
+}
+
+class _StepTile extends StatelessWidget {
+  final String number;
+  final ColorScheme colorScheme;
+  final String title;
+  final String body;
+
+  const _StepTile({
+    required this.number,
+    required this.colorScheme,
+    required this.title,
+    required this.body,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              number,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: colorScheme.onPrimaryContainer,
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text(body, style: theme.textTheme.bodySmall?.copyWith(height: 1.4)),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
