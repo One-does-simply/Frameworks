@@ -178,6 +178,25 @@ class LoadedAppsStore {
     await _save();
   }
 
+  /// Updates an existing app entry's metadata and spec JSON.
+  Future<void> updateApp({
+    required String id,
+    required String name,
+    required String description,
+    required String specJson,
+  }) async {
+    final index = _apps.indexWhere((a) => a.id == id);
+    if (index == -1) return;
+    _apps[index] = LoadedAppEntry(
+      id: id,
+      name: name,
+      description: description,
+      specJson: specJson,
+      isBundled: _apps[index].isBundled,
+    );
+    await _save();
+  }
+
   /// Removes a user-added app from the list. Bundled apps are protected
   /// from removal at the UI layer (remove button is not shown).
   Future<void> removeApp(String id) async {

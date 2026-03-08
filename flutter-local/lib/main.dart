@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'debug/debug_panel.dart';
 import 'engine/app_engine.dart';
 import 'engine/loaded_apps_store.dart';
+import 'engine/settings_store.dart';
 import 'loader/spec_loader.dart';
 import 'renderer/page_renderer.dart';
 import 'screens/app_help_screen.dart';
@@ -16,18 +17,6 @@ import 'screens/ods_about_screen.dart';
 // Entry point
 // ---------------------------------------------------------------------------
 
-/// Application entry point.
-///
-/// Sets up a global [FlutterError.onError] handler so crashes are logged
-/// to the console (useful during development and in debug mode), then
-/// wraps the widget tree in a [ChangeNotifierProvider] that makes the
-/// single [AppEngine] instance available everywhere via `context.read`
-/// and `context.watch`.
-///
-/// ODS Architecture: One engine, one provider, one widget tree. The engine
-/// owns all state; widgets are pure projections of that state. This is the
-/// simplest reactive architecture Flutter offers, and it aligns perfectly
-/// with ODS's "keep it simple" philosophy.
 void main() {
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
@@ -36,9 +25,95 @@ void main() {
   };
 
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => AppEngine(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AppEngine()),
+        ChangeNotifierProvider(create: (_) => SettingsStore()),
+      ],
       child: const OdsFrameworkApp(),
+    ),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Color palette — a refined indigo/slate palette for a premium feel
+// ---------------------------------------------------------------------------
+
+const _seedColor = Color(0xFF4F46E5); // Indigo 600
+
+ColorScheme _lightScheme() => ColorScheme.fromSeed(
+      seedColor: _seedColor,
+      brightness: Brightness.light,
+    );
+
+ColorScheme _darkScheme() => ColorScheme.fromSeed(
+      seedColor: _seedColor,
+      brightness: Brightness.dark,
+    );
+
+ThemeData _buildTheme(ColorScheme colorScheme) {
+  final isDark = colorScheme.brightness == Brightness.dark;
+  return ThemeData(
+    colorScheme: colorScheme,
+    useMaterial3: true,
+    fontFamily: 'Segoe UI',
+    scaffoldBackgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+    appBarTheme: AppBarTheme(
+      centerTitle: false,
+      elevation: 0,
+      scrolledUnderElevation: 1,
+      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      foregroundColor: isDark ? Colors.white : const Color(0xFF1E293B),
+    ),
+    cardTheme: CardThemeData(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
+        ),
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(
+          color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.08),
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: colorScheme.primary, width: 2),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    ),
+    drawerTheme: DrawerThemeData(
+      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+    ),
+    dividerTheme: DividerThemeData(
+      color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06),
+    ),
+    chipTheme: ChipThemeData(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     ),
   );
 }
@@ -47,48 +122,57 @@ void main() {
 // Root widget
 // ---------------------------------------------------------------------------
 
-/// The root [MaterialApp] that switches between two screens:
-///   - [WelcomeScreen] when no spec is loaded (engine.app == null).
-///   - [AppShell] when a spec has been successfully loaded and parsed.
-///
-/// Watches the engine so the transition happens automatically when
-/// [AppEngine.loadSpec] succeeds.
-class OdsFrameworkApp extends StatelessWidget {
+class OdsFrameworkApp extends StatefulWidget {
   const OdsFrameworkApp({super.key});
+
+  @override
+  State<OdsFrameworkApp> createState() => _OdsFrameworkAppState();
+}
+
+class _OdsFrameworkAppState extends State<OdsFrameworkApp> {
+  bool _settingsReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initSettings();
+  }
+
+  Future<void> _initSettings() async {
+    final settings = context.read<SettingsStore>();
+    await settings.initialize();
+    if (mounted) setState(() => _settingsReady = true);
+  }
 
   @override
   Widget build(BuildContext context) {
     final engine = context.watch<AppEngine>();
-    final appName = engine.app?.appName ?? 'ODS Framework';
+    final settings = context.watch<SettingsStore>();
+    final appName = engine.app?.appName ?? 'One Does Simply';
+
+    if (!_settingsReady) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: _buildTheme(_lightScheme()),
+        home: const Scaffold(body: Center(child: CircularProgressIndicator())),
+      );
+    }
 
     return MaterialApp(
       title: appName,
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-        useMaterial3: true,
-      ),
+      theme: _buildTheme(_lightScheme()),
+      darkTheme: _buildTheme(_darkScheme()),
+      themeMode: settings.themeMode,
       home: engine.app == null ? const WelcomeScreen() : const AppShell(),
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-// Welcome / Spec Loader Screen
+// Welcome / Home Screen
 // ---------------------------------------------------------------------------
 
-/// The home screen shown before any spec is loaded.
-///
-/// Layout (top to bottom):
-///   1. "My Apps" — saved apps from [LoadedAppsStore] (bundled examples +
-///      user-added specs). Tapping one runs it immediately.
-///   2. "Load New App" — file picker button and URL text field for loading
-///      a fresh spec. New specs trigger a dialog asking "Just Run" or
-///      "Add to My Apps & Run".
-///
-/// ODS Ethos: Getting started should take one tap. The bundled example
-/// apps are always there in "My Apps" so a new user can explore without
-/// having to find or create a spec first.
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
 
@@ -97,7 +181,6 @@ class WelcomeScreen extends StatefulWidget {
 }
 
 class _WelcomeScreenState extends State<WelcomeScreen> {
-  final _urlController = TextEditingController();
   final _loadedAppsStore = LoadedAppsStore();
   bool _isLoading = false;
   bool _storeReady = false;
@@ -109,15 +192,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     _initStore();
   }
 
-  /// Initializes the [LoadedAppsStore], which reads saved apps from disk
-  /// and seeds the bundled examples on first run.
   Future<void> _initStore() async {
     await _loadedAppsStore.initialize();
     if (mounted) setState(() => _storeReady = true);
   }
 
-  /// Hands a JSON string to the engine for parsing and rendering.
-  /// On failure, captures the error message for display.
   Future<void> _runSpec(String jsonString) async {
     setState(() {
       _isLoading = true;
@@ -135,7 +214,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     }
   }
 
-  /// Opens the native file picker for `.json` files.
   Future<void> _pickFile() async {
     try {
       final json = await SpecLoader().loadFromFilePicker();
@@ -145,10 +223,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     }
   }
 
-  /// Fetches a spec from the URL typed into the text field.
   Future<void> _loadFromUrl() async {
-    final url = _urlController.text.trim();
-    if (url.isEmpty) return;
+    final url = await showDialog<String>(
+      context: context,
+      builder: (ctx) => _UrlInputDialog(),
+    );
+    if (url == null || url.isEmpty) return;
 
     setState(() {
       _isLoading = true;
@@ -169,16 +249,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     }
   }
 
-  /// Shows a dialog letting the user choose between "Just Run" (ephemeral)
-  /// and "Add to My Apps & Run" (persisted to [LoadedAppsStore]).
-  ///
-  /// Extracts the app name and description from the raw JSON for display
-  /// in the dialog and for storage if the user chooses to save.
   Future<void> _handleNewSpec(String specJson) async {
     if (!mounted) return;
 
-    // Best-effort metadata extraction — if the JSON is malformed, the
-    // engine will catch it later during full parsing.
     String appName = 'Untitled App';
     String appDescription = '';
     try {
@@ -195,7 +268,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       builder: (ctx) => _RunOrAddDialog(appName: appName),
     );
 
-    if (action == null) return; // User tapped Cancel.
+    if (action == null) return;
 
     if (action == _NewSpecAction.addAndRun) {
       await _loadedAppsStore.addApp(
@@ -203,27 +276,28 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         description: appDescription,
         specJson: specJson,
       );
-      if (mounted) setState(() {}); // Refresh the app list.
+      if (mounted) setState(() {});
     }
 
     await _runSpec(specJson);
   }
 
-  /// Confirms and removes a user-added app from [LoadedAppsStore].
-  /// Bundled apps cannot be removed (their cards don't show the X button).
   Future<void> _removeApp(LoadedAppEntry app) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Remove App'),
-        content: Text('Remove "${app.name}" from your loaded apps?'),
+        content: Text('Remove "${app.name}" from your apps?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancel'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
             child: const Text('Remove'),
           ),
         ],
@@ -236,154 +310,496 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    _urlController.dispose();
-    super.dispose();
+  Future<void> _editApp(LoadedAppEntry app) async {
+    final controller = TextEditingController(text: app.specJson);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => _SpecEditorDialog(controller: controller, appName: app.name),
+    );
+    controller.dispose();
+
+    if (result != null && result != app.specJson) {
+      String newName = app.name;
+      String newDesc = app.description;
+      try {
+        final parsed = jsonDecode(result) as Map<String, dynamic>;
+        newName = parsed['appName'] as String? ?? newName;
+        final help = parsed['help'] as Map<String, dynamic>?;
+        if (help != null) {
+          newDesc = help['overview'] as String? ?? '';
+        }
+      } catch (_) {}
+
+      await _loadedAppsStore.updateApp(
+        id: app.id,
+        name: newName,
+        description: newDesc,
+        specJson: result,
+      );
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _showCreateNew() {
+    showDialog(
+      context: context,
+      builder: (ctx) => const _CreateNewDialog(),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final settings = context.watch<SettingsStore>();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('ODS Framework'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            tooltip: 'About ODS',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const OdsAboutScreen()),
+      body: CustomScrollView(
+        slivers: [
+          // -- Hero header --
+          SliverToBoxAdapter(
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: isDark
+                      ? [const Color(0xFF1E1B4B), const Color(0xFF0F172A)]
+                      : [const Color(0xFF4F46E5), const Color(0xFF7C3AED)],
+                ),
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Top bar with settings
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          _ThemeToggle(
+                            themeMode: settings.themeMode,
+                            onChanged: (mode) => settings.setThemeMode(mode),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      // Title
+                      Text(
+                        'One Does Simply',
+                        style: theme.textTheme.headlineLarge?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Vibe Coding with Guardrails',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.8),
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Flutter Local Framework',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.6),
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Description
+                      Text(
+                        'A local implementation of the One Does Simply Framework that runs '
+                        'completely locally — no Internet or Cloud required.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.85),
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextButton.icon(
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const OdsAboutScreen()),
+                        ),
+                        icon: const Icon(Icons.arrow_forward, size: 16),
+                        label: const Text('Learn More'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
+
+          // -- My Apps section --
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 12),
+              child: Row(
+                children: [
+                  Text(
+                    'My Apps',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const Spacer(),
+                  _AddAppButton(
+                    onPickFile: _pickFile,
+                    onLoadUrl: _loadFromUrl,
+                    onCreateNew: _showCreateNew,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // -- Loading / Error states --
+          if (_isLoading)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            ),
+
+          if (_error != null)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colorScheme.errorContainer,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline, color: colorScheme.onErrorContainer, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _error!,
+                          style: TextStyle(color: colorScheme.onErrorContainer, fontSize: 13),
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.close, size: 18, color: colorScheme.onErrorContainer),
+                        onPressed: () => setState(() => _error = null),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // -- App list --
+          if (!_storeReady)
+            const SliverFillRemaining(
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_loadedAppsStore.apps.isEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(48),
+                child: Column(
+                  children: [
+                    Icon(Icons.apps_outlined, size: 48, color: Colors.grey.shade400),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No apps yet',
+                      style: theme.textTheme.titleMedium?.copyWith(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Tap + to add your first app',
+                      style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final app = _loadedAppsStore.apps[index];
+                    return _AppListTile(
+                      app: app,
+                      isLoading: _isLoading,
+                      onRun: () => _runSpec(app.specJson),
+                      onEdit: app.isBundled ? null : () => _editApp(app),
+                      onRemove: app.isBundled ? null : () => _removeApp(app),
+                    );
+                  },
+                  childCount: _loadedAppsStore.apps.length,
+                ),
+              ),
+            ),
+
+          // Bottom padding
+          const SliverToBoxAdapter(child: SizedBox(height: 32)),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Center(
-          child: ConstrainedBox(
-            // Cap width for readability on wide screens.
-            constraints: const BoxConstraints(maxWidth: 600),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Theme toggle widget
+// ---------------------------------------------------------------------------
+
+class _ThemeToggle extends StatelessWidget {
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onChanged;
+
+  const _ThemeToggle({required this.themeMode, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _themeButton(Icons.light_mode, ThemeMode.light, 'Light'),
+          _themeButton(Icons.auto_mode, ThemeMode.system, 'Auto'),
+          _themeButton(Icons.dark_mode, ThemeMode.dark, 'Dark'),
+        ],
+      ),
+    );
+  }
+
+  Widget _themeButton(IconData icon, ThemeMode mode, String tooltip) {
+    final isActive = themeMode == mode;
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => onChanged(mode),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: isActive
+              ? BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(8),
+                )
+              : null,
+          child: Icon(icon, size: 18, color: Colors.white.withValues(alpha: isActive ? 1.0 : 0.5)),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Add App button (dropdown with options)
+// ---------------------------------------------------------------------------
+
+class _AddAppButton extends StatelessWidget {
+  final VoidCallback onPickFile;
+  final VoidCallback onLoadUrl;
+  final VoidCallback onCreateNew;
+
+  const _AddAppButton({
+    required this.onPickFile,
+    required this.onLoadUrl,
+    required this.onCreateNew,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      onSelected: (value) {
+        switch (value) {
+          case 'file':
+            onPickFile();
+          case 'url':
+            onLoadUrl();
+          case 'new':
+            onCreateNew();
+        }
+      },
+      offset: const Offset(0, 40),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      itemBuilder: (ctx) => [
+        const PopupMenuItem(
+          value: 'file',
+          child: ListTile(
+            leading: Icon(Icons.folder_open),
+            title: Text('Open Spec File'),
+            subtitle: Text('Load a .json file from your device'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'url',
+          child: ListTile(
+            leading: Icon(Icons.link),
+            title: Text('Load from URL'),
+            subtitle: Text('Fetch a spec from the web'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: 'new',
+          child: ListTile(
+            leading: Icon(Icons.auto_awesome),
+            title: Text('Create New'),
+            subtitle: Text('Build an app with AI assistance'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.add, size: 18, color: Theme.of(context).colorScheme.onPrimary),
+            const SizedBox(width: 6),
+            Text(
+              'Add App',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// App list tile — rich card with run/edit/remove actions
+// ---------------------------------------------------------------------------
+
+class _AppListTile extends StatelessWidget {
+  final LoadedAppEntry app;
+  final bool isLoading;
+  final VoidCallback onRun;
+  final VoidCallback? onEdit;
+  final VoidCallback? onRemove;
+
+  const _AppListTile({
+    required this.app,
+    required this.isLoading,
+    required this.onRun,
+    this.onEdit,
+    this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Card(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: isLoading ? null : onRun,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
               children: [
-                // -- Header --
-                Text(
-                  'One Does Simply',
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+                // App icon
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Load a spec to get started, or launch a saved app.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey,
+                  child: Icon(
+                    app.isBundled ? Icons.apps_rounded : Icons.description_outlined,
+                    color: colorScheme.onPrimaryContainer,
+                    size: 22,
                   ),
-                  textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 32),
-
-                // -- My Apps section --
-                _sectionDivider('My Apps'),
-                const SizedBox(height: 12),
-
-                if (!_storeReady)
-                  const Center(child: CircularProgressIndicator())
-                else if (_loadedAppsStore.apps.isEmpty)
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'No apps yet. Load a spec below to get started.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey.shade600),
-                      ),
-                    ),
-                  )
-                else
-                  ..._loadedAppsStore.apps.map((app) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: _LoadedAppCard(
-                          app: app,
-                          onTap: _isLoading
-                              ? null
-                              : () => _runSpec(app.specJson),
-                          onRemove: app.isBundled
-                              ? null
-                              : () => _removeApp(app),
-                        ),
-                      )),
-
-                const SizedBox(height: 24),
-
-                // -- Load New App section --
-                _sectionDivider('Load New App'),
-                const SizedBox(height: 12),
-
-                // File picker button.
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _isLoading ? null : _pickFile,
-                        icon: const Icon(Icons.folder_open),
-                        label: const Text('Open Spec File'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
+                const SizedBox(width: 14),
+                // App info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        app.name,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // URL input row.
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _urlController,
-                        decoration: const InputDecoration(
-                          hintText: 'Enter spec URL...',
-                          border: OutlineInputBorder(),
-                          isDense: true,
+                      if (app.description.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          app.description,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.7),
+                          ),
                         ),
-                        onSubmitted: (_) => _loadFromUrl(),
+                      ],
+                      const SizedBox(height: 4),
+                      Text(
+                        app.isBundled ? 'Example' : 'Custom',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: app.isBundled
+                              ? colorScheme.primary
+                              : colorScheme.tertiary,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: _isLoading ? null : _loadFromUrl,
-                      child: const Text('Load'),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-
-                // Loading indicator.
-                if (_isLoading) ...[
-                  const SizedBox(height: 16),
-                  const Center(child: CircularProgressIndicator()),
+                // Action buttons
+                if (onEdit != null || onRemove != null) ...[
+                  if (onEdit != null)
+                    IconButton(
+                      icon: Icon(Icons.edit_outlined, size: 20, color: colorScheme.onSurfaceVariant),
+                      tooltip: 'Edit Spec',
+                      onPressed: onEdit,
+                    ),
+                  if (onRemove != null)
+                    IconButton(
+                      icon: Icon(Icons.delete_outline, size: 20, color: colorScheme.error),
+                      tooltip: 'Remove',
+                      onPressed: onRemove,
+                    ),
                 ],
-
-                // Error display.
-                if (_error != null) ...[
-                  const SizedBox(height: 16),
-                  Card(
-                    color: Colors.red.shade50,
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Text(
-                        _error!,
-                        style: TextStyle(color: Colors.red.shade800),
-                      ),
-                    ),
-                  ),
-                ],
+                Icon(Icons.play_arrow_rounded, color: colorScheme.primary, size: 28),
               ],
             ),
           ),
@@ -391,17 +807,47 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       ),
     );
   }
+}
 
-  /// Builds the labeled divider used to separate "My Apps" and "Load New App".
-  static Widget _sectionDivider(String label) {
-    return Row(
-      children: [
-        const Expanded(child: Divider()),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text(label, style: const TextStyle(color: Colors.grey)),
+// ---------------------------------------------------------------------------
+// URL input dialog
+// ---------------------------------------------------------------------------
+
+class _UrlInputDialog extends StatefulWidget {
+  @override
+  State<_UrlInputDialog> createState() => _UrlInputDialogState();
+}
+
+class _UrlInputDialogState extends State<_UrlInputDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Load from URL'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        decoration: const InputDecoration(
+          hintText: 'https://example.com/my-app.json',
         ),
-        const Expanded(child: Divider()),
+        onSubmitted: (v) => Navigator.pop(context, v.trim()),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _controller.text.trim()),
+          child: const Text('Load'),
+        ),
       ],
     );
   }
@@ -411,17 +857,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 // "Just Run" vs "Add to My Apps" dialog
 // ---------------------------------------------------------------------------
 
-/// The two actions a user can take with a newly loaded spec.
 enum _NewSpecAction { justRun, addAndRun }
 
-/// A simple three-button dialog: Cancel / Just Run / Add to My Apps & Run.
-///
-/// "Just Run" loads the spec ephemerally — it won't appear in "My Apps"
-/// next time. "Add to My Apps & Run" persists it to disk so it's always
-/// available from the home screen.
 class _RunOrAddDialog extends StatelessWidget {
   final String appName;
-
   const _RunOrAddDialog({required this.appName});
 
   @override
@@ -448,56 +887,126 @@ class _RunOrAddDialog extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Loaded App Card
+// Create New dialog
 // ---------------------------------------------------------------------------
 
-/// A card widget for each app in the "My Apps" list.
-///
-/// Bundled (example) apps show an `apps` icon; user-added apps show a
-/// `description` icon. User-added apps also show an X button to remove
-/// them. Tapping the card runs the app immediately.
-class _LoadedAppCard extends StatelessWidget {
-  final LoadedAppEntry app;
-  final VoidCallback? onTap;
-  final VoidCallback? onRemove;
-
-  const _LoadedAppCard({required this.app, this.onTap, this.onRemove});
+class _CreateNewDialog extends StatelessWidget {
+  const _CreateNewDialog();
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: ListTile(
-        leading: Icon(
-          app.isBundled ? Icons.apps : Icons.description_outlined,
-          color: theme.colorScheme.primary,
-        ),
-        title: Text(app.name),
-        subtitle: app.description.isNotEmpty
-            ? Text(
-                app.description,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              )
-            : null,
-        onTap: onTap,
-        trailing: Row(
+    return AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.auto_awesome, color: theme.colorScheme.primary),
+          const SizedBox(width: 10),
+          const Text('Create a New App'),
+        ],
+      ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (onRemove != null)
-              IconButton(
-                icon: const Icon(Icons.close, size: 18),
-                tooltip: 'Remove',
-                onPressed: onRemove,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-            const SizedBox(width: 8),
-            const Icon(Icons.chevron_right),
+            Text(
+              'Use an ODS Build Helper to create your app spec with AI assistance.',
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 20),
+            _infoTile(
+              theme,
+              Icons.smart_toy_outlined,
+              'AI-Powered',
+              'Describe your app in plain language and get a complete ODS spec.',
+            ),
+            const SizedBox(height: 12),
+            _infoTile(
+              theme,
+              Icons.verified_outlined,
+              'Guardrails Built In',
+              'The Build Helper knows the ODS spec rules and ensures your app is valid.',
+            ),
+            const SizedBox(height: 12),
+            _infoTile(
+              theme,
+              Icons.rocket_launch_outlined,
+              'Getting Started',
+              'Use the Claude Build Helper with the ODS CLAUDE.MD prompt file. '
+                  'Visit github.com/One-does-simply/BuildHelpers for details.',
+            ),
           ],
         ),
       ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Got it'),
+        ),
+      ],
+    );
+  }
+
+  static Widget _infoTile(ThemeData theme, IconData icon, String title, String body) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 22, color: theme.colorScheme.primary),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text(body, style: theme.textTheme.bodySmall),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Spec editor dialog (for editing user-added app specs)
+// ---------------------------------------------------------------------------
+
+class _SpecEditorDialog extends StatelessWidget {
+  final TextEditingController controller;
+  final String appName;
+
+  const _SpecEditorDialog({required this.controller, required this.appName});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Edit $appName Spec'),
+      content: SizedBox(
+        width: 600,
+        height: 400,
+        child: TextField(
+          controller: controller,
+          maxLines: null,
+          expands: true,
+          style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            contentPadding: EdgeInsets.all(12),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, controller.text),
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }
@@ -506,24 +1015,6 @@ class _LoadedAppCard extends StatelessWidget {
 // Main App Shell (after spec is loaded)
 // ---------------------------------------------------------------------------
 
-/// The primary app chrome displayed after a spec has been loaded.
-///
-/// Provides:
-///   - An [AppBar] with the current page title, back navigation, and
-///     action buttons (help, tour replay, debug toggle, home).
-///   - A [Drawer] built from the spec's `menu` array for page navigation.
-///   - A [PageRenderer] that renders the current page's components.
-///   - An optional [DebugPanel] at the bottom when debug mode is active.
-///   - A [_PageHelpBanner] at the top when the current page has help text.
-///
-/// ODS Spec alignment:
-///   - `menu` items map to Drawer ListTiles.
-///   - `help.pages[currentPageId]` drives the contextual help banner.
-///   - `tour` drives the auto-launch tour and the replay button.
-///
-/// ODS Ethos: The shell is deliberately simple — a flat list of pages,
-/// a side menu, a back button. No nested navigation, no tabs, no bottom
-/// bar. Constraints breed simplicity.
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
@@ -532,30 +1023,31 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  /// Tracks whether the auto-launch tour has already been shown this
-  /// session, so it doesn't re-trigger on every rebuild.
-  bool _tourShown = false;
+  bool _tourChecked = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Auto-launch the tour on first display if the spec defines one.
-    if (!_tourShown) {
+    if (!_tourChecked) {
+      _tourChecked = true;
       final engine = context.read<AppEngine>();
+      final settings = context.read<SettingsStore>();
       final app = engine.app;
       if (app != null && app.tour.isNotEmpty) {
-        _tourShown = true;
-        // Post-frame callback ensures the Scaffold is fully built before
-        // the dialog appears, preventing "no Overlay" errors.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          AppTourDialog.show(
-            context,
-            steps: app.tour,
-            appName: app.appName,
-            onNavigateToPage: (pageId) => engine.navigateTo(pageId),
-          );
-        });
+        // Build a stable ID from the app name for tour tracking
+        final appId = app.appName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+        if (!settings.hasSeenTour(appId)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            settings.markTourSeen(appId);
+            AppTourDialog.show(
+              context,
+              steps: app.tour,
+              appName: app.appName,
+              onNavigateToPage: (pageId) => engine.navigateTo(pageId),
+            );
+          });
+        }
       }
     }
   }
@@ -563,23 +1055,43 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final engine = context.watch<AppEngine>();
+    final settings = context.watch<SettingsStore>();
     final app = engine.app!;
     final currentPageId = engine.currentPageId;
-    final currentPage =
-        currentPageId != null ? app.pages[currentPageId] : null;
+    final currentPage = currentPageId != null ? app.pages[currentPageId] : null;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(currentPage?.title ?? app.appName),
-        // Show a back arrow when the navigation stack has history.
-        leading: engine.canGoBack()
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () => engine.goBack(),
-              )
-            : null,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (engine.canGoBack())
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () => engine.goBack(),
+                  child: const Padding(
+                    padding: EdgeInsets.all(4),
+                    child: Icon(Icons.arrow_back, size: 20),
+                  ),
+                ),
+              ),
+            Flexible(child: Text(currentPage?.title ?? app.appName)),
+          ],
+        ),
+        // Always show the hamburger menu (don't let back nav replace it)
+        leading: Builder(
+          builder: (ctx) => IconButton(
+            icon: const Icon(Icons.menu),
+            tooltip: 'Menu',
+            onPressed: () => Scaffold.of(ctx).openDrawer(),
+          ),
+        ),
         actions: [
-          // Help button — only shown if the spec declares help content.
+          // Help is the only button in the top right
           if (app.help != null)
             IconButton(
               icon: const Icon(Icons.help_outline),
@@ -600,107 +1112,168 @@ class _AppShellState extends State<AppShell> {
                 );
               },
             ),
-          // Tour replay button — only shown if the spec declares a tour.
-          if (app.tour.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.tour_outlined),
-              tooltip: 'Replay Tour',
-              onPressed: () {
-                AppTourDialog.show(
-                  context,
-                  steps: app.tour,
-                  appName: app.appName,
-                  onNavigateToPage: (pageId) => engine.navigateTo(pageId),
-                );
-              },
-            ),
-          // Debug toggle — always available. Orange when active.
-          IconButton(
-            icon: Icon(
-              engine.debugMode ? Icons.bug_report : Icons.bug_report_outlined,
-              color: engine.debugMode ? Colors.orange : null,
-            ),
-            tooltip: 'Toggle Debug Mode',
-            onPressed: () => engine.toggleDebugMode(),
-          ),
-          // Home button — resets the engine and returns to WelcomeScreen.
-          IconButton(
-            icon: const Icon(Icons.home),
-            tooltip: 'Load New Spec',
-            onPressed: () async => engine.reset(),
-          ),
         ],
       ),
 
-      // -- Navigation drawer --
-      // Built from the spec's `menu` array. Each menu item maps to a page.
-      drawer: app.menu.isNotEmpty
-          ? Drawer(
-              child: ListView(
+      // -- Navigation drawer with settings --
+      drawer: Drawer(
+        child: ListView(
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [colorScheme.primary, colorScheme.tertiary],
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  DrawerHeader(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Text(
-                          app.appName,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                          ),
-                        ),
-                        // Show a truncated overview in the drawer header
-                        // for context.
-                        if (app.help != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text(
-                              app.help!.overview.length > 80
-                                  ? '${app.help!.overview.substring(0, 80)}...'
-                                  : app.help!.overview,
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                      ],
+                  Text(
+                    app.appName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  ...app.menu.map((item) => ListTile(
-                        title: Text(item.label),
-                        selected: item.mapsTo == currentPageId,
-                        onTap: () {
-                          Navigator.pop(context); // Close the drawer.
-                          engine.navigateTo(item.mapsTo);
-                        },
-                      )),
+                  if (app.help != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        app.help!.overview.length > 80
+                            ? '${app.help!.overview.substring(0, 80)}...'
+                            : app.help!.overview,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.75),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
                 ],
               ),
-            )
-          : null,
+            ),
+            // -- Navigation --
+            if (app.menu.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 24, top: 8, bottom: 4),
+                child: Text(
+                  'NAVIGATION',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+            ...app.menu.map((item) {
+              final isSelected = item.mapsTo == currentPageId;
+              return ListTile(
+                title: Text(item.label),
+                selected: isSelected,
+                selectedTileColor: colorScheme.primaryContainer.withValues(alpha: 0.4),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                onTap: () {
+                  Navigator.pop(context);
+                  engine.navigateTo(item.mapsTo);
+                },
+              );
+            }),
+            const Divider(),
+            // -- Settings section --
+            Padding(
+              padding: const EdgeInsets.only(left: 24, top: 4, bottom: 4),
+              child: Text(
+                'SETTINGS',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+            if (app.tour.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.tour_outlined),
+                title: const Text('Replay Tour'),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                onTap: () {
+                  Navigator.pop(context);
+                  AppTourDialog.show(
+                    context,
+                    steps: app.tour,
+                    appName: app.appName,
+                    onNavigateToPage: (pageId) => engine.navigateTo(pageId),
+                  );
+                },
+              ),
+            ListTile(
+              leading: Icon(
+                engine.debugMode ? Icons.bug_report : Icons.bug_report_outlined,
+                color: engine.debugMode ? Colors.orange : null,
+              ),
+              title: Text(engine.debugMode ? 'Hide Debug Panel' : 'Show Debug Panel'),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              onTap: () {
+                Navigator.pop(context);
+                engine.toggleDebugMode();
+              },
+            ),
+            // Theme sub-section
+            ListTile(
+              leading: Icon(
+                settings.themeMode == ThemeMode.dark
+                    ? Icons.dark_mode
+                    : settings.themeMode == ThemeMode.light
+                        ? Icons.light_mode
+                        : Icons.auto_mode,
+              ),
+              title: const Text('Theme'),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              trailing: SegmentedButton<ThemeMode>(
+                segments: const [
+                  ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode, size: 16)),
+                  ButtonSegment(value: ThemeMode.system, icon: Icon(Icons.auto_mode, size: 16)),
+                  ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode, size: 16)),
+                ],
+                selected: {settings.themeMode},
+                onSelectionChanged: (s) => settings.setThemeMode(s.first),
+                showSelectedIcon: false,
+                style: ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.close),
+              title: const Text('Close App'),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              onTap: () async {
+                Navigator.pop(context);
+                await engine.reset();
+              },
+            ),
+          ],
+        ),
+      ),
 
       // -- Body --
       body: Column(
         children: [
-          // Contextual help banner for the current page (dismissible).
           if (app.help != null &&
               currentPageId != null &&
               app.help!.pages.containsKey(currentPageId))
             _PageHelpBanner(helpText: app.help!.pages[currentPageId]!),
-
-          // The page content rendered by the component dispatch system.
           Expanded(
             child: currentPage != null
                 ? PageRenderer(page: currentPage)
                 : const Center(child: Text('Page not found')),
           ),
-
-          // Debug panel pinned to the bottom when debug mode is on.
           if (engine.debugMode)
             const SizedBox(
               height: 250,
@@ -716,17 +1289,8 @@ class _AppShellState extends State<AppShell> {
 // Page Help Banner
 // ---------------------------------------------------------------------------
 
-/// A dismissible banner shown at the top of the page body when the spec
-/// provides per-page help text via `help.pages.<pageId>`.
-///
-/// ODS Spec: The `help.pages` map is keyed by page ID. If the current
-/// page has an entry, this banner displays it.
-///
-/// The banner resets (un-dismisses) when the help text changes — i.e.,
-/// when navigating to a different page that also has help text.
 class _PageHelpBanner extends StatefulWidget {
   final String helpText;
-
   const _PageHelpBanner({required this.helpText});
 
   @override
@@ -739,7 +1303,6 @@ class _PageHelpBannerState extends State<_PageHelpBanner> {
   @override
   void didUpdateWidget(covariant _PageHelpBanner oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // New page, new help text — show the banner again.
     if (oldWidget.helpText != widget.helpText) {
       _dismissed = false;
     }
@@ -749,29 +1312,29 @@ class _PageHelpBannerState extends State<_PageHelpBanner> {
   Widget build(BuildContext context) {
     if (_dismissed) return const SizedBox.shrink();
 
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: Theme.of(context).colorScheme.primaryContainer,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer.withValues(alpha: 0.5),
+        border: Border(
+          bottom: BorderSide(color: colorScheme.primaryContainer),
+        ),
+      ),
       child: Row(
         children: [
-          Icon(
-            Icons.lightbulb_outline,
-            size: 18,
-            color: Theme.of(context).colorScheme.onPrimaryContainer,
-          ),
-          const SizedBox(width: 8),
+          Icon(Icons.lightbulb_outline, size: 18, color: colorScheme.onPrimaryContainer),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               widget.helpText,
-              style: TextStyle(
-                fontSize: 13,
-                color: Theme.of(context).colorScheme.onPrimaryContainer,
-              ),
+              style: TextStyle(fontSize: 13, color: colorScheme.onPrimaryContainer),
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.close, size: 16),
+            icon: Icon(Icons.close, size: 16, color: colorScheme.onPrimaryContainer),
             onPressed: () => setState(() => _dismissed = true),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
