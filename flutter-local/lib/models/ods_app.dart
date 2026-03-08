@@ -1,0 +1,79 @@
+import 'ods_data_source.dart';
+import 'ods_help.dart';
+import 'ods_menu_item.dart';
+import 'ods_page.dart';
+
+/// The top-level model representing a complete ODS application.
+///
+/// ODS Spec alignment: This is the root object of ods-schema.json. It holds
+/// everything the framework needs to render a full application: metadata
+/// (appName), navigation (startPage, menu), content (pages), data layer
+/// (dataSources), and user guidance (help, tour).
+///
+/// ODS Ethos: One JSON file = one complete application. No external config,
+/// no build steps, no server. This model captures that entire contract.
+///
+/// Architecture note: This class lives in the models layer and has ZERO
+/// Flutter imports. It is pure Dart, making it reusable by future non-Flutter
+/// ODS frameworks and by the planned code-generation off-ramp.
+class OdsApp {
+  final String appName;
+
+  /// The page ID loaded when the app starts.
+  final String startPage;
+
+  /// Navigation menu entries shown in the drawer.
+  /// Optional: apps with a single page may omit the menu.
+  final List<OdsMenuItem> menu;
+
+  /// All pages in the app, keyed by page ID.
+  final Map<String, OdsPage> pages;
+
+  /// All data sources, keyed by a unique identifier referenced by
+  /// list components and submit actions.
+  final Map<String, OdsDataSource> dataSources;
+
+  /// Optional in-app help content (overview + per-page contextual help).
+  final OdsHelp? help;
+
+  /// Optional guided tour steps shown on first launch.
+  final List<OdsTourStep> tour;
+
+  const OdsApp({
+    required this.appName,
+    required this.startPage,
+    required this.menu,
+    required this.pages,
+    required this.dataSources,
+    this.help,
+    this.tour = const [],
+  });
+
+  factory OdsApp.fromJson(Map<String, dynamic> json) {
+    return OdsApp(
+      appName: json['appName'] as String,
+      startPage: json['startPage'] as String,
+      // Menu is optional — default to empty list if not provided.
+      menu: (json['menu'] as List<dynamic>?)
+              ?.map((m) => OdsMenuItem.fromJson(m as Map<String, dynamic>))
+              .toList() ??
+          [],
+      pages: (json['pages'] as Map<String, dynamic>).map(
+        (key, value) => MapEntry(key, OdsPage.fromJson(value as Map<String, dynamic>)),
+      ),
+      // DataSources are optional — apps with only static text don't need them.
+      dataSources: (json['dataSources'] as Map<String, dynamic>?)?.map(
+            (key, value) =>
+                MapEntry(key, OdsDataSource.fromJson(value as Map<String, dynamic>)),
+          ) ??
+          {},
+      help: json['help'] != null
+          ? OdsHelp.fromJson(json['help'] as Map<String, dynamic>)
+          : null,
+      tour: (json['tour'] as List<dynamic>?)
+              ?.map((t) => OdsTourStep.fromJson(t as Map<String, dynamic>))
+              .toList() ??
+          [],
+    );
+  }
+}

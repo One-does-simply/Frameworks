@@ -1,0 +1,157 @@
+{
+  "appName": "Reading List",
+  "startPage": "myReadingListPage",
+  "menu": [
+    { "label": "My Reading List", "mapsTo": "myReadingListPage" },
+    { "label": "Add Book", "mapsTo": "addBookPage" }
+  ],
+  "pages": {
+    "addBookPage": {
+      "component": "page",
+      "title": "Add a Book",
+      "content": [
+        {
+          "component": "text",
+          "content": "Add a new book to your reading list.",
+          "styleHint": { "variant": "body" }
+        },
+        {
+          "component": "form",
+          "id": "addBookForm",
+          "fields": [
+            { "name": "bookTitle", "label": "Book Title", "type": "text", "required": true, "placeholder": "e.g., Atomic Habits" },
+            { "name": "author", "label": "Author", "type": "text", "required": true, "placeholder": "e.g., James Clear" },
+            { "name": "status", "label": "Status", "type": "select", "options": ["To Read", "Reading", "Finished", "Abandoned"], "default": "To Read" },
+            { "name": "rating", "label": "Rating", "type": "select", "options": ["1", "2", "3", "4", "5"] },
+            { "name": "notes", "label": "Notes", "type": "multiline", "placeholder": "Your thoughts about this book..." }
+          ]
+        },
+        {
+          "component": "button",
+          "label": "Save Book",
+          "onClick": [
+            {
+              "action": "submit",
+              "dataSource": "booksStore",
+              "target": "addBookForm"
+            },
+            {
+              "action": "navigate",
+              "target": "myReadingListPage"
+            }
+          ],
+          "styleHint": { "emphasis": "primary" }
+        }
+      ]
+    },
+    "myReadingListPage": {
+      "component": "page",
+      "title": "My Reading List",
+      "content": [
+        {
+          "component": "text",
+          "content": "All the books you are tracking are listed below. Use the buttons to update their status.",
+          "styleHint": { "variant": "body" }
+        },
+        {
+          "component": "list",
+          "dataSource": "booksReader",
+          "columns": [
+            { "header": "Title", "field": "bookTitle" },
+            { "header": "Author", "field": "author" },
+            { "header": "Status", "field": "status", "sortable": true },
+            { "header": "Rating", "field": "rating", "sortable": true },
+            { "header": "Notes", "field": "notes" }
+          ],
+          "rowActions": [
+            {
+              "label": "Start Reading",
+              "action": "update",
+              "dataSource": "booksUpdater",
+              "matchField": "bookTitle",
+              "values": { "status": "Reading" }
+            },
+            {
+              "label": "Finished",
+              "action": "update",
+              "dataSource": "booksUpdater",
+              "matchField": "bookTitle",
+              "values": { "status": "Finished" }
+            }
+          ]
+        },
+        {
+          "component": "button",
+          "label": "Add a Book",
+          "onClick": [
+            {
+              "action": "navigate",
+              "target": "addBookPage"
+            }
+          ],
+          "styleHint": { "emphasis": "primary" }
+        }
+      ]
+    }
+  },
+  "dataSources": {
+    "booksStore": {
+      "url": "local://books",
+      "method": "POST"
+    },
+    "booksReader": {
+      "url": "local://books",
+      "method": "GET",
+      "fields": [
+        { "name": "bookTitle", "type": "text" },
+        { "name": "author", "type": "text" },
+        { "name": "status", "type": "select" },
+        { "name": "rating", "type": "select" },
+        { "name": "notes", "type": "multiline" }
+      ],
+      "seedData": [
+        {
+          "bookTitle": "Atomic Habits",
+          "author": "James Clear",
+          "status": "Finished",
+          "rating": "5",
+          "notes": "Excellent practical guide to building good habits and breaking bad ones. Highly recommended."
+        },
+        {
+          "bookTitle": "Dune",
+          "author": "Frank Herbert",
+          "status": "Reading",
+          "rating": "4",
+          "notes": "Epic science fiction. Currently on chapter 12. The world-building is incredible."
+        }
+      ]
+    },
+    "booksUpdater": {
+      "url": "local://books",
+      "method": "PUT"
+    }
+  },
+  "help": {
+    "overview": "Reading List helps you track books you want to read, are currently reading, or have finished. Rate and annotate each book, and update their status right from the list.",
+    "pages": {
+      "addBookPage": "Enter the book title (required) and author (required). Select your reading status from the dropdown (To Read, Reading, Finished, or Abandoned). Pick a rating from the dropdown (1 to 5), and add any notes. Press Save Book to add it to your list.",
+      "myReadingListPage": "View all your tracked books with their status, rating, and notes. Use 'Start Reading' or 'Finished' on any row to update its status instantly."
+    }
+  },
+  "tour": [
+    {
+      "title": "Welcome to Reading List",
+      "content": "Keep track of every book you want to read, are currently reading, or have finished. All data stays on your device."
+    },
+    {
+      "title": "Track Your Books",
+      "content": "Add a book with its title and author. Select a status from the dropdown and pick a rating. Use the notes field to jot down your thoughts as you read.",
+      "page": "addBookPage"
+    },
+    {
+      "title": "Browse Your List",
+      "content": "Your full reading list appears here. Use 'Start Reading' or 'Finished' on any row to update a book's status with one tap.",
+      "page": "myReadingListPage"
+    }
+  ]
+}

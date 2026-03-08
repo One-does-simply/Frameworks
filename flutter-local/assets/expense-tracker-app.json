@@ -1,0 +1,149 @@
+{
+  "appName": "Expense Tracker",
+  "startPage": "logExpensePage",
+  "menu": [
+    { "label": "Log Expense", "mapsTo": "logExpensePage" },
+    { "label": "View Expenses", "mapsTo": "viewExpensesPage" }
+  ],
+  "pages": {
+    "logExpensePage": {
+      "component": "page",
+      "title": "Log an Expense",
+      "content": [
+        {
+          "component": "text",
+          "content": "Record a new expense to keep track of your spending.",
+          "styleHint": { "variant": "body" }
+        },
+        {
+          "component": "form",
+          "id": "expenseForm",
+          "fields": [
+            { "name": "description", "label": "Description", "type": "text", "required": true, "placeholder": "e.g., Weekly groceries" },
+            { "name": "amount", "label": "Amount", "type": "number", "required": true },
+            { "name": "category", "label": "Category", "type": "select", "options": ["Food", "Transport", "Bills", "Entertainment", "Medical", "Shopping", "Other"] },
+            { "name": "date", "label": "Date", "type": "date", "required": true }
+          ]
+        },
+        {
+          "component": "button",
+          "label": "Save Expense",
+          "onClick": [
+            {
+              "action": "submit",
+              "dataSource": "expensesStore",
+              "target": "expenseForm"
+            },
+            {
+              "action": "navigate",
+              "target": "viewExpensesPage"
+            }
+          ],
+          "styleHint": { "emphasis": "primary" }
+        },
+        {
+          "component": "button",
+          "label": "View All Expenses",
+          "onClick": [
+            {
+              "action": "navigate",
+              "target": "viewExpensesPage"
+            }
+          ],
+          "styleHint": { "emphasis": "secondary" }
+        }
+      ]
+    },
+    "viewExpensesPage": {
+      "component": "page",
+      "title": "My Expenses",
+      "content": [
+        {
+          "component": "text",
+          "content": "Review all your recorded expenses below.",
+          "styleHint": { "variant": "body" }
+        },
+        {
+          "component": "list",
+          "dataSource": "expensesReader",
+          "columns": [
+            { "header": "Date", "field": "date", "sortable": true },
+            { "header": "Description", "field": "description" },
+            { "header": "Amount", "field": "amount", "sortable": true },
+            { "header": "Category", "field": "category", "sortable": true }
+          ]
+        },
+        {
+          "component": "button",
+          "label": "Log Another Expense",
+          "onClick": [
+            {
+              "action": "navigate",
+              "target": "logExpensePage"
+            }
+          ],
+          "styleHint": { "emphasis": "primary" }
+        }
+      ]
+    }
+  },
+  "dataSources": {
+    "expensesStore": {
+      "url": "local://expenses",
+      "method": "POST"
+    },
+    "expensesReader": {
+      "url": "local://expenses",
+      "method": "GET",
+      "fields": [
+        { "name": "description", "type": "text" },
+        { "name": "amount", "type": "number" },
+        { "name": "category", "type": "select" },
+        { "name": "date", "type": "date" }
+      ],
+      "seedData": [
+        {
+          "description": "Weekly groceries",
+          "amount": 62,
+          "category": "Food",
+          "date": "2025-03-01"
+        },
+        {
+          "description": "Monthly bus pass",
+          "amount": 45,
+          "category": "Transport",
+          "date": "2025-03-01"
+        },
+        {
+          "description": "Coffee with a friend",
+          "amount": 8,
+          "category": "Food",
+          "date": "2025-03-02"
+        }
+      ]
+    }
+  },
+  "help": {
+    "overview": "Expense Tracker helps you monitor your personal spending. Log each expense with a description, amount, category, and date, then review your spending history.",
+    "pages": {
+      "logExpensePage": "Enter a description, amount (required), pick a category from the dropdown, and choose the date. Press Save Expense to record it.",
+      "viewExpensesPage": "This page shows all your logged expenses in a table so you can review your spending patterns."
+    }
+  },
+  "tour": [
+    {
+      "title": "Welcome to Expense Tracker",
+      "content": "Take control of your finances by logging every expense. This app stores everything locally on your device for privacy."
+    },
+    {
+      "title": "Log Your Spending",
+      "content": "Each time you spend money, enter a description, amount, pick a category from the dropdown, and choose the date. Fields marked with * are required.",
+      "page": "logExpensePage"
+    },
+    {
+      "title": "Review Your Expenses",
+      "content": "Check the View Expenses page to see a full list of everything you have spent. The app comes with a few sample entries to show you how it looks.",
+      "page": "viewExpensesPage"
+    }
+  ]
+}

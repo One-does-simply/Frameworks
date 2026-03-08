@@ -1,0 +1,248 @@
+import 'ods_action.dart';
+import 'ods_field_definition.dart';
+import 'ods_style_hint.dart';
+
+/// Base class for all ODS components, using Dart 3 sealed classes.
+///
+/// ODS Spec alignment: The spec defines four component types — text, list,
+/// form, and button. Using a sealed class lets the renderer use exhaustive
+/// switch expressions (see PageRenderer), guaranteeing every component type
+/// is handled at compile time.
+///
+/// ODS Ethos: Four components is all you need. Text for content, List for
+/// data display, Form for data entry, Button for actions. This constraint
+/// is intentional — it forces simplicity and makes every ODS app instantly
+/// understandable.
+sealed class OdsComponent {
+  /// The component type string from the spec (e.g., "text", "list").
+  final String component;
+
+  /// Optional styling hints interpreted by the renderer.
+  final OdsStyleHint styleHint;
+
+  const OdsComponent({required this.component, required this.styleHint});
+
+  /// Factory that dispatches to the correct subclass based on the
+  /// `component` field. Unknown types become [OdsUnknownComponent],
+  /// which are silently skipped in normal mode and shown in debug mode.
+  factory OdsComponent.fromJson(Map<String, dynamic> json) {
+    final type = json['component'] as String;
+    switch (type) {
+      case 'text':
+        return OdsTextComponent.fromJson(json);
+      case 'list':
+        return OdsListComponent.fromJson(json);
+      case 'form':
+        return OdsFormComponent.fromJson(json);
+      case 'button':
+        return OdsButtonComponent.fromJson(json);
+      default:
+        // Graceful degradation: unknown components are captured, not rejected.
+        // This keeps forward compatibility — a spec with future component types
+        // will still load in older framework versions.
+        return OdsUnknownComponent.fromJson(json);
+    }
+  }
+}
+
+/// Displays static or dynamic text content on a page.
+///
+/// ODS Spec: `textComponent` — requires `content` string, optional `styleHint`
+/// with a `variant` key (heading, subheading, body, caption).
+class OdsTextComponent extends OdsComponent {
+  final String content;
+
+  const OdsTextComponent({
+    required this.content,
+    required super.styleHint,
+  }) : super(component: 'text');
+
+  factory OdsTextComponent.fromJson(Map<String, dynamic> json) {
+    return OdsTextComponent(
+      content: json['content'] as String,
+      styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
+    );
+  }
+}
+
+/// Defines a column mapping for list components: a display header and the
+/// data field name to read from each row.
+class OdsListColumn {
+  final String header;
+  final String field;
+
+  /// When true, the column header is tappable to sort the list by this field.
+  final bool sortable;
+
+  const OdsListColumn({
+    required this.header,
+    required this.field,
+    this.sortable = false,
+  });
+
+  factory OdsListColumn.fromJson(Map<String, dynamic> json) {
+    return OdsListColumn(
+      header: json['header'] as String,
+      field: json['field'] as String,
+      sortable: json['sortable'] as bool? ?? false,
+    );
+  }
+}
+
+/// Defines an inline action button rendered in each row of a list.
+///
+/// ODS Spec: Row actions let the builder add per-row buttons (e.g., "Mark Done")
+/// that update a record directly using the row's own data — no separate form
+/// page needed. The `values` map specifies what to set, and `matchField`
+/// identifies which row to update.
+class OdsRowAction {
+  final String label;
+  final String action;
+  final String dataSource;
+  final String matchField;
+  final Map<String, String> values;
+
+  const OdsRowAction({
+    required this.label,
+    required this.action,
+    required this.dataSource,
+    required this.matchField,
+    required this.values,
+  });
+
+  factory OdsRowAction.fromJson(Map<String, dynamic> json) {
+    return OdsRowAction(
+      label: json['label'] as String,
+      action: json['action'] as String,
+      dataSource: json['dataSource'] as String,
+      matchField: json['matchField'] as String,
+      values: (json['values'] as Map<String, dynamic>)
+          .map((k, v) => MapEntry(k, v.toString())),
+    );
+  }
+}
+
+/// Displays tabular data from a data source.
+///
+/// ODS Spec: `listComponent` — requires a `dataSource` ID and `columns` array.
+/// Optionally includes `rowActions` for inline per-row action buttons.
+/// The framework queries the referenced data source and renders a DataTable.
+class OdsListComponent extends OdsComponent {
+  /// The ID of the data source to read rows from.
+  final String dataSource;
+
+  /// Column definitions mapping data fields to display headers.
+  final List<OdsListColumn> columns;
+
+  /// Optional action buttons rendered in each row.
+  final List<OdsRowAction> rowActions;
+
+  const OdsListComponent({
+    required this.dataSource,
+    required this.columns,
+    this.rowActions = const [],
+    required super.styleHint,
+  }) : super(component: 'list');
+
+  factory OdsListComponent.fromJson(Map<String, dynamic> json) {
+    return OdsListComponent(
+      dataSource: json['dataSource'] as String,
+      columns: (json['columns'] as List<dynamic>)
+          .map((c) => OdsListColumn.fromJson(c as Map<String, dynamic>))
+          .toList(),
+      rowActions: (json['rowActions'] as List<dynamic>?)
+              ?.map((a) => OdsRowAction.fromJson(a as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
+    );
+  }
+}
+
+/// Renders an input form for data entry.
+///
+/// ODS Spec: `formComponent` — requires a unique `id` and a `fields` array.
+/// The form ID links this form to submit actions: when a button's onClick
+/// includes `{"action": "submit", "target": "<formId>"}`, the engine collects
+/// this form's field values and writes them to the specified data source.
+///
+/// ODS Ethos: "The form is the schema." If a data source has no explicit field
+/// definitions, the form's fields implicitly define the database table columns
+/// on first submission. This eliminates the need for citizen developers to
+/// think about database design at all.
+class OdsFormComponent extends OdsComponent {
+  /// Unique identifier referenced by submit actions.
+  final String id;
+
+  /// Ordered list of input fields rendered in the form.
+  final List<OdsFieldDefinition> fields;
+
+  const OdsFormComponent({
+    required this.id,
+    required this.fields,
+    required super.styleHint,
+  }) : super(component: 'form');
+
+  factory OdsFormComponent.fromJson(Map<String, dynamic> json) {
+    return OdsFormComponent(
+      id: json['id'] as String,
+      fields: (json['fields'] as List<dynamic>)
+          .map((f) => OdsFieldDefinition.fromJson(f as Map<String, dynamic>))
+          .toList(),
+      styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
+    );
+  }
+}
+
+/// A tappable button that triggers one or more actions.
+///
+/// ODS Spec: `buttonComponent` — requires a `label` and an `onClick` array
+/// of actions. Actions execute sequentially: typically a submit followed by
+/// a navigate, giving the user a natural "save and go" flow.
+class OdsButtonComponent extends OdsComponent {
+  final String label;
+
+  /// Actions executed in order when the button is tapped.
+  final List<OdsAction> onClick;
+
+  const OdsButtonComponent({
+    required this.label,
+    required this.onClick,
+    required super.styleHint,
+  }) : super(component: 'button');
+
+  factory OdsButtonComponent.fromJson(Map<String, dynamic> json) {
+    return OdsButtonComponent(
+      label: json['label'] as String,
+      onClick: (json['onClick'] as List<dynamic>)
+          .map((a) => OdsAction.fromJson(a as Map<String, dynamic>))
+          .toList(),
+      styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
+    );
+  }
+}
+
+/// Placeholder for component types not recognized by this framework version.
+///
+/// ODS Ethos: Graceful degradation over hard failure. Unknown components are
+/// silently skipped in normal mode and shown with a warning card in debug mode.
+/// This means a spec authored for a newer ODS version will still load in an
+/// older framework — it just won't render the unknown parts.
+class OdsUnknownComponent extends OdsComponent {
+  /// The original JSON for debugging and inspection.
+  final Map<String, dynamic> rawJson;
+
+  const OdsUnknownComponent({
+    required String type,
+    required this.rawJson,
+    required super.styleHint,
+  }) : super(component: type);
+
+  factory OdsUnknownComponent.fromJson(Map<String, dynamic> json) {
+    return OdsUnknownComponent(
+      type: json['component'] as String? ?? 'unknown',
+      rawJson: json,
+      styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
+    );
+  }
+}

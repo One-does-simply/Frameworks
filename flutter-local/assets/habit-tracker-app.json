@@ -1,0 +1,221 @@
+{
+  "appName": "Habit Tracker",
+  "startPage": "logHabitsPage",
+  "menu": [
+    { "label": "Log Today's Habits", "mapsTo": "logHabitsPage" },
+    { "label": "My Habits", "mapsTo": "myHabitsPage" },
+    { "label": "Add Habit", "mapsTo": "addHabitPage" },
+    { "label": "Habit History", "mapsTo": "habitHistoryPage" }
+  ],
+  "pages": {
+    "addHabitPage": {
+      "component": "page",
+      "title": "Add a New Habit",
+      "content": [
+        {
+          "component": "text",
+          "content": "Define a new habit you want to track every day.",
+          "styleHint": { "variant": "body" }
+        },
+        {
+          "component": "form",
+          "id": "addHabitForm",
+          "fields": [
+            { "name": "habitName", "label": "Habit Name", "type": "text", "required": true, "placeholder": "e.g., Drink 8 glasses of water" },
+            { "name": "category", "label": "Category", "type": "select", "options": ["Health", "Learning", "Fitness", "Mindfulness", "Productivity", "Social", "Other"] }
+          ]
+        },
+        {
+          "component": "button",
+          "label": "Save Habit",
+          "onClick": [
+            {
+              "action": "submit",
+              "dataSource": "habitsStore",
+              "target": "addHabitForm"
+            },
+            {
+              "action": "navigate",
+              "target": "myHabitsPage"
+            }
+          ],
+          "styleHint": { "emphasis": "primary" }
+        }
+      ]
+    },
+    "myHabitsPage": {
+      "component": "page",
+      "title": "My Habits",
+      "content": [
+        {
+          "component": "text",
+          "content": "These are the habits you are tracking. Use the Log page to record your daily progress.",
+          "styleHint": { "variant": "body" }
+        },
+        {
+          "component": "list",
+          "dataSource": "habitsReader",
+          "columns": [
+            { "header": "Habit", "field": "habitName" },
+            { "header": "Category", "field": "category", "sortable": true }
+          ]
+        },
+        {
+          "component": "button",
+          "label": "Add a Habit",
+          "onClick": [
+            {
+              "action": "navigate",
+              "target": "addHabitPage"
+            }
+          ],
+          "styleHint": { "emphasis": "primary" }
+        }
+      ]
+    },
+    "logHabitsPage": {
+      "component": "page",
+      "title": "Log Today's Habits",
+      "content": [
+        {
+          "component": "text",
+          "content": "Record which habits you completed today. Type the name of each habit and whether you did it.",
+          "styleHint": { "variant": "body" }
+        },
+        {
+          "component": "form",
+          "id": "logHabitForm",
+          "fields": [
+            { "name": "date", "label": "Date", "type": "date", "required": true },
+            { "name": "habitName", "label": "Habit Name", "type": "text", "required": true, "placeholder": "e.g., Drink 8 glasses of water" },
+            { "name": "completed", "label": "Completed", "type": "checkbox" },
+            { "name": "notes", "label": "Notes", "type": "multiline", "placeholder": "Any thoughts about today's progress..." }
+          ]
+        },
+        {
+          "component": "button",
+          "label": "Save Log Entry",
+          "onClick": [
+            {
+              "action": "submit",
+              "dataSource": "habitLogStore",
+              "target": "logHabitForm"
+            }
+          ],
+          "styleHint": { "emphasis": "primary" }
+        },
+        {
+          "component": "button",
+          "label": "View History",
+          "onClick": [
+            {
+              "action": "navigate",
+              "target": "habitHistoryPage"
+            }
+          ],
+          "styleHint": { "emphasis": "secondary" }
+        }
+      ]
+    },
+    "habitHistoryPage": {
+      "component": "page",
+      "title": "Habit History",
+      "content": [
+        {
+          "component": "text",
+          "content": "Review your habit completion history.",
+          "styleHint": { "variant": "body" }
+        },
+        {
+          "component": "list",
+          "dataSource": "habitLogReader",
+          "columns": [
+            { "header": "Date", "field": "date", "sortable": true },
+            { "header": "Habit", "field": "habitName", "sortable": true },
+            { "header": "Completed", "field": "completed" },
+            { "header": "Notes", "field": "notes" }
+          ]
+        },
+        {
+          "component": "button",
+          "label": "Log More Habits",
+          "onClick": [
+            {
+              "action": "navigate",
+              "target": "logHabitsPage"
+            }
+          ],
+          "styleHint": { "emphasis": "secondary" }
+        }
+      ]
+    }
+  },
+  "dataSources": {
+    "habitsStore": {
+      "url": "local://habits",
+      "method": "POST"
+    },
+    "habitsReader": {
+      "url": "local://habits",
+      "method": "GET",
+      "fields": [
+        { "name": "habitName", "type": "text" },
+        { "name": "category", "type": "select" }
+      ],
+      "seedData": [
+        { "habitName": "Drink 8 glasses of water", "category": "Health" },
+        { "habitName": "Read for 20 minutes", "category": "Learning" },
+        { "habitName": "Take a 15-minute walk", "category": "Health" }
+      ]
+    },
+    "habitLogStore": {
+      "url": "local://habit_log",
+      "method": "POST"
+    },
+    "habitLogReader": {
+      "url": "local://habit_log",
+      "method": "GET",
+      "fields": [
+        { "name": "date", "type": "date" },
+        { "name": "habitName", "type": "text" },
+        { "name": "completed", "type": "checkbox" },
+        { "name": "notes", "type": "multiline" }
+      ],
+      "seedData": [
+        { "date": "2025-03-01", "habitName": "Drink 8 glasses of water", "completed": "true", "notes": "Felt more energetic today." },
+        { "date": "2025-03-01", "habitName": "Read for 20 minutes", "completed": "true", "notes": "Finished a chapter of Atomic Habits." },
+        { "date": "2025-03-01", "habitName": "Take a 15-minute walk", "completed": "false", "notes": "Rained all day, will try tomorrow." }
+      ]
+    }
+  },
+  "help": {
+    "overview": "Habit Tracker helps you build positive daily routines. Define the habits you want to cultivate, log your progress each day, and review your history to stay motivated.",
+    "pages": {
+      "addHabitPage": "Enter a habit name (required) and pick a category from the dropdown, then press Save Habit to add it to your tracking list.",
+      "myHabitsPage": "View all the habits you have defined. Use this as a reference when logging your daily progress.",
+      "logHabitsPage": "Pick the date, type a habit name, toggle the Completed switch to mark whether you completed it today, and optionally add notes.",
+      "habitHistoryPage": "Browse all your logged habit entries to see your consistency over time."
+    }
+  },
+  "tour": [
+    {
+      "title": "Welcome to Habit Tracker",
+      "content": "This app helps you build and maintain daily habits. It comes with three starter habits to get you going."
+    },
+    {
+      "title": "Your Habits",
+      "content": "This page shows all the habits you are tracking. You can add new ones anytime from the Add Habit page.",
+      "page": "myHabitsPage"
+    },
+    {
+      "title": "Log Your Day",
+      "content": "Each day, come here to record which habits you completed. Pick the date, type the habit name, and toggle the switch to mark completion.",
+      "page": "logHabitsPage"
+    },
+    {
+      "title": "Review Your Progress",
+      "content": "Check the Habit History page to see all your logged entries and track your consistency over time.",
+      "page": "habitHistoryPage"
+    }
+  ]
+}

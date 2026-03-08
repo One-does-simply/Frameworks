@@ -1,0 +1,159 @@
+{
+  "appName": "Customer Feedback",
+  "startPage": "feedbackFormPage",
+  "menu": [
+    { "label": "Submit Feedback", "mapsTo": "feedbackFormPage" },
+    { "label": "View Responses", "mapsTo": "viewFeedbackPage" }
+  ],
+  "pages": {
+    "feedbackFormPage": {
+      "component": "page",
+      "title": "We Value Your Feedback",
+      "content": [
+        {
+          "component": "text",
+          "content": "Please let us know how we're doing. Your feedback helps us improve our service.",
+          "styleHint": { "variant": "body" }
+        },
+        {
+          "component": "form",
+          "id": "feedbackForm",
+          "fields": [
+            { "name": "customerName", "label": "Your Name", "type": "text", "required": true, "placeholder": "e.g., Jane Smith" },
+            { "name": "customerEmail", "label": "Email Address", "type": "email", "placeholder": "you@example.com" },
+            { "name": "rating", "label": "Rating", "type": "select", "options": ["1 - Poor", "2 - Fair", "3 - Good", "4 - Very Good", "5 - Excellent"], "required": true },
+            { "name": "comments", "label": "Comments", "type": "multiline", "placeholder": "Tell us about your experience..." }
+          ]
+        },
+        {
+          "component": "button",
+          "label": "Submit Feedback",
+          "onClick": [
+            {
+              "action": "submit",
+              "dataSource": "feedbackStore",
+              "target": "feedbackForm"
+            },
+            {
+              "action": "navigate",
+              "target": "thankYouPage"
+            }
+          ],
+          "styleHint": { "emphasis": "primary" }
+        }
+      ]
+    },
+    "thankYouPage": {
+      "component": "page",
+      "title": "Thank You!",
+      "content": [
+        {
+          "component": "text",
+          "content": "Your feedback has been submitted successfully. We appreciate you taking the time to help us.",
+          "styleHint": { "variant": "heading" }
+        },
+        {
+          "component": "button",
+          "label": "Submit Another Response",
+          "onClick": [
+            {
+              "action": "navigate",
+              "target": "feedbackFormPage"
+            }
+          ]
+        }
+      ]
+    },
+    "viewFeedbackPage": {
+      "component": "page",
+      "title": "All Feedback",
+      "content": [
+        {
+          "component": "text",
+          "content": "Below is all feedback that has been submitted.",
+          "styleHint": { "variant": "body" }
+        },
+        {
+          "component": "list",
+          "dataSource": "feedbackReader",
+          "columns": [
+            { "header": "Name", "field": "customerName" },
+            { "header": "Email", "field": "customerEmail" },
+            { "header": "Rating", "field": "rating", "sortable": true },
+            { "header": "Comments", "field": "comments" }
+          ]
+        },
+        {
+          "component": "button",
+          "label": "Back to Form",
+          "onClick": [
+            {
+              "action": "navigate",
+              "target": "feedbackFormPage"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "dataSources": {
+    "feedbackStore": {
+      "url": "local://feedback",
+      "method": "POST"
+    },
+    "feedbackReader": {
+      "url": "local://feedback",
+      "method": "GET",
+      "fields": [
+        { "name": "customerName", "type": "text" },
+        { "name": "customerEmail", "type": "email" },
+        { "name": "rating", "type": "select" },
+        { "name": "comments", "type": "multiline" }
+      ],
+      "seedData": [
+        {
+          "customerName": "Alice Johnson",
+          "customerEmail": "alice@example.com",
+          "rating": "5 - Excellent",
+          "comments": "Absolutely love the service! Fast response times and very helpful staff."
+        },
+        {
+          "customerName": "Bob Martinez",
+          "customerEmail": "bob@example.com",
+          "rating": "4 - Very Good",
+          "comments": "Great overall experience. Would appreciate more options for scheduling."
+        },
+        {
+          "customerName": "Carol Chen",
+          "customerEmail": "carol@example.com",
+          "rating": "3 - Good",
+          "comments": "Decent service but the wait time was longer than expected."
+        }
+      ]
+    }
+  },
+  "help": {
+    "overview": "Customer Feedback lets you collect and review feedback from customers. Submit ratings and comments through the form, then browse all responses on the View Responses page.",
+    "pages": {
+      "feedbackFormPage": "Fill in your name (required), email, select a rating from the dropdown (required), and any comments, then press Submit Feedback.",
+      "thankYouPage": "Your feedback was saved. You can submit another response or navigate to View Responses.",
+      "viewFeedbackPage": "This page displays all submitted feedback in a table with name, email, rating, and comments."
+    }
+  },
+  "tour": [
+    {
+      "title": "Welcome to Customer Feedback",
+      "content": "This app lets you collect feedback from customers and review it all in one place."
+    },
+    {
+      "title": "Submit Feedback",
+      "content": "Use this form to enter a customer name, email, select a rating from the dropdown, and add comments, then press Submit. Fields marked with * are required.",
+      "page": "feedbackFormPage"
+    },
+    {
+      "title": "View All Responses",
+      "content": "Browse every piece of feedback that has been submitted in a convenient table view.",
+      "page": "viewFeedbackPage"
+    }
+  ]
+}

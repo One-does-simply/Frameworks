@@ -1,0 +1,143 @@
+{
+  "appName": "Personal Journal",
+  "startPage": "writeEntryPage",
+  "menu": [
+    { "label": "Write Entry", "mapsTo": "writeEntryPage" },
+    { "label": "View Entries", "mapsTo": "viewEntriesPage" }
+  ],
+  "pages": {
+    "writeEntryPage": {
+      "component": "page",
+      "title": "Write a Journal Entry",
+      "content": [
+        {
+          "component": "text",
+          "content": "Take a moment to reflect on your day. Write freely and honestly.",
+          "styleHint": { "variant": "body" }
+        },
+        {
+          "component": "form",
+          "id": "journalEntryForm",
+          "fields": [
+            { "name": "title", "label": "Title", "type": "text", "required": true, "placeholder": "e.g., Monday Reflections" },
+            { "name": "date", "label": "Date", "type": "date", "required": true },
+            { "name": "mood", "label": "Mood", "type": "select", "options": ["Happy", "Calm", "Grateful", "Anxious", "Sad", "Neutral", "Excited", "Focused", "Stressed"] },
+            { "name": "entry", "label": "Journal Entry", "type": "multiline", "required": true, "placeholder": "What's on your mind today?" }
+          ]
+        },
+        {
+          "component": "button",
+          "label": "Save Entry",
+          "onClick": [
+            {
+              "action": "submit",
+              "dataSource": "journalStore",
+              "target": "journalEntryForm"
+            },
+            {
+              "action": "navigate",
+              "target": "viewEntriesPage"
+            }
+          ],
+          "styleHint": { "emphasis": "primary" }
+        },
+        {
+          "component": "button",
+          "label": "Discard",
+          "onClick": [
+            {
+              "action": "navigate",
+              "target": "viewEntriesPage"
+            }
+          ],
+          "styleHint": { "emphasis": "danger" }
+        }
+      ]
+    },
+    "viewEntriesPage": {
+      "component": "page",
+      "title": "My Journal Entries",
+      "content": [
+        {
+          "component": "text",
+          "content": "Browse through your past journal entries.",
+          "styleHint": { "variant": "body" }
+        },
+        {
+          "component": "list",
+          "dataSource": "journalReader",
+          "columns": [
+            { "header": "Date", "field": "date", "sortable": true },
+            { "header": "Title", "field": "title" },
+            { "header": "Mood", "field": "mood", "sortable": true },
+            { "header": "Entry", "field": "entry" }
+          ]
+        },
+        {
+          "component": "button",
+          "label": "Write New Entry",
+          "onClick": [
+            {
+              "action": "navigate",
+              "target": "writeEntryPage"
+            }
+          ],
+          "styleHint": { "emphasis": "primary" }
+        }
+      ]
+    }
+  },
+  "dataSources": {
+    "journalStore": {
+      "url": "local://journal_entries",
+      "method": "POST"
+    },
+    "journalReader": {
+      "url": "local://journal_entries",
+      "method": "GET",
+      "fields": [
+        { "name": "title", "type": "text" },
+        { "name": "date", "type": "date" },
+        { "name": "mood", "type": "select" },
+        { "name": "entry", "type": "multiline" }
+      ],
+      "seedData": [
+        {
+          "title": "A Fresh Start",
+          "date": "2025-03-01",
+          "mood": "Optimistic",
+          "entry": "Today I decided to start journaling regularly. I feel hopeful about building this new habit and reflecting on my days more intentionally."
+        },
+        {
+          "title": "Rainy Afternoon Thoughts",
+          "date": "2025-03-02",
+          "mood": "Calm",
+          "entry": "Spent the afternoon reading while it rained outside. There is something peaceful about the sound of rain against the window. Finished two chapters of my book."
+        }
+      ]
+    }
+  },
+  "help": {
+    "overview": "Personal Journal is your private space to write daily reflections. Capture your thoughts, track your mood, and look back on past entries anytime.",
+    "pages": {
+      "writeEntryPage": "Give your entry a title, pick the date, select your current mood from the dropdown, and write your journal text. Press Save Entry when finished, or Discard to go back without saving.",
+      "viewEntriesPage": "This page lists all your saved journal entries with their dates, titles, moods, and content."
+    }
+  },
+  "tour": [
+    {
+      "title": "Welcome to Your Journal",
+      "content": "Journaling helps reduce stress, improve self-awareness, and track personal growth. This app keeps your entries private and stored locally on your device."
+    },
+    {
+      "title": "Write an Entry",
+      "content": "Give each entry a title, pick the date, choose your mood from the dropdown, and write whatever is on your mind. Fields marked with * are required.",
+      "page": "writeEntryPage"
+    },
+    {
+      "title": "Review Past Entries",
+      "content": "Browse your previous entries to notice patterns in your mood and reflect on how you have grown over time.",
+      "page": "viewEntriesPage"
+    }
+  ]
+}
