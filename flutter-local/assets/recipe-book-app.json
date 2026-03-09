@@ -128,6 +128,19 @@
       "browseRecipesPage": "View all your saved recipes in a table. Click Add New Recipe to expand your collection."
     }
   },
+  "settings": {
+    "defaultServings": {
+      "label": "Default servings",
+      "type": "number",
+      "default": "4"
+    },
+    "defaultCuisine": {
+      "label": "Default cuisine",
+      "type": "select",
+      "options": ["Italian", "Asian", "Mexican", "Indian", "Mediterranean", "American", "French", "Japanese", "Other"],
+      "default": "Italian"
+    }
+  },
   "tour": [
     {
       "title": "Welcome to Recipe Book",

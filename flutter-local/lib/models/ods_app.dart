@@ -1,3 +1,4 @@
+import 'ods_app_setting.dart';
 import 'ods_data_source.dart';
 import 'ods_help.dart';
 import 'ods_menu_item.dart';
@@ -39,6 +40,9 @@ class OdsApp {
   /// Optional guided tour steps shown on first launch.
   final List<OdsTourStep> tour;
 
+  /// Optional user-configurable settings with default values.
+  final Map<String, OdsAppSetting> settings;
+
   const OdsApp({
     required this.appName,
     required this.startPage,
@@ -47,6 +51,7 @@ class OdsApp {
     required this.dataSources,
     this.help,
     this.tour = const [],
+    this.settings = const {},
   });
 
   factory OdsApp.fromJson(Map<String, dynamic> json) {
@@ -74,6 +79,11 @@ class OdsApp {
               ?.map((t) => OdsTourStep.fromJson(t as Map<String, dynamic>))
               .toList() ??
           [],
+      settings: (json['settings'] as Map<String, dynamic>?)?.map(
+            (key, value) =>
+                MapEntry(key, OdsAppSetting.fromJson(value as Map<String, dynamic>)),
+          ) ??
+          {},
     );
   }
 }

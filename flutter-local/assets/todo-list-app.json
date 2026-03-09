@@ -137,6 +137,19 @@
       "viewTasksPage": "View all your tasks with their due dates, priorities, and done status. Press 'Mark Done' on any row to mark it complete."
     }
   },
+  "settings": {
+    "defaultPriority": {
+      "label": "Default priority for new tasks",
+      "type": "select",
+      "options": ["High", "Medium", "Low"],
+      "default": "Medium"
+    },
+    "showNotes": {
+      "label": "Show notes column in task list",
+      "type": "checkbox",
+      "default": "false"
+    }
+  },
   "tour": [
     {
       "title": "Welcome to To-Do List!",

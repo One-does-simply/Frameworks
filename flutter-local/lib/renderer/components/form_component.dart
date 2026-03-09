@@ -14,6 +14,7 @@ import '../../models/ods_field_definition.dart';
 ///   - "email"     -> single-line TextField with email keyboard
 ///   - "number"    -> single-line TextField with numeric keyboard
 ///   - "date"      -> read-only TextField that opens a date picker on tap
+///   - "datetime"  -> read-only TextField that opens date + time pickers on tap
 ///   - "multiline" -> multi-line TextField for long-form content
 ///   - "select"    -> dropdown menu with predefined options
 ///   - "checkbox"  -> switch toggle for boolean values
@@ -69,7 +70,7 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
     final engine = context.read<AppEngine>();
     var currentValue = engine.getFormState(widget.formId)[widget.field.name] ?? '';
     if (currentValue.isEmpty && widget.field.defaultValue != null) {
-      currentValue = widget.field.defaultValue!;
+      currentValue = _resolveDefault(widget.field.defaultValue!, widget.field.type);
       // Push the default into the engine so it's included in submit/update.
       engine.updateFormField(widget.formId, widget.field.name, currentValue);
     }
@@ -91,6 +92,25 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  /// Resolves magic default tokens like "NOW" and "CURRENTDATE" to actual values.
+  ///
+  /// ODS Spec: Date and datetime fields can use "NOW" or "CURRENTDATE" as their
+  /// default value. The framework replaces these with the current date or
+  /// datetime at render time, so the form opens pre-filled with "today".
+  static String _resolveDefault(String defaultValue, String fieldType) {
+    final upper = defaultValue.toUpperCase();
+    if (upper == 'NOW' || upper == 'CURRENTDATE') {
+      final now = DateTime.now();
+      if (fieldType == 'datetime') {
+        return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} '
+            '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+      }
+      // For "date" or any other type, return just the date portion.
+      return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    }
+    return defaultValue;
   }
 
   /// Maps ODS field types to Flutter keyboard types.
@@ -159,6 +179,8 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
         return _buildCheckbox(currentValue);
       case 'date':
         return _buildDate();
+      case 'datetime':
+        return _buildDateTime();
       default:
         return _buildTextField();
     }
@@ -238,6 +260,56 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
         hintText: widget.field.placeholder,
         border: const OutlineInputBorder(),
         suffixIcon: const Icon(Icons.calendar_today),
+      ),
+    );
+  }
+
+  /// Opens a Material date picker followed by a time picker, writing the
+  /// combined datetime (YYYY-MM-DD HH:MM) to the controller and engine state.
+  Future<void> _pickDateTime() async {
+    final now = DateTime.now();
+    final existingDt = _parseDate(_controller.text);
+
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: existingDt ?? now,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (pickedDate == null || !mounted) return;
+
+    final initialTime = existingDt != null
+        ? TimeOfDay(hour: existingDt.hour, minute: existingDt.minute)
+        : TimeOfDay(hour: now.hour, minute: now.minute);
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+    );
+    if (pickedTime == null || !mounted) return;
+
+    final formatted =
+        '${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')} '
+        '${pickedTime.hour.toString().padLeft(2, '0')}:${pickedTime.minute.toString().padLeft(2, '0')}';
+    _controller.text = formatted;
+    context.read<AppEngine>().updateFormField(
+          widget.formId,
+          widget.field.name,
+          formatted,
+        );
+  }
+
+  /// Builds a datetime picker field (date + time).
+  Widget _buildDateTime() {
+    return TextField(
+      controller: _controller,
+      readOnly: true,
+      onTap: _pickDateTime,
+      decoration: InputDecoration(
+        labelText: _labelText(),
+        hintText: widget.field.placeholder,
+        border: const OutlineInputBorder(),
+        suffixIcon: const Icon(Icons.access_time),
       ),
     );
   }

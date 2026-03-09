@@ -54,6 +54,44 @@ class _OdsListWidgetState extends State<OdsListWidget> {
     return sorted;
   }
 
+  /// Shows a confirmation dialog before deleting a row.
+  Future<void> _confirmDelete(
+    BuildContext context,
+    AppEngine engine,
+    OdsRowAction action,
+    Map<String, dynamic> row,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Record'),
+        content: const Text('Are you sure you want to delete this record? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final matchValue = row[action.matchField]?.toString() ?? '';
+      engine.executeDeleteRowAction(
+        dataSourceId: action.dataSource,
+        matchField: action.matchField,
+        matchValue: matchValue,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final engine = context.watch<AppEngine>();
@@ -134,19 +172,32 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                           children: widget.model.rowActions.map((action) {
                             return Padding(
                               padding: const EdgeInsets.only(right: 4),
-                              child: TextButton(
-                                onPressed: () {
-                                  final matchValue =
-                                      row[action.matchField]?.toString() ?? '';
-                                  engine.executeRowAction(
-                                    dataSourceId: action.dataSource,
-                                    matchField: action.matchField,
-                                    matchValue: matchValue,
-                                    values: action.values,
-                                  );
-                                },
-                                child: Text(action.label),
-                              ),
+                              child: action.isDelete
+                                  ? TextButton(
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: Theme.of(context).colorScheme.error,
+                                      ),
+                                      onPressed: () => _confirmDelete(
+                                        context,
+                                        engine,
+                                        action,
+                                        row,
+                                      ),
+                                      child: Text(action.label),
+                                    )
+                                  : TextButton(
+                                      onPressed: () {
+                                        final matchValue =
+                                            row[action.matchField]?.toString() ?? '';
+                                        engine.executeRowAction(
+                                          dataSourceId: action.dataSource,
+                                          matchField: action.matchField,
+                                          matchValue: matchValue,
+                                          values: action.values,
+                                        );
+                                      },
+                                      child: Text(action.label),
+                                    ),
                             );
                           }).toList(),
                         ),

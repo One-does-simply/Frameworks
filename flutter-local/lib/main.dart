@@ -9,6 +9,8 @@ import 'engine/app_engine.dart';
 import 'engine/loaded_apps_store.dart';
 import 'engine/settings_store.dart';
 import 'loader/spec_loader.dart';
+import 'models/ods_app.dart';
+import 'models/ods_app_setting.dart';
 import 'renderer/page_renderer.dart';
 import 'screens/app_help_screen.dart';
 import 'screens/app_tour_dialog.dart';
@@ -341,6 +343,62 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     }
   }
 
+  Future<void> _editWithAi(LoadedAppEntry app) async {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _EditWithAiScreen(
+          app: app,
+          onSpecUpdated: (updatedJson) async {
+            String newName = app.name;
+            String newDesc = app.description;
+            try {
+              final parsed = jsonDecode(updatedJson) as Map<String, dynamic>;
+              newName = parsed['appName'] as String? ?? newName;
+              final help = parsed['help'] as Map<String, dynamic>?;
+              if (help != null) {
+                newDesc = help['overview'] as String? ?? '';
+              }
+            } catch (_) {}
+
+            await _loadedAppsStore.updateApp(
+              id: app.id,
+              name: newName,
+              description: newDesc,
+              specJson: updatedJson,
+            );
+            if (mounted) setState(() {});
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _archiveApp(LoadedAppEntry app) async {
+    await _loadedAppsStore.archiveApp(app.id);
+    if (mounted) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('"${app.name}" archived'),
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () async {
+              await _loadedAppsStore.unarchiveApp(app.id);
+              if (mounted) setState(() {});
+            },
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _unarchiveApp(LoadedAppEntry app) async {
+    await _loadedAppsStore.unarchiveApp(app.id);
+    if (mounted) setState(() {});
+  }
+
   void _showCreateNew() {
     Navigator.push(
       context,
@@ -513,7 +571,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             const SliverFillRemaining(
               child: Center(child: CircularProgressIndicator()),
             )
-          else if (_loadedAppsStore.apps.isEmpty)
+          else if (_loadedAppsStore.activeApps.isEmpty)
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.all(48),
@@ -540,19 +598,59 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
-                    final app = _loadedAppsStore.apps[index];
+                    final app = _loadedAppsStore.activeApps[index];
                     return _AppListTile(
                       app: app,
                       isLoading: _isLoading,
                       onRun: () => _runSpec(app.specJson),
-                      onEdit: app.isBundled ? null : () => _editApp(app),
+                      onEditSpec: () => _editApp(app),
+                      onEditWithAi: () => _editWithAi(app),
+                      onArchive: () => _archiveApp(app),
                       onRemove: app.isBundled ? null : () => _removeApp(app),
                     );
                   },
-                  childCount: _loadedAppsStore.apps.length,
+                  childCount: _loadedAppsStore.activeApps.length,
                 ),
               ),
             ),
+
+          // -- Archived section --
+          if (_storeReady && _loadedAppsStore.archivedApps.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.archive_outlined, size: 18, color: colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Archived',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final app = _loadedAppsStore.archivedApps[index];
+                    return _ArchivedAppTile(
+                      app: app,
+                      onUnarchive: () => _unarchiveApp(app),
+                      onRemove: app.isBundled ? null : () => _removeApp(app),
+                    );
+                  },
+                  childCount: _loadedAppsStore.archivedApps.length,
+                ),
+              ),
+            ),
+          ],
 
           // Bottom padding
           const SliverToBoxAdapter(child: SizedBox(height: 32)),
@@ -709,14 +807,18 @@ class _AppListTile extends StatelessWidget {
   final LoadedAppEntry app;
   final bool isLoading;
   final VoidCallback onRun;
-  final VoidCallback? onEdit;
+  final VoidCallback onEditSpec;
+  final VoidCallback onEditWithAi;
+  final VoidCallback onArchive;
   final VoidCallback? onRemove;
 
   const _AppListTile({
     required this.app,
     required this.isLoading,
     required this.onRun,
-    this.onEdit,
+    required this.onEditSpec,
+    required this.onEditWithAi,
+    required this.onArchive,
     this.onRemove,
   });
 
@@ -785,24 +887,130 @@ class _AppListTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                // Action buttons
-                if (onEdit != null || onRemove != null) ...[
-                  if (onEdit != null)
-                    IconButton(
-                      icon: Icon(Icons.edit_outlined, size: 20, color: colorScheme.onSurfaceVariant),
-                      tooltip: 'Edit Spec',
-                      onPressed: onEdit,
+                // More actions menu
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert, color: colorScheme.onSurfaceVariant, size: 20),
+                  tooltip: 'More actions',
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'editWithAi':
+                        onEditWithAi();
+                      case 'editSpec':
+                        onEditSpec();
+                      case 'archive':
+                        onArchive();
+                      case 'remove':
+                        onRemove?.call();
+                    }
+                  },
+                  itemBuilder: (ctx) => [
+                    const PopupMenuItem(
+                      value: 'editWithAi',
+                      child: ListTile(
+                        leading: Icon(Icons.auto_awesome),
+                        title: Text('Edit with AI'),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
                     ),
-                  if (onRemove != null)
-                    IconButton(
-                      icon: Icon(Icons.delete_outline, size: 20, color: colorScheme.error),
-                      tooltip: 'Remove',
-                      onPressed: onRemove,
+                    if (!app.isBundled)
+                      const PopupMenuItem(
+                        value: 'editSpec',
+                        child: ListTile(
+                          leading: Icon(Icons.code),
+                          title: Text('Edit JSON Spec'),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      value: 'archive',
+                      child: ListTile(
+                        leading: Icon(Icons.archive_outlined),
+                        title: Text('Archive'),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
                     ),
-                ],
+                    if (onRemove != null)
+                      PopupMenuItem(
+                        value: 'remove',
+                        child: ListTile(
+                          leading: Icon(Icons.delete_outline, color: colorScheme.error),
+                          title: Text('Delete', style: TextStyle(color: colorScheme.error)),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                  ],
+                ),
                 Icon(Icons.play_arrow_rounded, color: colorScheme.primary, size: 28),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Archived app tile — compact with restore/delete options
+// ---------------------------------------------------------------------------
+
+class _ArchivedAppTile extends StatelessWidget {
+  final LoadedAppEntry app;
+  final VoidCallback onUnarchive;
+  final VoidCallback? onRemove;
+
+  const _ArchivedAppTile({
+    required this.app,
+    required this.onUnarchive,
+    this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Card(
+        color: colorScheme.surfaceContainerLow,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Icon(Icons.archive_outlined, size: 20, color: colorScheme.onSurfaceVariant),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  app.name,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: onUnarchive,
+                icon: const Icon(Icons.unarchive_outlined, size: 16),
+                label: const Text('Restore'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+              ),
+              if (onRemove != null)
+                IconButton(
+                  icon: Icon(Icons.delete_outline, size: 18, color: colorScheme.error),
+                  tooltip: 'Delete permanently',
+                  onPressed: onRemove,
+                  visualDensity: VisualDensity.compact,
+                ),
+            ],
           ),
         ),
       ),
@@ -1128,6 +1336,264 @@ class _StepTile extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
+// Edit with AI screen — copy spec, edit with chatbot, paste back
+// ---------------------------------------------------------------------------
+
+class _EditWithAiScreen extends StatefulWidget {
+  final LoadedAppEntry app;
+  final Future<void> Function(String updatedJson) onSpecUpdated;
+
+  const _EditWithAiScreen({required this.app, required this.onSpecUpdated});
+
+  @override
+  State<_EditWithAiScreen> createState() => _EditWithAiScreenState();
+}
+
+class _EditWithAiScreenState extends State<_EditWithAiScreen> {
+  bool _specCopied = false;
+  bool _promptCopied = false;
+  final _pasteController = TextEditingController();
+  String? _importError;
+
+  @override
+  void dispose() {
+    _pasteController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _copySpec() async {
+    await Clipboard.setData(ClipboardData(text: widget.app.specJson));
+    if (mounted) {
+      setState(() => _specCopied = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('App spec JSON copied to clipboard!'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _copyEditPrompt() async {
+    final prompt = await rootBundle.loadString('assets/build-helper-prompt.txt');
+    if (!mounted) return;
+    await Clipboard.setData(ClipboardData(text: prompt));
+    if (mounted) {
+      setState(() => _promptCopied = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Build Helper prompt copied to clipboard!'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _importUpdatedSpec() async {
+    final text = _pasteController.text.trim();
+    if (text.isEmpty) {
+      setState(() => _importError = 'Paste the updated JSON spec first.');
+      return;
+    }
+
+    try {
+      jsonDecode(text); // Validate it's valid JSON
+    } catch (e) {
+      setState(() => _importError = 'Invalid JSON: $e');
+      return;
+    }
+
+    await widget.onSpecUpdated(text);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('"${widget.app.name}" updated successfully!'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      Navigator.pop(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Scaffold(
+      appBar: AppBar(title: Text('Edit ${widget.app.name}')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Hero
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: isDark
+                          ? [const Color(0xFF1E1B4B), const Color(0xFF312E81)]
+                          : [const Color(0xFF4F46E5), const Color(0xFF7C3AED)],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.edit_note, size: 36, color: Colors.white),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Edit with AI Assistance',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Copy your app\'s current spec, paste it into any AI chatbot along with '
+                        'the Build Helper prompt, describe your changes, and paste the updated '
+                        'spec back here.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.85),
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 28),
+
+                // Step 1: Copy prompt
+                Text('Step 1: Copy the Build Helper Prompt',
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Text(
+                  'If you haven\'t already pasted the Build Helper prompt into your AI chatbot, copy it first.',
+                  style: theme.textTheme.bodySmall?.copyWith(height: 1.4),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _copyEditPrompt,
+                    icon: Icon(_promptCopied ? Icons.check : Icons.copy, size: 18),
+                    label: Text(_promptCopied ? 'Prompt Copied!' : 'Copy Build Helper Prompt'),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Step 2: Copy spec
+                Text('Step 2: Copy Your App Spec',
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Text(
+                  'Copy the current JSON spec for "${widget.app.name}" and paste it into the AI chatbot. '
+                  'Tell the AI what changes you\'d like to make.',
+                  style: theme.textTheme.bodySmall?.copyWith(height: 1.4),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _copySpec,
+                    icon: Icon(_specCopied ? Icons.check : Icons.copy, size: 18),
+                    label: Text(_specCopied ? 'Spec Copied!' : 'Copy App Spec JSON'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+
+                // Preview the spec
+                const SizedBox(height: 8),
+                Card(
+                  child: ExpansionTile(
+                    leading: Icon(Icons.visibility_outlined, color: colorScheme.primary, size: 20),
+                    title: const Text('Preview current spec'),
+                    childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.black26 : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        child: SingleChildScrollView(
+                          child: SelectableText(
+                            widget.app.specJson,
+                            style: TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                              color: isDark ? Colors.white70 : Colors.black87,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Step 3: Paste back
+                Text('Step 3: Paste Updated Spec',
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                Text(
+                  'After the AI generates the updated spec, copy it and paste it below.',
+                  style: theme.textTheme.bodySmall?.copyWith(height: 1.4),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _pasteController,
+                  maxLines: 8,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                  decoration: InputDecoration(
+                    hintText: 'Paste the updated JSON spec here...',
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.all(12),
+                    errorText: _importError,
+                  ),
+                  onChanged: (_) {
+                    if (_importError != null) setState(() => _importError = null);
+                  },
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _importUpdatedSpec,
+                    icon: const Icon(Icons.save, size: 18),
+                    label: const Text('Save Updated Spec'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Spec editor dialog (for editing user-added app specs)
 // ---------------------------------------------------------------------------
 
@@ -1341,72 +1807,22 @@ class _AppShellState extends State<AppShell> {
               );
             }),
             const Divider(),
-            // -- Settings section --
-            Padding(
-              padding: const EdgeInsets.only(left: 24, top: 4, bottom: 4),
-              child: Text(
-                'SETTINGS',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ),
-            if (app.tour.isNotEmpty)
-              ListTile(
-                leading: const Icon(Icons.tour_outlined),
-                title: const Text('Replay Tour'),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-                onTap: () {
-                  Navigator.pop(context);
-                  AppTourDialog.show(
-                    context,
-                    steps: app.tour,
-                    appName: app.appName,
-                    onNavigateToPage: (pageId) => engine.navigateTo(pageId),
-                  );
-                },
-              ),
             ListTile(
-              leading: Icon(
-                engine.debugMode ? Icons.bug_report : Icons.bug_report_outlined,
-                color: engine.debugMode ? Colors.orange : null,
-              ),
-              title: Text(engine.debugMode ? 'Hide Debug Panel' : 'Show Debug Panel'),
+              leading: const Icon(Icons.settings_outlined),
+              title: const Text('Settings'),
               contentPadding: const EdgeInsets.symmetric(horizontal: 24),
               onTap: () {
                 Navigator.pop(context);
-                engine.toggleDebugMode();
+                showDialog(
+                  context: context,
+                  builder: (_) => _SettingsDialog(
+                    engine: engine,
+                    settings: settings,
+                    app: app,
+                  ),
+                );
               },
             ),
-            // Theme sub-section
-            ListTile(
-              leading: Icon(
-                settings.themeMode == ThemeMode.dark
-                    ? Icons.dark_mode
-                    : settings.themeMode == ThemeMode.light
-                        ? Icons.light_mode
-                        : Icons.auto_mode,
-              ),
-              title: const Text('Theme'),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-              trailing: SegmentedButton<ThemeMode>(
-                segments: const [
-                  ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode, size: 16)),
-                  ButtonSegment(value: ThemeMode.system, icon: Icon(Icons.auto_mode, size: 16)),
-                  ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode, size: 16)),
-                ],
-                selected: {settings.themeMode},
-                onSelectionChanged: (s) => settings.setThemeMode(s.first),
-                showSelectedIcon: false,
-                style: ButtonStyle(
-                  visualDensity: VisualDensity.compact,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-            ),
-            const Divider(),
             ListTile(
               leading: const Icon(Icons.close),
               title: const Text('Close App'),
@@ -1439,6 +1855,237 @@ class _AppShellState extends State<AppShell> {
             ),
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Settings dialog
+// ---------------------------------------------------------------------------
+
+class _SettingsDialog extends StatelessWidget {
+  final AppEngine engine;
+  final SettingsStore settings;
+  final OdsApp app;
+
+  const _SettingsDialog({
+    required this.engine,
+    required this.settings,
+    required this.app,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return AlertDialog(
+      title: const Text('Settings'),
+      contentPadding: const EdgeInsets.fromLTRB(0, 16, 0, 0),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // -- App settings (from spec) --
+            if (app.settings.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'APP SETTINGS',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              _AppSettingsList(engine: engine, settings: app.settings),
+              const Divider(),
+            ],
+            // -- Framework settings --
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'FRAMEWORK',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            // Theme
+            ListTile(
+              leading: Icon(
+                settings.themeMode == ThemeMode.dark
+                    ? Icons.dark_mode
+                    : settings.themeMode == ThemeMode.light
+                        ? Icons.light_mode
+                        : Icons.auto_mode,
+              ),
+              title: const Text('Theme'),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              trailing: SegmentedButton<ThemeMode>(
+                segments: const [
+                  ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode, size: 16)),
+                  ButtonSegment(value: ThemeMode.system, icon: Icon(Icons.auto_mode, size: 16)),
+                  ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode, size: 16)),
+                ],
+                selected: {settings.themeMode},
+                onSelectionChanged: (s) => settings.setThemeMode(s.first),
+                showSelectedIcon: false,
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ),
+            // Tour
+            if (app.tour.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.tour_outlined),
+                title: const Text('Replay Tour'),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                onTap: () {
+                  Navigator.pop(context);
+                  AppTourDialog.show(
+                    context,
+                    steps: app.tour,
+                    appName: app.appName,
+                    onNavigateToPage: (pageId) => engine.navigateTo(pageId),
+                  );
+                },
+              ),
+            // Debug
+            ListTile(
+              leading: Icon(
+                engine.debugMode ? Icons.bug_report : Icons.bug_report_outlined,
+                color: engine.debugMode ? Colors.orange : null,
+              ),
+              title: Text(engine.debugMode ? 'Hide Debug Panel' : 'Show Debug Panel'),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              onTap: () {
+                Navigator.pop(context);
+                engine.toggleDebugMode();
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Renders the app-level settings defined in the ODS spec's `settings` property.
+class _AppSettingsList extends StatefulWidget {
+  final AppEngine engine;
+  final Map<String, OdsAppSetting> settings;
+
+  const _AppSettingsList({required this.engine, required this.settings});
+
+  @override
+  State<_AppSettingsList> createState() => _AppSettingsListState();
+}
+
+class _AppSettingsListState extends State<_AppSettingsList> {
+  @override
+  Widget build(BuildContext context) {
+    final entries = widget.settings.entries.toList();
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: entries.map((entry) {
+        final key = entry.key;
+        final setting = entry.value;
+        final currentValue = widget.engine.getAppSetting(key) ?? setting.defaultValue;
+
+        if (setting.type == 'checkbox') {
+          return SwitchListTile(
+            title: Text(setting.label),
+            value: currentValue == 'true',
+            contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+            onChanged: (v) async {
+              await widget.engine.setAppSetting(key, v ? 'true' : 'false');
+              setState(() {});
+            },
+          );
+        }
+
+        if (setting.type == 'select' && setting.options != null) {
+          return ListTile(
+            title: Text(setting.label),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+            trailing: DropdownButton<String>(
+              value: setting.options!.contains(currentValue)
+                  ? currentValue
+                  : setting.defaultValue,
+              underline: const SizedBox.shrink(),
+              items: setting.options!
+                  .map((o) => DropdownMenuItem(value: o, child: Text(o)))
+                  .toList(),
+              onChanged: (v) async {
+                if (v != null) {
+                  await widget.engine.setAppSetting(key, v);
+                  setState(() {});
+                }
+              },
+            ),
+          );
+        }
+
+        // text, number, etc. — show current value with tap-to-edit
+        return ListTile(
+          title: Text(setting.label),
+          subtitle: Text(currentValue.isEmpty ? '(not set)' : currentValue),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+          onTap: () async {
+            final controller = TextEditingController(text: currentValue);
+            final result = await showDialog<String>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: Text(setting.label),
+                content: TextField(
+                  controller: controller,
+                  autofocus: true,
+                  keyboardType: setting.type == 'number'
+                      ? TextInputType.number
+                      : TextInputType.text,
+                  onSubmitted: (v) => Navigator.pop(ctx, v),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx, controller.text),
+                    child: const Text('Save'),
+                  ),
+                ],
+              ),
+            );
+            controller.dispose();
+            if (result != null) {
+              await widget.engine.setAppSetting(key, result);
+              setState(() {});
+            }
+          },
+        );
+      }).toList(),
     );
   }
 }

@@ -12,13 +12,14 @@ class OdsFieldDefinition {
   /// The programmatic name, used as the column name in local storage.
   final String name;
 
-  /// The data type: "text", "email", "number", "date", or "multiline".
+  /// The data type: "text", "email", "number", "date", "datetime", or "multiline".
   ///
   /// Drives input widget selection in forms:
   ///   - "text"      → single-line text field
   ///   - "email"     → single-line with email keyboard
   ///   - "number"    → single-line with numeric keyboard
-  ///   - "date"      → date picker (stored as ISO 8601 string)
+  ///   - "date"      → date picker (stored as ISO 8601 date string)
+  ///   - "datetime"  → date + time picker (stored as ISO 8601 datetime string)
   ///   - "multiline" → multi-line text area for long-form content
   final String type;
 

@@ -130,6 +130,19 @@
       "viewExpensesPage": "This page shows all your logged expenses in a table so you can review your spending patterns."
     }
   },
+  "settings": {
+    "currency": {
+      "label": "Currency symbol",
+      "type": "text",
+      "default": "$"
+    },
+    "defaultCategory": {
+      "label": "Default category for new expenses",
+      "type": "select",
+      "options": ["Food", "Transport", "Bills", "Entertainment", "Medical", "Shopping", "Other"],
+      "default": "Food"
+    }
+  },
   "tour": [
     {
       "title": "Welcome to Expense Tracker",

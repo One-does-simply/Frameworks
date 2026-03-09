@@ -111,9 +111,15 @@ class SpecValidator {
               context: 'page: $pageId',
             );
           }
-          if (rowAction.values.isEmpty) {
+          if (rowAction.isUpdate && rowAction.values.isEmpty) {
             result.warning(
               'Row action "${rowAction.label}" has empty values map',
+              context: 'page: $pageId',
+            );
+          }
+          if (!rowAction.isUpdate && !rowAction.isDelete) {
+            result.warning(
+              'Row action "${rowAction.label}" has unknown action type "${rowAction.action}"',
               context: 'page: $pageId',
             );
           }
@@ -185,5 +191,5 @@ class SpecValidator {
   }
 
   /// The set of field types defined in the ODS spec.
-  static const _validFieldTypes = {'text', 'email', 'number', 'date', 'multiline', 'select', 'checkbox'};
+  static const _validFieldTypes = {'text', 'email', 'number', 'date', 'datetime', 'multiline', 'select', 'checkbox'};
 }

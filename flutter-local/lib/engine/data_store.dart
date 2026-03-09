@@ -178,6 +178,25 @@ class DataStore {
     return count;
   }
 
+  /// Deletes rows where [matchField] equals [matchValue].
+  ///
+  /// ODS Spec: The "delete" row action removes a record identified by a key
+  /// field. Returns the number of rows deleted (typically 1, or 0 if no match).
+  Future<int> delete(
+    String tableName,
+    String matchField,
+    String matchValue,
+  ) async {
+    final db = _db!;
+    final count = await db.delete(
+      tableName,
+      where: '"$matchField" = ?',
+      whereArgs: [matchValue],
+    );
+    _log('DELETE from "$tableName" WHERE $matchField=$matchValue → $count rows');
+    return count;
+  }
+
   /// Returns all rows from a table, ordered by most recent first.
   Future<List<Map<String, dynamic>>> query(String tableName) async {
     final db = _db!;
@@ -211,6 +230,59 @@ class DataStore {
   Future<List<Map<String, dynamic>>> getTableInfo(String tableName) async {
     final db = _db!;
     return await db.rawQuery('PRAGMA table_info("$tableName")');
+  }
+
+  // ---------------------------------------------------------------------------
+  // App settings storage — uses a special _ods_settings key-value table
+  // ---------------------------------------------------------------------------
+
+  /// Ensures the internal settings table exists.
+  Future<void> _ensureSettingsTable() async {
+    final db = _db!;
+    if (_knownTables.contains('_ods_settings')) return;
+
+    final existing = await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='_ods_settings'",
+    );
+    if (existing.isEmpty) {
+      await db.execute(
+        'CREATE TABLE "_ods_settings" (key TEXT PRIMARY KEY, value TEXT)',
+      );
+      _log('Created internal settings table');
+    }
+    _knownTables.add('_ods_settings');
+  }
+
+  /// Gets a single app setting value, or null if not set.
+  Future<String?> getAppSetting(String key) async {
+    await _ensureSettingsTable();
+    final db = _db!;
+    final rows = await db.query(
+      '_ods_settings',
+      where: 'key = ?',
+      whereArgs: [key],
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['value'] as String?;
+  }
+
+  /// Sets a single app setting value (upsert).
+  Future<void> setAppSetting(String key, String value) async {
+    await _ensureSettingsTable();
+    final db = _db!;
+    await db.rawInsert(
+      'INSERT OR REPLACE INTO "_ods_settings" (key, value) VALUES (?, ?)',
+      [key, value],
+    );
+    _log('Setting "$key" = "$value"');
+  }
+
+  /// Gets all app settings as a map.
+  Future<Map<String, String>> getAllAppSettings() async {
+    await _ensureSettingsTable();
+    final db = _db!;
+    final rows = await db.query('_ods_settings');
+    return {for (final row in rows) row['key'] as String: row['value'] as String};
   }
 
   /// Closes the database connection. Called on app reset and dispose.

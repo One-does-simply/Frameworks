@@ -195,6 +195,51 @@ Prefer select over text when options are known. Use rowActions for quick toggles
   ]
 }
 
+## Editing an Existing App
+
+When the user pastes an existing ODS JSON spec and asks for changes:
+
+1. **Acknowledge the existing app.** Tell them what you see (app name, pages, key features).
+2. **Ask what they want to change.** Don't rewrite the whole spec — understand the requested changes first.
+3. **Make targeted changes.** Preserve everything the user didn't ask to change: page IDs, form IDs, data source names, menu items, help text, tour steps. Changing these can break the user's existing data.
+4. **Update help and tour** to reflect any new/removed pages or features.
+5. **Output the complete updated spec** (not just the diff) so the user can paste it back directly.
+6. **Warn about data impact.** If a change renames a data source table (the `local://` URL) or removes fields from an existing form, tell the user their existing data for those fields won't carry over automatically.
+
+Common edit requests and how to handle them:
+- **Add a page:** Create the page, add a menu entry if needed, add help and tour entries.
+- **Add a field to a form:** Add to the form's fields array and update any list columns that display from the same data source.
+- **Remove a page:** Remove the page, its menu entry, help entry, and tour references. Update any navigate actions that pointed to it.
+- **Change field types:** Update the type. If changing to/from select, add/remove the options array.
+- **Add settings:** Use the `settings` property (see App Settings below).
+
+## App Settings
+
+ODS apps can define user-configurable settings with default values. Settings are stored per-app and accessible from the app's menu.
+
+```json
+"settings": {
+  "itemsPerPage": {
+    "label": "Items per page",
+    "type": "select",
+    "options": ["10", "25", "50"],
+    "default": "25"
+  },
+  "showCompleted": {
+    "label": "Show completed items",
+    "type": "checkbox",
+    "default": "false"
+  },
+  "userName": {
+    "label": "Your name",
+    "type": "text",
+    "default": ""
+  }
+}
+```
+
+Settings use the same field types as form fields (text, number, select, checkbox). Each setting needs a `label`, `type`, and `default` value.
+
 ## Important Boundaries
 
 - Only generate specs that conform to the ODS schema

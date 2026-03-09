@@ -21,12 +21,16 @@ class LoadedAppEntry {
   /// Bundled apps cannot be removed from the list.
   final bool isBundled;
 
+  /// Whether this entry has been archived (hidden from the main list).
+  final bool isArchived;
+
   const LoadedAppEntry({
     required this.id,
     required this.name,
     required this.description,
     required this.specJson,
     this.isBundled = false,
+    this.isArchived = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -35,6 +39,7 @@ class LoadedAppEntry {
         'description': description,
         'specJson': specJson,
         'isBundled': isBundled,
+        'isArchived': isArchived,
       };
 
   factory LoadedAppEntry.fromJson(Map<String, dynamic> json) => LoadedAppEntry(
@@ -43,6 +48,7 @@ class LoadedAppEntry {
         description: json['description'] as String,
         specJson: json['specJson'] as String,
         isBundled: json['isBundled'] as bool? ?? false,
+        isArchived: json['isArchived'] as bool? ?? false,
       );
 }
 
@@ -60,6 +66,15 @@ class LoadedAppsStore {
 
   /// Immutable view of the current app list.
   List<LoadedAppEntry> get apps => List.unmodifiable(_apps);
+
+  /// Only non-archived apps (the main "My Apps" view).
+  List<LoadedAppEntry> get activeApps =>
+      List.unmodifiable(_apps.where((a) => !a.isArchived));
+
+  /// Only archived apps (shown in an "Archived" section).
+  List<LoadedAppEntry> get archivedApps =>
+      List.unmodifiable(_apps.where((a) => a.isArchived));
+
   bool get isInitialized => _initialized;
 
   Future<File> _getIndexFile() async {
@@ -201,6 +216,39 @@ class LoadedAppsStore {
   /// from removal at the UI layer (remove button is not shown).
   Future<void> removeApp(String id) async {
     _apps.removeWhere((app) => app.id == id);
+    await _save();
+  }
+
+  /// Archives an app (hides it without deleting). Works for both bundled
+  /// and user-added apps.
+  Future<void> archiveApp(String id) async {
+    final index = _apps.indexWhere((a) => a.id == id);
+    if (index == -1) return;
+    final app = _apps[index];
+    _apps[index] = LoadedAppEntry(
+      id: app.id,
+      name: app.name,
+      description: app.description,
+      specJson: app.specJson,
+      isBundled: app.isBundled,
+      isArchived: true,
+    );
+    await _save();
+  }
+
+  /// Restores an archived app back to the active list.
+  Future<void> unarchiveApp(String id) async {
+    final index = _apps.indexWhere((a) => a.id == id);
+    if (index == -1) return;
+    final app = _apps[index];
+    _apps[index] = LoadedAppEntry(
+      id: app.id,
+      name: app.name,
+      description: app.description,
+      specJson: app.specJson,
+      isBundled: app.isBundled,
+      isArchived: false,
+    );
     await _save();
   }
 

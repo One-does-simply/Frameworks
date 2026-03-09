@@ -91,15 +91,20 @@ class OdsListColumn {
 
 /// Defines an inline action button rendered in each row of a list.
 ///
-/// ODS Spec: Row actions let the builder add per-row buttons (e.g., "Mark Done")
-/// that update a record directly using the row's own data — no separate form
-/// page needed. The `values` map specifies what to set, and `matchField`
-/// identifies which row to update.
+/// ODS Spec: Row actions let the builder add per-row buttons (e.g., "Mark Done",
+/// "Delete") that operate on a record directly using the row's own data — no
+/// separate form page needed. Supported action types:
+///   - "update": sets new values on the matched row (requires `values` map)
+///   - "delete": removes the matched row entirely (no `values` needed)
+/// The `matchField` identifies which row to target.
 class OdsRowAction {
   final String label;
   final String action;
   final String dataSource;
   final String matchField;
+
+  /// The values to set on the matched row. Required for "update" actions,
+  /// optional (and ignored) for "delete" actions.
   final Map<String, String> values;
 
   const OdsRowAction({
@@ -107,8 +112,11 @@ class OdsRowAction {
     required this.action,
     required this.dataSource,
     required this.matchField,
-    required this.values,
+    this.values = const {},
   });
+
+  bool get isDelete => action == 'delete';
+  bool get isUpdate => action == 'update';
 
   factory OdsRowAction.fromJson(Map<String, dynamic> json) {
     return OdsRowAction(
@@ -116,8 +124,9 @@ class OdsRowAction {
       action: json['action'] as String,
       dataSource: json['dataSource'] as String,
       matchField: json['matchField'] as String,
-      values: (json['values'] as Map<String, dynamic>)
-          .map((k, v) => MapEntry(k, v.toString())),
+      values: (json['values'] as Map<String, dynamic>?)
+              ?.map((k, v) => MapEntry(k, v.toString())) ??
+          const {},
     );
   }
 }

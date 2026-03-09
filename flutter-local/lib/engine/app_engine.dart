@@ -126,6 +126,14 @@ class AppEngine extends ChangeNotifier {
       return false;
     }
 
+    // Load app settings from the database, falling back to spec defaults.
+    _appSettings.clear();
+    for (final entry in _app!.settings.entries) {
+      _appSettings[entry.key] = entry.value.defaultValue;
+    }
+    final savedSettings = await _dataStore.getAllAppSettings();
+    _appSettings.addAll(savedSettings);
+
     // Ready — navigate to the start page.
     _currentPageId = _app!.startPage;
     _navigationStack.clear();
@@ -242,6 +250,40 @@ class AppEngine extends ChangeNotifier {
     }
   }
 
+  /// Executes a delete row action, removing the matched record from storage.
+  Future<void> executeDeleteRowAction({
+    required String dataSourceId,
+    required String matchField,
+    required String matchValue,
+  }) async {
+    final ds = _app?.dataSources[dataSourceId];
+    if (ds == null || !ds.isLocal) return;
+
+    try {
+      await _dataStore.delete(ds.tableName, matchField, matchValue);
+      notifyListeners(); // Trigger list rebuild to reflect the deletion.
+    } catch (e) {
+      debugPrint('ODS Delete Row Action Error: $e');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // App settings — user-configurable settings defined in the spec.
+  // ---------------------------------------------------------------------------
+
+  /// In-memory cache of app settings, loaded from the database on spec load.
+  final Map<String, String> _appSettings = {};
+
+  /// Gets the current value for an app setting, falling back to the spec default.
+  String? getAppSetting(String key) => _appSettings[key];
+
+  /// Updates an app setting value and persists it to the database.
+  Future<void> setAppSetting(String key, String value) async {
+    _appSettings[key] = value;
+    await _dataStore.setAppSetting(key, value);
+    notifyListeners();
+  }
+
   // ---------------------------------------------------------------------------
   // Debug mode — toggle-able inspection tools for spec authors.
   // ---------------------------------------------------------------------------
@@ -279,6 +321,7 @@ class AppEngine extends ChangeNotifier {
     _currentPageId = null;
     _navigationStack.clear();
     _formStates.clear();
+    _appSettings.clear();
     _validation = null;
     _loadError = null;
     notifyListeners();
