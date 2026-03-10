@@ -1,3 +1,27 @@
+/// Describes how a select field should dynamically load its options from
+/// a GET data source instead of using a static [options] array.
+class OdsOptionsFrom {
+  /// The ID of a GET data source to fetch options from.
+  final String dataSource;
+
+  /// The field/column name whose values become the dropdown options.
+  final String valueField;
+
+  const OdsOptionsFrom({required this.dataSource, required this.valueField});
+
+  factory OdsOptionsFrom.fromJson(Map<String, dynamic> json) {
+    return OdsOptionsFrom(
+      dataSource: json['dataSource'] as String,
+      valueField: json['valueField'] as String,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'dataSource': dataSource,
+        'valueField': valueField,
+      };
+}
+
 /// Represents a single field (column) in a form or data source.
 ///
 /// ODS Spec alignment: Maps directly to the `fieldDefinition` shared type
@@ -8,6 +32,9 @@
 /// label, an optional required flag, an optional placeholder, and an optional
 /// default value. No regex, no masks, no computed logic. Complexity is the
 /// enemy of "One Does Simply."
+///
+/// Select fields support dynamic options via [optionsFrom], which references
+/// a GET data source and a column to pull values from at render time.
 class OdsFieldDefinition {
   /// The programmatic name, used as the column name in local storage.
   final String name;
@@ -41,9 +68,16 @@ class OdsFieldDefinition {
   /// where a sensible starting value reduces friction.
   final String? defaultValue;
 
-  /// Required when [type] is "select". The list of string options the user
-  /// can choose from, rendered as a dropdown menu.
+  /// Required when [type] is "select" (unless [optionsFrom] is provided).
+  /// The list of string options the user can choose from, rendered as a
+  /// dropdown menu.
   final List<String>? options;
+
+  /// Optional. Dynamically populates dropdown options from a GET data source.
+  /// When provided on a "select" field, the framework queries the referenced
+  /// data source and uses [OdsOptionsFrom.valueField] as dropdown values.
+  /// Takes priority over static [options] if both are present.
+  final OdsOptionsFrom? optionsFrom;
 
   const OdsFieldDefinition({
     required this.name,
@@ -53,6 +87,7 @@ class OdsFieldDefinition {
     this.placeholder,
     this.defaultValue,
     this.options,
+    this.optionsFrom,
   });
 
   factory OdsFieldDefinition.fromJson(Map<String, dynamic> json) {
@@ -64,6 +99,9 @@ class OdsFieldDefinition {
       placeholder: json['placeholder'] as String?,
       defaultValue: json['default'] as String?,
       options: (json['options'] as List<dynamic>?)?.cast<String>(),
+      optionsFrom: json['optionsFrom'] != null
+          ? OdsOptionsFrom.fromJson(json['optionsFrom'] as Map<String, dynamic>)
+          : null,
     );
   }
 
@@ -75,5 +113,6 @@ class OdsFieldDefinition {
         if (placeholder != null) 'placeholder': placeholder,
         if (defaultValue != null) 'default': defaultValue,
         if (options != null) 'options': options,
+        if (optionsFrom != null) 'optionsFrom': optionsFrom!.toJson(),
       };
 }

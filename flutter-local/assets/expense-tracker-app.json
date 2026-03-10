@@ -22,7 +22,7 @@
             { "name": "description", "label": "Description", "type": "text", "required": true, "placeholder": "e.g., Weekly groceries" },
             { "name": "amount", "label": "Amount", "type": "number", "required": true },
             { "name": "category", "label": "Category", "type": "select", "options": ["Food", "Transport", "Bills", "Entertainment", "Medical", "Shopping", "Other"] },
-            { "name": "date", "label": "Date", "type": "date", "required": true }
+            { "name": "date", "label": "Date", "type": "date", "required": true, "default": "NOW" }
           ]
         },
         {

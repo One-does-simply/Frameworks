@@ -38,7 +38,8 @@ For each page, walk through what components it needs:
   - Type: text, email, number, date, multiline, select, or checkbox
   - Whether required
   - Optional placeholder and default value
-  - select type requires an options array
+  - select type requires an options array OR optionsFrom for dynamic options
+  - For select fields whose options come from user-managed data (e.g., categories, rooms, people), use optionsFrom to reference a GET data source
   - checkbox stores "true"/"false"
 - List — If the page displays data, ask which columns to show. Lists can have optional rowActions for inline per-row operations (like "Mark Done")
 - Button — Label and actions (navigate, submit, update, or combinations)
@@ -80,7 +81,7 @@ Components:
 - list: requires component, dataSource (must reference dataSources), columns (non-empty array)
 - button: requires component, label, onClick (non-empty array)
 
-Fields: need name (camelCase), label, type (text/email/number/date/multiline/select/checkbox). select requires options array.
+Fields: need name (camelCase), label, type (text/email/number/date/multiline/select/checkbox). select requires options array OR optionsFrom object.
 
 Actions:
 - navigate: needs target (page key)
@@ -107,10 +108,34 @@ Tour: 2-4 steps with title and content; page references must match page IDs.
 - number: numeric values
 - date: dates (shows date picker)
 - multiline: long text (journals, comments)
-- select: pick from fixed list (requires options array)
+- select: pick from fixed list (requires options array) or dynamic list (requires optionsFrom)
 - checkbox: yes/no toggle (stores "true"/"false")
 
-Prefer select over text when options are known. Use rowActions for quick toggles (mark done). Use update actions when the user needs to type new values.
+Prefer select over text when options are known. Use optionsFrom when the user wants to manage their own lookup lists (categories, rooms, people, etc.) — create a separate "manage" page with a form + list for the lookup data, then reference its GET data source from the select field. Use rowActions for quick toggles (mark done). Use update actions when the user needs to type new values.
+
+## Dynamic Select Options (optionsFrom)
+
+Select fields can load their options dynamically from a GET data source instead of a static options array. This is useful when the user wants to manage their own categories, tags, rooms, people, etc.
+
+```json
+{
+  "name": "room",
+  "label": "Room",
+  "type": "select",
+  "required": true,
+  "optionsFrom": {
+    "dataSource": "roomReader",
+    "valueField": "roomName"
+  }
+}
+```
+
+- `dataSource`: must reference a GET data source defined in dataSources
+- `valueField`: the column/field name whose values become dropdown options
+- If both `options` and `optionsFrom` are present, `optionsFrom` takes priority
+- The dropdown shows "No options available" if the data source is empty
+
+**Pattern:** When using optionsFrom, create a "Manage" page where the user can add/delete entries for the lookup table, then reference that table's GET data source from the select field.
 
 ## Reference Example
 
@@ -210,7 +235,7 @@ Common edit requests and how to handle them:
 - **Add a page:** Create the page, add a menu entry if needed, add help and tour entries.
 - **Add a field to a form:** Add to the form's fields array and update any list columns that display from the same data source.
 - **Remove a page:** Remove the page, its menu entry, help entry, and tour references. Update any navigate actions that pointed to it.
-- **Change field types:** Update the type. If changing to/from select, add/remove the options array.
+- **Change field types:** Update the type. If changing to/from select, add/remove the options array or optionsFrom object.
 - **Add settings:** Use the `settings` property (see App Settings below).
 
 ## App Settings

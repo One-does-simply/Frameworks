@@ -20,7 +20,7 @@
           "id": "journalEntryForm",
           "fields": [
             { "name": "title", "label": "Title", "type": "text", "required": true, "placeholder": "e.g., Monday Reflections" },
-            { "name": "date", "label": "Date", "type": "date", "required": true },
+            { "name": "date", "label": "Date", "type": "date", "required": true, "default": "NOW" },
             { "name": "mood", "label": "Mood", "type": "select", "options": ["Happy", "Calm", "Grateful", "Anxious", "Sad", "Neutral", "Excited", "Focused", "Stressed"] },
             { "name": "entry", "label": "Journal Entry", "type": "multiline", "required": true, "placeholder": "What's on your mind today?" }
           ]

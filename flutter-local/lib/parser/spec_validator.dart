@@ -171,11 +171,21 @@ class SpecValidator {
               context: 'page: $pageId, form: "${component.id}"',
             );
           }
-          if (field.type == 'select' && (field.options == null || field.options!.isEmpty)) {
-            result.warning(
-              'Select field "${field.name}" is missing options array',
-              context: 'page: $pageId, form: "${component.id}"',
-            );
+          if (field.type == 'select') {
+            final hasStaticOptions = field.options != null && field.options!.isNotEmpty;
+            final hasDynamicOptions = field.optionsFrom != null;
+            if (!hasStaticOptions && !hasDynamicOptions) {
+              result.warning(
+                'Select field "${field.name}" is missing both options array and optionsFrom',
+                context: 'page: $pageId, form: "${component.id}"',
+              );
+            }
+            if (hasDynamicOptions && !app.dataSources.containsKey(field.optionsFrom!.dataSource)) {
+              result.warning(
+                'Select field "${field.name}" optionsFrom references unknown dataSource "${field.optionsFrom!.dataSource}"',
+                context: 'page: $pageId, form: "${component.id}"',
+              );
+            }
           }
         }
       }

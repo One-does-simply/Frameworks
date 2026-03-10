@@ -79,15 +79,15 @@
       "content": [
         {
           "component": "text",
-          "content": "Record which habits you completed today. Type the name of each habit and whether you did it.",
+          "content": "Record which habits you completed today. Select a habit from the dropdown and mark whether you did it.",
           "styleHint": { "variant": "body" }
         },
         {
           "component": "form",
           "id": "logHabitForm",
           "fields": [
-            { "name": "date", "label": "Date", "type": "date", "required": true },
-            { "name": "habitName", "label": "Habit Name", "type": "text", "required": true, "placeholder": "e.g., Drink 8 glasses of water" },
+            { "name": "date", "label": "Date", "type": "date", "required": true, "default": "NOW" },
+            { "name": "habitName", "label": "Habit Name", "type": "select", "required": true, "optionsFrom": { "dataSource": "habitsReader", "valueField": "habitName" } },
             { "name": "completed", "label": "Completed", "type": "checkbox" },
             { "name": "notes", "label": "Notes", "type": "multiline", "placeholder": "Any thoughts about today's progress..." }
           ]
@@ -193,7 +193,7 @@
     "pages": {
       "addHabitPage": "Enter a habit name (required) and pick a category from the dropdown, then press Save Habit to add it to your tracking list.",
       "myHabitsPage": "View all the habits you have defined. Use this as a reference when logging your daily progress.",
-      "logHabitsPage": "Pick the date, type a habit name, toggle the Completed switch to mark whether you completed it today, and optionally add notes.",
+      "logHabitsPage": "Pick the date, select a habit from the dropdown, toggle the Completed switch, and optionally add notes.",
       "habitHistoryPage": "Browse all your logged habit entries to see your consistency over time."
     }
   },
@@ -209,7 +209,7 @@
     },
     {
       "title": "Log Your Day",
-      "content": "Each day, come here to record which habits you completed. Pick the date, type the habit name, and toggle the switch to mark completion.",
+      "content": "Each day, come here to record which habits you completed. Pick the date, choose a habit from the dropdown, and toggle the switch.",
       "page": "logHabitsPage"
     },
     {

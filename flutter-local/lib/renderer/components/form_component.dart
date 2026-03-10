@@ -188,16 +188,29 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
 
   /// Builds a dropdown menu for "select" fields.
   ///
-  /// The options come from [OdsFieldDefinition.options]. The framework
-  /// renders a Material dropdown so the builder only writes:
-  ///   { "type": "select", "options": ["High", "Medium", "Low"] }
+  /// Options can come from a static [OdsFieldDefinition.options] array or
+  /// dynamically from a data source via [OdsFieldDefinition.optionsFrom].
+  /// When optionsFrom is present, the framework queries the referenced GET
+  /// data source and extracts the specified column values as options.
+  /// optionsFrom takes priority over static options if both are present.
   Widget _buildSelect(String currentValue) {
-    final options = widget.field.options ?? [];
-    // If the current value isn't in the options list, treat it as unselected.
+    final optionsFrom = widget.field.optionsFrom;
+
+    // Dynamic options: fetch from a data source.
+    if (optionsFrom != null) {
+      return _buildDynamicSelect(currentValue, optionsFrom);
+    }
+
+    // Static options: use the inline options array.
+    return _buildStaticSelect(currentValue, widget.field.options ?? []);
+  }
+
+  /// Builds a dropdown with static options from the spec's options array.
+  Widget _buildStaticSelect(String currentValue, List<String> options) {
     final effectiveValue = options.contains(currentValue) ? currentValue : null;
 
     return DropdownButtonFormField<String>(
-      value: effectiveValue,
+      initialValue: effectiveValue,
       decoration: InputDecoration(
         labelText: _labelText(),
         hintText: widget.field.placeholder,
@@ -217,6 +230,55 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
                 value,
               );
         }
+      },
+    );
+  }
+
+  /// Builds a dropdown whose options are loaded from a GET data source.
+  Widget _buildDynamicSelect(
+      String currentValue, OdsOptionsFrom optionsFrom) {
+    final engine = context.read<AppEngine>();
+
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: engine.queryDataSource(optionsFrom.dataSource),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return InputDecorator(
+            decoration: InputDecoration(
+              labelText: _labelText(),
+              border: const OutlineInputBorder(),
+            ),
+            child: const SizedBox(
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+
+        final rows = snapshot.data ?? [];
+        final options = rows
+            .map((row) => row[optionsFrom.valueField]?.toString())
+            .where((v) => v != null && v.isNotEmpty)
+            .cast<String>()
+            .toSet() // deduplicate
+            .toList();
+
+        if (options.isEmpty) {
+          return InputDecorator(
+            decoration: InputDecoration(
+              labelText: _labelText(),
+              hintText: 'No options available — add data first',
+              border: const OutlineInputBorder(),
+            ),
+            child: const Text(
+              'No options available',
+              style: TextStyle(color: Colors.grey),
+            ),
+          );
+        }
+
+        return _buildStaticSelect(currentValue, options);
       },
     );
   }
