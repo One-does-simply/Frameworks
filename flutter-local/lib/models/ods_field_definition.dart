@@ -22,16 +22,93 @@ class OdsOptionsFrom {
       };
 }
 
+/// Describes a condition under which a field is visible.
+/// When the referenced field's value matches, this field is shown; otherwise hidden.
+class OdsVisibleWhen {
+  /// The name of another field in the same form to watch.
+  final String field;
+
+  /// The value the watched field must equal for this field to be visible.
+  final String equals;
+
+  const OdsVisibleWhen({required this.field, required this.equals});
+
+  factory OdsVisibleWhen.fromJson(Map<String, dynamic> json) {
+    return OdsVisibleWhen(
+      field: json['field'] as String,
+      equals: json['equals'] as String,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'field': field,
+        'equals': equals,
+      };
+}
+
+/// Describes validation constraints beyond simple `required`.
+class OdsValidation {
+  final num? min;
+  final num? max;
+  final int? minLength;
+  final String? pattern;
+  final String? message;
+
+  const OdsValidation({this.min, this.max, this.minLength, this.pattern, this.message});
+
+  factory OdsValidation.fromJson(Map<String, dynamic> json) {
+    return OdsValidation(
+      min: json['min'] as num?,
+      max: json['max'] as num?,
+      minLength: json['minLength'] as int?,
+      pattern: json['pattern'] as String?,
+      message: json['message'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        if (min != null) 'min': min,
+        if (max != null) 'max': max,
+        if (minLength != null) 'minLength': minLength,
+        if (pattern != null) 'pattern': pattern,
+        if (message != null) 'message': message,
+      };
+
+  /// Validates a value and returns an error message, or null if valid.
+  String? validate(String value, String fieldType) {
+    if (value.isEmpty) return null; // Empty check is handled by `required`.
+
+    if (minLength != null && value.length < minLength!) {
+      return message ?? 'Must be at least $minLength characters';
+    }
+
+    if (pattern != null) {
+      final regex = RegExp(pattern!);
+      if (!regex.hasMatch(value)) {
+        return message ?? 'Invalid format';
+      }
+    }
+
+    if ((min != null || max != null) && fieldType == 'number') {
+      final num? parsed = num.tryParse(value);
+      if (parsed == null) return null; // Not a number — type validation handles this.
+      if (min != null && parsed < min!) {
+        return message ?? 'Must be at least $min';
+      }
+      if (max != null && parsed > max!) {
+        return message ?? 'Must be at most $max';
+      }
+    }
+
+    return null;
+  }
+}
+
 /// Represents a single field (column) in a form or data source.
 ///
 /// ODS Spec alignment: Maps directly to the `fieldDefinition` shared type
 /// in ods-schema.json. This is the atomic building block for both user input
 /// (form fields) and data storage (table columns).
-///
-/// ODS Ethos: Fields are intentionally simple — a name, a type, an optional
-/// label, an optional required flag, an optional placeholder, and an optional
-/// default value. No regex, no masks, no computed logic. Complexity is the
-/// enemy of "One Does Simply."
 ///
 /// Select fields support dynamic options via [optionsFrom], which references
 /// a GET data source and a column to pull values from at render time.
@@ -79,6 +156,22 @@ class OdsFieldDefinition {
   /// Takes priority over static [options] if both are present.
   final OdsOptionsFrom? optionsFrom;
 
+  /// Optional. A formula that computes this field's value from other fields.
+  /// Reference fields with {fieldName} syntax. Supports basic math for number
+  /// fields or string interpolation for text fields. Computed fields are
+  /// read-only and not stored in the database.
+  final String? formula;
+
+  /// Optional. Conditional visibility — field is only shown when the
+  /// referenced field's value matches.
+  final OdsVisibleWhen? visibleWhen;
+
+  /// Optional. Validation constraints beyond `required` — min, max, minLength, pattern.
+  final OdsValidation? validation;
+
+  /// Whether this field is computed (has a formula).
+  bool get isComputed => formula != null;
+
   const OdsFieldDefinition({
     required this.name,
     required this.type,
@@ -88,6 +181,9 @@ class OdsFieldDefinition {
     this.defaultValue,
     this.options,
     this.optionsFrom,
+    this.formula,
+    this.visibleWhen,
+    this.validation,
   });
 
   factory OdsFieldDefinition.fromJson(Map<String, dynamic> json) {
@@ -102,6 +198,13 @@ class OdsFieldDefinition {
       optionsFrom: json['optionsFrom'] != null
           ? OdsOptionsFrom.fromJson(json['optionsFrom'] as Map<String, dynamic>)
           : null,
+      formula: json['formula'] as String?,
+      visibleWhen: json['visibleWhen'] != null
+          ? OdsVisibleWhen.fromJson(json['visibleWhen'] as Map<String, dynamic>)
+          : null,
+      validation: json['validation'] != null
+          ? OdsValidation.fromJson(json['validation'] as Map<String, dynamic>)
+          : null,
     );
   }
 
@@ -114,5 +217,8 @@ class OdsFieldDefinition {
         if (defaultValue != null) 'default': defaultValue,
         if (options != null) 'options': options,
         if (optionsFrom != null) 'optionsFrom': optionsFrom!.toJson(),
+        if (formula != null) 'formula': formula,
+        if (visibleWhen != null) 'visibleWhen': visibleWhen!.toJson(),
+        if (validation != null) 'validation': validation!.toJson(),
       };
 }

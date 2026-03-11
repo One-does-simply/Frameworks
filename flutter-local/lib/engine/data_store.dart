@@ -285,6 +285,21 @@ class DataStore {
     return {for (final row in rows) row['key'] as String: row['value'] as String};
   }
 
+  /// Exports all user data tables as a map of table name → list of row maps.
+  /// Internal tables (prefixed with `_ods_`) are excluded.
+  Future<Map<String, List<Map<String, dynamic>>>> exportAllData() async {
+    final db = _db!;
+    final tables = await listTables();
+    final result = <String, List<Map<String, dynamic>>>{};
+    for (final table in tables) {
+      if (table.startsWith('_ods_')) continue;
+      final rows = await db.query(table, orderBy: '_id ASC');
+      result[table] = rows;
+    }
+    _log('Exported ${result.length} tables');
+    return result;
+  }
+
   /// Closes the database connection. Called on app reset and dispose.
   Future<void> close() async {
     await _db?.close();

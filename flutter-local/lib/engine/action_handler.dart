@@ -68,22 +68,11 @@ class ActionHandler {
       return const ActionResult(error: 'No form data found');
     }
 
-    // Validate required fields before persisting.
-    // ODS Spec: Fields with `"required": true` must have a non-empty value.
+    // Validate required fields and validation rules before persisting.
     final formFields = _findFormFields(formId, app);
-    final missingFields = <String>[];
-    for (final field in formFields) {
-      if (field.required) {
-        final value = formData[field.name]?.trim() ?? '';
-        if (value.isEmpty) {
-          missingFields.add(field.label ?? field.name);
-        }
-      }
-    }
-    if (missingFields.isNotEmpty) {
-      return ActionResult(
-        error: 'Required fields missing: ${missingFields.join(", ")}',
-      );
+    final errors = _validateFields(formFields, formData);
+    if (errors.isNotEmpty) {
+      return ActionResult(error: errors.join(', '));
     }
 
     final ds = app.dataSources[dataSourceId];
@@ -95,13 +84,20 @@ class ActionHandler {
       return const ActionResult(error: 'External dataSources not supported in local mode');
     }
 
-    // "Form is the schema": use the field definitions (already fetched
-    // above for required validation) to create or update the table.
-    if (formFields.isNotEmpty) {
-      await dataStore.ensureTable(ds.tableName, formFields);
+    // Strip computed and hidden fields — they are not stored.
+    final excludeNames = _fieldsToExclude(formFields, formData);
+    final storedFields = formFields
+        .where((f) => !f.isComputed && !excludeNames.contains(f.name))
+        .toList();
+    final storedData = Map<String, dynamic>.from(formData)
+      ..removeWhere((key, _) => excludeNames.contains(key));
+
+    // "Form is the schema": use the field definitions to create or update the table.
+    if (storedFields.isNotEmpty) {
+      await dataStore.ensureTable(ds.tableName, storedFields);
     }
 
-    await dataStore.insert(ds.tableName, Map<String, dynamic>.from(formData));
+    await dataStore.insert(ds.tableName, storedData);
     return const ActionResult(submitted: true);
   }
 
@@ -130,21 +126,11 @@ class ActionHandler {
       return ActionResult(error: 'Match field "$matchField" is empty');
     }
 
-    // Validate required fields before persisting.
+    // Validate required fields and validation rules before persisting.
     final formFields = _findFormFields(formId, app);
-    final missingFields = <String>[];
-    for (final field in formFields) {
-      if (field.required) {
-        final value = formData[field.name]?.trim() ?? '';
-        if (value.isEmpty) {
-          missingFields.add(field.label ?? field.name);
-        }
-      }
-    }
-    if (missingFields.isNotEmpty) {
-      return ActionResult(
-        error: 'Required fields missing: ${missingFields.join(", ")}',
-      );
+    final errors = _validateFields(formFields, formData);
+    if (errors.isNotEmpty) {
+      return ActionResult(error: errors.join(', '));
     }
 
     final ds = app.dataSources[dataSourceId];
@@ -156,14 +142,22 @@ class ActionHandler {
       return const ActionResult(error: 'External dataSources not supported in local mode');
     }
 
+    // Strip computed and hidden fields — they are not stored.
+    final excludeNames = _fieldsToExclude(formFields, formData);
+    final storedFields = formFields
+        .where((f) => !f.isComputed && !excludeNames.contains(f.name))
+        .toList();
+    final storedData = Map<String, dynamic>.from(formData)
+      ..removeWhere((key, _) => excludeNames.contains(key));
+
     // Ensure table schema is up to date.
-    if (formFields.isNotEmpty) {
-      await dataStore.ensureTable(ds.tableName, formFields);
+    if (storedFields.isNotEmpty) {
+      await dataStore.ensureTable(ds.tableName, storedFields);
     }
 
     final rowsAffected = await dataStore.update(
       ds.tableName,
-      Map<String, dynamic>.from(formData),
+      storedData,
       matchField,
       matchValue,
     );
@@ -173,6 +167,57 @@ class ActionHandler {
     }
 
     return const ActionResult(submitted: true);
+  }
+
+  /// Checks whether a field is currently hidden by a visibleWhen condition.
+  bool _isFieldHidden(OdsFieldDefinition field, Map<String, String> formData) {
+    final condition = field.visibleWhen;
+    if (condition == null) return false;
+    final watchedValue = formData[condition.field] ?? '';
+    return watchedValue != condition.equals;
+  }
+
+  /// Returns the set of field names that should be excluded from storage
+  /// (computed fields + conditionally hidden fields).
+  Set<String> _fieldsToExclude(
+    List<OdsFieldDefinition> fields,
+    Map<String, String> formData,
+  ) {
+    final exclude = <String>{};
+    for (final field in fields) {
+      if (field.isComputed) exclude.add(field.name);
+      if (_isFieldHidden(field, formData)) exclude.add(field.name);
+    }
+    return exclude;
+  }
+
+  /// Validates all visible, non-computed fields. Returns a list of error strings.
+  List<String> _validateFields(
+    List<OdsFieldDefinition> fields,
+    Map<String, String> formData,
+  ) {
+    final errors = <String>[];
+    for (final field in fields) {
+      if (field.isComputed) continue;
+      if (_isFieldHidden(field, formData)) continue;
+
+      final value = formData[field.name]?.trim() ?? '';
+
+      // Check required.
+      if (field.required && value.isEmpty) {
+        errors.add('Required: ${field.label ?? field.name}');
+        continue;
+      }
+
+      // Check validation rules.
+      if (field.validation != null && value.isNotEmpty) {
+        final error = field.validation!.validate(value, field.type);
+        if (error != null) {
+          errors.add('${field.label ?? field.name}: $error');
+        }
+      }
+    }
+    return errors;
   }
 
   /// Searches all pages for a form component with the given ID and returns

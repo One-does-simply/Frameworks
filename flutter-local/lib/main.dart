@@ -1,11 +1,15 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'debug/debug_panel.dart';
 import 'engine/app_engine.dart';
+import 'engine/code_generator.dart';
+import 'engine/data_exporter.dart';
 import 'engine/loaded_apps_store.dart';
 import 'engine/settings_store.dart';
 import 'loader/spec_loader.dart';
@@ -1676,6 +1680,136 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
+  Future<void> _exportData(BuildContext context, AppEngine engine) async {
+    // Show format picker
+    final format = await showDialog<ExportFormat>(
+      context: context,
+      builder: (ctx) => const _ExportFormatDialog(),
+    );
+    if (format == null) return;
+
+    try {
+      final data = await engine.exportData();
+      final appName = engine.app?.appName ?? 'ods_app';
+      final exporter = DataExporter();
+      final outputPath = await exporter.export(
+        appName: appName,
+        exportData: data,
+        format: format,
+      );
+
+      if (outputPath != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Data exported to $outputPath')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showGenerateCode(BuildContext context, AppEngine engine) async {
+    final app = engine.app;
+    if (app == null) return;
+
+    // Show the generation dialog with explanation and folder picker.
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Generate Flutter Project'),
+        content: const SizedBox(
+          width: 380,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'This will generate a standalone Flutter project from your ODS '
+                'app — complete source code that you fully own and can customize '
+                'without limits.',
+              ),
+              SizedBox(height: 12),
+              Text(
+                'The generated project includes:',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              SizedBox(height: 4),
+              Text('  • main.dart with MaterialApp and routing'),
+              Text('  • One page widget per screen'),
+              Text('  • SQLite database helper with CRUD'),
+              Text('  • Forms, lists, buttons, and charts'),
+              Text('  • pubspec.yaml with all dependencies'),
+              SizedBox(height: 12),
+              Text(
+                'Choose an empty folder to write the project files into. '
+                'A README.md is included with step-by-step instructions '
+                'for getting the app running — even if you\'ve never '
+                'used Flutter before.',
+                style: TextStyle(fontStyle: FontStyle.italic),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.folder_open),
+            label: const Text('Choose Folder'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    // Pick a folder
+    final outputDir = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Choose folder for generated project',
+    );
+    if (outputDir == null || !context.mounted) return;
+
+    try {
+      // Generate the files
+      final generator = CodeGenerator();
+      final files = generator.generate(app);
+
+      // Write them to disk
+      int fileCount = 0;
+      for (final entry in files.entries) {
+        final file = File('$outputDir/${entry.key}');
+        await file.parent.create(recursive: true);
+        await file.writeAsString(entry.value);
+        fileCount++;
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Generated $fileCount files in $outputDir'),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Code generation failed: $e'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final engine = context.watch<AppEngine>();
@@ -1823,6 +1957,49 @@ class _AppShellState extends State<AppShell> {
                 );
               },
             ),
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.only(left: 24, top: 8, bottom: 4),
+              child: Text(
+                'OFF-RAMP',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.download_outlined),
+              title: const Text('Export Data'),
+              subtitle: Text(
+                'JSON, CSV, or SQL',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              onTap: () async {
+                Navigator.pop(context);
+                await _exportData(context, engine);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.code),
+              title: const Text('Generate Code'),
+              subtitle: Text(
+                'Standalone Flutter project',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              onTap: () {
+                Navigator.pop(context);
+                _showGenerateCode(context, engine);
+              },
+            ),
+            const Divider(),
             ListTile(
               leading: const Icon(Icons.close),
               title: const Text('Close App'),
@@ -1985,6 +2162,54 @@ class _SettingsDialog extends StatelessWidget {
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Export format picker dialog
+// ---------------------------------------------------------------------------
+
+class _ExportFormatDialog extends StatelessWidget {
+  const _ExportFormatDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return AlertDialog(
+      title: const Text('Export Format'),
+      contentPadding: const EdgeInsets.fromLTRB(0, 16, 0, 0),
+      content: SizedBox(
+        width: 340,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: ExportFormat.values.map((format) {
+            final icon = switch (format) {
+              ExportFormat.json => Icons.data_object,
+              ExportFormat.csv => Icons.table_chart_outlined,
+              ExportFormat.sql => Icons.storage_outlined,
+            };
+            return ListTile(
+              leading: Icon(icon, color: colorScheme.primary),
+              title: Text(format.label),
+              subtitle: Text(
+                format.description,
+                style: theme.textTheme.bodySmall,
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              onTap: () => Navigator.pop(context, format),
+            );
+          }).toList(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
         ),
       ],
     );

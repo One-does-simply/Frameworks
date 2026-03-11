@@ -36,6 +36,8 @@ sealed class OdsComponent {
         return OdsFormComponent.fromJson(json);
       case 'button':
         return OdsButtonComponent.fromJson(json);
+      case 'chart':
+        return OdsChartComponent.fromJson(json);
       default:
         // Graceful degradation: unknown components are captured, not rejected.
         // This keeps forward compatibility — a spec with future component types
@@ -74,10 +76,14 @@ class OdsListColumn {
   /// When true, the column header is tappable to sort the list by this field.
   final bool sortable;
 
+  /// When true, a filter dropdown is shown above the list for this column.
+  final bool filterable;
+
   const OdsListColumn({
     required this.header,
     required this.field,
     this.sortable = false,
+    this.filterable = false,
   });
 
   factory OdsListColumn.fromJson(Map<String, dynamic> json) {
@@ -85,6 +91,7 @@ class OdsListColumn {
       header: json['header'] as String,
       field: json['field'] as String,
       sortable: json['sortable'] as bool? ?? false,
+      filterable: json['filterable'] as bool? ?? false,
     );
   }
 }
@@ -107,12 +114,17 @@ class OdsRowAction {
   /// optional (and ignored) for "delete" actions.
   final Map<String, String> values;
 
+  /// Optional confirmation text. When set, a dialog is shown before executing.
+  /// For delete actions, overrides the default "Are you sure?" message.
+  final String? confirm;
+
   const OdsRowAction({
     required this.label,
     required this.action,
     required this.dataSource,
     required this.matchField,
     this.values = const {},
+    this.confirm,
   });
 
   bool get isDelete => action == 'delete';
@@ -127,6 +139,32 @@ class OdsRowAction {
       values: (json['values'] as Map<String, dynamic>?)
               ?.map((k, v) => MapEntry(k, v.toString())) ??
           const {},
+      confirm: json['confirm'] as String?,
+    );
+  }
+}
+
+/// Defines a summary/aggregation rule for a list column.
+///
+/// ODS Spec: Summary rules specify a column and an aggregation function
+/// (sum, avg, count, min, max). The framework computes the aggregate
+/// and renders it as a summary row below the data table.
+class OdsSummaryRule {
+  final String column;
+  final String function;
+  final String? label;
+
+  const OdsSummaryRule({
+    required this.column,
+    required this.function,
+    this.label,
+  });
+
+  factory OdsSummaryRule.fromJson(Map<String, dynamic> json) {
+    return OdsSummaryRule(
+      column: json['column'] as String,
+      function: json['function'] as String,
+      label: json['label'] as String?,
     );
   }
 }
@@ -134,7 +172,8 @@ class OdsRowAction {
 /// Displays tabular data from a data source.
 ///
 /// ODS Spec: `listComponent` — requires a `dataSource` ID and `columns` array.
-/// Optionally includes `rowActions` for inline per-row action buttons.
+/// Optionally includes `rowActions` for inline per-row action buttons,
+/// `summary` for aggregation rows, and `filterable` columns for dropdown filters.
 /// The framework queries the referenced data source and renders a DataTable.
 class OdsListComponent extends OdsComponent {
   /// The ID of the data source to read rows from.
@@ -146,10 +185,14 @@ class OdsListComponent extends OdsComponent {
   /// Optional action buttons rendered in each row.
   final List<OdsRowAction> rowActions;
 
+  /// Optional summary/aggregation rules displayed below the data table.
+  final List<OdsSummaryRule> summary;
+
   const OdsListComponent({
     required this.dataSource,
     required this.columns,
     this.rowActions = const [],
+    this.summary = const [],
     required super.styleHint,
   }) : super(component: 'list');
 
@@ -161,6 +204,10 @@ class OdsListComponent extends OdsComponent {
           .toList(),
       rowActions: (json['rowActions'] as List<dynamic>?)
               ?.map((a) => OdsRowAction.fromJson(a as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      summary: (json['summary'] as List<dynamic>?)
+              ?.map((s) => OdsSummaryRule.fromJson(s as Map<String, dynamic>))
               .toList() ??
           const [],
       styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
@@ -226,6 +273,48 @@ class OdsButtonComponent extends OdsComponent {
       onClick: (json['onClick'] as List<dynamic>)
           .map((a) => OdsAction.fromJson(a as Map<String, dynamic>))
           .toList(),
+      styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
+    );
+  }
+}
+
+/// Renders a data visualization chart from a data source.
+///
+/// ODS Spec: `chartComponent` — requires a `dataSource` ID, a `chartType`
+/// (bar, line, or pie), and field mappings (`labelField` and `valueField`).
+/// The framework queries the data source and renders the appropriate chart.
+class OdsChartComponent extends OdsComponent {
+  /// The ID of the data source to read rows from.
+  final String dataSource;
+
+  /// The chart type: "bar", "line", or "pie".
+  final String chartType;
+
+  /// The field to use for category labels (X axis or pie slices).
+  final String labelField;
+
+  /// The field to use for numeric values (Y axis or pie values).
+  final String valueField;
+
+  /// Optional chart title displayed above the chart.
+  final String? title;
+
+  const OdsChartComponent({
+    required this.dataSource,
+    required this.chartType,
+    required this.labelField,
+    required this.valueField,
+    this.title,
+    required super.styleHint,
+  }) : super(component: 'chart');
+
+  factory OdsChartComponent.fromJson(Map<String, dynamic> json) {
+    return OdsChartComponent(
+      dataSource: json['dataSource'] as String,
+      chartType: json['chartType'] as String? ?? 'bar',
+      labelField: json['labelField'] as String,
+      valueField: json['valueField'] as String,
+      title: json['title'] as String?,
       styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
     );
   }

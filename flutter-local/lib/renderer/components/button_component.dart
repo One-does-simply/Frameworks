@@ -29,6 +29,28 @@ class OdsButtonWidget extends StatelessWidget {
     this.styleResolver = const StyleResolver(),
   });
 
+  /// Shows a confirmation dialog and returns true if the user confirms.
+  Future<bool> _showConfirmation(BuildContext context, String message) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final style = styleResolver.resolveButtonStyle(model.styleHint, context);
@@ -38,7 +60,18 @@ class OdsButtonWidget extends StatelessWidget {
         style: style,
         onPressed: () async {
           final engine = context.read<AppEngine>();
-          await engine.executeActions(model.onClick);
+
+          // Check for confirm on any action in the chain. If any action has a
+          // confirm property, show it before executing that action. We process
+          // actions one-by-one to support per-action confirmation.
+          for (final action in model.onClick) {
+            if (action.confirm != null && context.mounted) {
+              final proceed = await _showConfirmation(context, action.confirm!);
+              if (!proceed) return;
+            }
+            await engine.executeActions([action]);
+            if (engine.lastActionError != null) break;
+          }
 
           // Show a SnackBar if an action failed (e.g., required validation).
           if (engine.lastActionError != null && context.mounted) {

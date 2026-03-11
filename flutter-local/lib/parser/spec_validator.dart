@@ -1,3 +1,4 @@
+import '../engine/formula_evaluator.dart';
 import '../models/ods_app.dart';
 import '../models/ods_component.dart';
 import '../models/ods_page.dart';
@@ -104,6 +105,22 @@ class SpecValidator {
             context: 'page: $pageId',
           );
         }
+        // Validate summary rules reference existing columns.
+        final columnFields = component.columns.map((c) => c.field).toSet();
+        for (final rule in component.summary) {
+          if (!columnFields.contains(rule.column)) {
+            result.warning(
+              'Summary rule references unknown column "${rule.column}"',
+              context: 'page: $pageId',
+            );
+          }
+          if (!_validSummaryFunctions.contains(rule.function)) {
+            result.warning(
+              'Summary rule has unknown function "${rule.function}"',
+              context: 'page: $pageId',
+            );
+          }
+        }
         for (final rowAction in component.rowActions) {
           if (!app.dataSources.containsKey(rowAction.dataSource)) {
             result.warning(
@@ -171,6 +188,51 @@ class SpecValidator {
               context: 'page: $pageId, form: "${component.id}"',
             );
           }
+          // Validate computed field formulas.
+          if (field.isComputed) {
+            final deps = FormulaEvaluator.dependencies(field.formula!);
+            if (deps.isEmpty) {
+              result.warning(
+                'Computed field "${field.name}" formula has no field references',
+                context: 'page: $pageId, form: "${component.id}"',
+              );
+            }
+            final fieldNames = component.fields.map((f) => f.name).toSet();
+            for (final dep in deps) {
+              if (!fieldNames.contains(dep)) {
+                result.warning(
+                  'Computed field "${field.name}" references unknown field "{$dep}"',
+                  context: 'page: $pageId, form: "${component.id}"',
+                );
+              }
+            }
+            if (field.required) {
+              result.warning(
+                'Computed field "${field.name}" is marked required but computed fields are read-only',
+                context: 'page: $pageId, form: "${component.id}"',
+              );
+            }
+          }
+          // Validate visibleWhen references.
+          if (field.visibleWhen != null) {
+            final fieldNames = component.fields.map((f) => f.name).toSet();
+            if (!fieldNames.contains(field.visibleWhen!.field)) {
+              result.warning(
+                'Field "${field.name}" visibleWhen references unknown field "${field.visibleWhen!.field}"',
+                context: 'page: $pageId, form: "${component.id}"',
+              );
+            }
+          }
+          // Validate validation rules make sense for the field type.
+          if (field.validation != null) {
+            final v = field.validation!;
+            if ((v.min != null || v.max != null) && field.type != 'number') {
+              result.warning(
+                'Field "${field.name}" has min/max validation but type is "${field.type}" (not number)',
+                context: 'page: $pageId, form: "${component.id}"',
+              );
+            }
+          }
           if (field.type == 'select') {
             final hasStaticOptions = field.options != null && field.options!.isNotEmpty;
             final hasDynamicOptions = field.optionsFrom != null;
@@ -190,6 +252,22 @@ class SpecValidator {
         }
       }
 
+      // Validate chart components reference valid data sources.
+      if (component is OdsChartComponent) {
+        if (!app.dataSources.containsKey(component.dataSource)) {
+          result.warning(
+            'Chart component references unknown dataSource "${component.dataSource}"',
+            context: 'page: $pageId',
+          );
+        }
+        if (!{'bar', 'line', 'pie'}.contains(component.chartType)) {
+          result.warning(
+            'Chart component has unknown chartType "${component.chartType}"',
+            context: 'page: $pageId',
+          );
+        }
+      }
+
       // Flag unknown component types for debug visibility.
       if (component is OdsUnknownComponent) {
         result.warning(
@@ -202,4 +280,5 @@ class SpecValidator {
 
   /// The set of field types defined in the ODS spec.
   static const _validFieldTypes = {'text', 'email', 'number', 'date', 'datetime', 'multiline', 'select', 'checkbox'};
+  static const _validSummaryFunctions = {'sum', 'avg', 'count', 'min', 'max'};
 }

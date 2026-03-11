@@ -32,12 +32,17 @@ class OdsAction {
   /// Parsed from the spec but not yet consumed by any framework action.
   final Map<String, dynamic>? withData;
 
+  /// Optional confirmation text. When set, a dialog is shown before the
+  /// action executes. The user must confirm to proceed.
+  final String? confirm;
+
   const OdsAction({
     required this.action,
     this.target,
     this.dataSource,
     this.matchField,
     this.withData,
+    this.confirm,
   });
 
   bool get isNavigate => action == 'navigate';
@@ -51,6 +56,7 @@ class OdsAction {
       dataSource: json['dataSource'] as String?,
       matchField: json['matchField'] as String?,
       withData: json['withData'] as Map<String, dynamic>?,
+      confirm: json['confirm'] as String?,
     );
   }
 
@@ -60,5 +66,6 @@ class OdsAction {
         if (dataSource != null) 'dataSource': dataSource,
         if (matchField != null) 'matchField': matchField,
         if (withData != null) 'withData': withData,
+        if (confirm != null) 'confirm': confirm,
       };
 }

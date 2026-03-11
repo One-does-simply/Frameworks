@@ -5,6 +5,7 @@ import '../engine/app_engine.dart';
 import '../models/ods_component.dart';
 import '../models/ods_page.dart';
 import 'components/button_component.dart';
+import 'components/chart_component.dart';
 import 'components/form_component.dart';
 import 'components/list_component.dart';
 import 'components/text_component.dart';
@@ -51,6 +52,7 @@ class PageRenderer extends StatelessWidget {
       OdsListComponent c => OdsListWidget(model: c),
       OdsFormComponent c => OdsFormWidget(model: c),
       OdsButtonComponent c => OdsButtonWidget(model: c, styleResolver: styleResolver),
+      OdsChartComponent c => OdsChartWidget(model: c),
       OdsUnknownComponent c => _UnknownComponentWidget(model: c),
     };
   }

@@ -19,9 +19,12 @@
           "component": "form",
           "id": "expenseForm",
           "fields": [
-            { "name": "description", "label": "Description", "type": "text", "required": true, "placeholder": "e.g., Weekly groceries" },
-            { "name": "amount", "label": "Amount", "type": "number", "required": true },
+            { "name": "description", "label": "Description", "type": "text", "required": true, "placeholder": "e.g., Weekly groceries", "validation": { "minLength": 3, "message": "Description must be at least 3 characters" } },
+            { "name": "quantity", "label": "Quantity", "type": "number", "required": true, "default": "1", "validation": { "min": 1, "max": 999 } },
+            { "name": "unitPrice", "label": "Unit Price", "type": "number", "required": true, "validation": { "min": 0.01, "max": 99999 } },
+            { "name": "total", "label": "Total", "type": "number", "formula": "{quantity} * {unitPrice}" },
             { "name": "category", "label": "Category", "type": "select", "options": ["Food", "Transport", "Bills", "Entertainment", "Medical", "Shopping", "Other"] },
+            { "name": "otherCategory", "label": "Specify category", "type": "text", "placeholder": "What kind of expense?", "visibleWhen": { "field": "category", "equals": "Other" } },
             { "name": "date", "label": "Date", "type": "date", "required": true, "default": "NOW" }
           ]
         },
@@ -32,7 +35,8 @@
             {
               "action": "submit",
               "dataSource": "expensesStore",
-              "target": "expenseForm"
+              "target": "expenseForm",
+              "confirm": "Save this expense?"
             },
             {
               "action": "navigate",
@@ -64,13 +68,28 @@
           "styleHint": { "variant": "body" }
         },
         {
+          "component": "chart",
+          "dataSource": "expensesReader",
+          "chartType": "pie",
+          "labelField": "category",
+          "valueField": "unitPrice",
+          "title": "Spending by Category"
+        },
+        {
           "component": "list",
           "dataSource": "expensesReader",
           "columns": [
-            { "header": "Date", "field": "date", "sortable": true },
+            { "header": "Date", "field": "date", "sortable": true, "filterable": true },
             { "header": "Description", "field": "description" },
-            { "header": "Amount", "field": "amount", "sortable": true },
-            { "header": "Category", "field": "category", "sortable": true }
+            { "header": "Qty", "field": "quantity" },
+            { "header": "Unit Price", "field": "unitPrice", "sortable": true },
+            { "header": "Total", "field": "total", "sortable": true },
+            { "header": "Category", "field": "category", "sortable": true, "filterable": true }
+          ],
+          "summary": [
+            { "column": "total", "function": "sum", "label": "Total Spent" },
+            { "column": "total", "function": "avg", "label": "Average" },
+            { "column": "total", "function": "count", "label": "Expenses" }
           ]
         },
         {
@@ -97,37 +116,50 @@
       "method": "GET",
       "fields": [
         { "name": "description", "type": "text" },
-        { "name": "amount", "type": "number" },
+        { "name": "quantity", "type": "number" },
+        { "name": "unitPrice", "type": "number" },
+        { "name": "total", "type": "number", "formula": "{quantity} * {unitPrice}" },
         { "name": "category", "type": "select" },
+        { "name": "otherCategory", "type": "text" },
         { "name": "date", "type": "date" }
       ],
       "seedData": [
         {
           "description": "Weekly groceries",
-          "amount": 62,
+          "quantity": "1",
+          "unitPrice": "62",
           "category": "Food",
           "date": "2025-03-01"
         },
         {
           "description": "Monthly bus pass",
-          "amount": 45,
+          "quantity": "1",
+          "unitPrice": "45",
           "category": "Transport",
           "date": "2025-03-01"
         },
         {
           "description": "Coffee with a friend",
-          "amount": 8,
+          "quantity": "2",
+          "unitPrice": "4",
           "category": "Food",
           "date": "2025-03-02"
+        },
+        {
+          "description": "Movie tickets",
+          "quantity": "2",
+          "unitPrice": "12",
+          "category": "Entertainment",
+          "date": "2025-03-03"
         }
       ]
     }
   },
   "help": {
-    "overview": "Expense Tracker helps you monitor your personal spending. Log each expense with a description, amount, category, and date, then review your spending history.",
+    "overview": "Expense Tracker helps you monitor your personal spending. Log each expense with a description, quantity, unit price, category, and date. The total is calculated automatically. A pie chart on the View Expenses page shows spending by category.",
     "pages": {
-      "logExpensePage": "Enter a description, amount (required), pick a category from the dropdown, and choose the date. Press Save Expense to record it.",
-      "viewExpensesPage": "This page shows all your logged expenses in a table so you can review your spending patterns."
+      "logExpensePage": "Enter a description (at least 3 characters), quantity, and unit price — the total is computed for you. Pick a category; if you choose 'Other', a text field appears to specify. Validation ensures amounts are in range.",
+      "viewExpensesPage": "This page shows a pie chart of spending by category and a table of all expenses. The Total column is computed from Quantity x Unit Price for each row. Use the Category and Date dropdowns to filter. Summary totals appear below the table."
     }
   },
   "settings": {
@@ -150,12 +182,12 @@
     },
     {
       "title": "Log Your Spending",
-      "content": "Each time you spend money, enter a description, amount, pick a category from the dropdown, and choose the date. Fields marked with * are required.",
+      "content": "Enter a description, quantity, and unit price. The Total field computes automatically. Pick 'Other' for the category and a second field appears to specify. Validation catches out-of-range values before saving.",
       "page": "logExpensePage"
     },
     {
       "title": "Review Your Expenses",
-      "content": "Check the View Expenses page to see a full list of everything you have spent. The app comes with a few sample entries to show you how it looks.",
+      "content": "See a pie chart breakdown by category and a full data table. Filter by Category or Date, and check the summary row for totals and averages.",
       "page": "viewExpensesPage"
     }
   ]

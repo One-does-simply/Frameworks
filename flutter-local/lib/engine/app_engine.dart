@@ -285,6 +285,24 @@ class AppEngine extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------------
+  // Data export — off-ramp: export all app data as portable JSON.
+  // ---------------------------------------------------------------------------
+
+  /// Exports all user data as a JSON-serializable map.
+  /// Includes metadata (app name, export timestamp) and all table data.
+  Future<Map<String, dynamic>> exportData() async {
+    final tables = await _dataStore.exportAllData();
+    return {
+      'odsExport': {
+        'appName': _app?.appName ?? 'unknown',
+        'exportedAt': DateTime.now().toIso8601String(),
+        'version': '1.0',
+      },
+      'tables': tables,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // Debug mode — toggle-able inspection tools for spec authors.
   // ---------------------------------------------------------------------------
 

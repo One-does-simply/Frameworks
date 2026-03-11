@@ -16,6 +16,8 @@ dependencies:
   path: ^1.9.1
   file_picker: ^8.1.6
   http: ^1.2.2
+  archive: ^4.0.4
+  fl_chart: ^0.70.2
 
 dev_dependencies:
   flutter_test:
