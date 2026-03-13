@@ -57,18 +57,40 @@ class LoadedAppEntry {
       );
 }
 
+/// An entry from the remote example catalog (metadata only, no spec loaded).
+class CatalogEntry {
+  final String id;
+  final String name;
+  final String description;
+  final String file;
+
+  const CatalogEntry({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.file,
+  });
+
+  factory CatalogEntry.fromJson(Map<String, dynamic> json) => CatalogEntry(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        description: json['description'] as String,
+        file: json['file'] as String,
+      );
+}
+
 /// Persists the user's collection of saved ODS app specs to disk.
 ///
-/// ODS Ethos: "My Apps" is the user's personal app library. Example apps
-/// are fetched from the remote catalog on first run (and refreshed on
-/// subsequent runs when online) to demonstrate ODS capabilities immediately.
-/// User-added apps are saved so they survive app restarts — no re-importing
-/// needed. Everything is a flat JSON file in the documents directory.
+/// ODS Ethos: "My Apps" is the user's personal app library. On first run
+/// the user is guided through an onboarding flow to pick example apps from
+/// the remote catalog. On subsequent runs, new or updated examples are
+/// synced silently in the background.
 class LoadedAppsStore {
   static const _indexFileName = 'ods_loaded_apps.json';
 
   List<LoadedAppEntry> _apps = [];
   bool _initialized = false;
+  bool _isFirstRun = false;
 
   /// Immutable view of the current app list.
   List<LoadedAppEntry> get apps => List.unmodifiable(_apps);
@@ -83,12 +105,17 @@ class LoadedAppsStore {
 
   bool get isInitialized => _initialized;
 
+  /// True when no saved app index exists — the user has never used the app.
+  /// The UI layer checks this to show the onboarding flow.
+  bool get isFirstRun => _isFirstRun;
+
   Future<File> _getIndexFile() async {
     final dir = await getApplicationDocumentsDirectory();
     return File(p.join(dir.path, _indexFileName));
   }
 
-  /// Loads the saved app list from disk, seeding examples on first run.
+  /// Loads the saved app list from disk. On first run, sets [isFirstRun]
+  /// so the UI can show onboarding instead of auto-seeding all examples.
   Future<void> initialize() async {
     if (_initialized) return;
 
@@ -101,28 +128,43 @@ class LoadedAppsStore {
             .map((e) => LoadedAppEntry.fromJson(e as Map<String, dynamic>))
             .toList();
       } catch (_) {
-        // Corrupted index file — start fresh.
         _apps = [];
       }
-    }
 
-    // First run: seed all examples from the remote catalog.
-    // Subsequent runs: sync any new or updated examples.
-    if (_apps.isEmpty) {
-      await _seedExamplesFromCatalog();
+      // Returning user — sync catalog in the background.
+      _syncExamplesFromCatalog();
     } else {
-      await _syncExamplesFromCatalog();
+      // First run — let the UI handle onboarding.
+      _isFirstRun = true;
     }
 
     _initialized = true;
   }
 
-  /// Fetches the catalog.json and downloads each example spec.
-  Future<void> _seedExamplesFromCatalog() async {
-    final catalog = await _fetchCatalog();
-    if (catalog == null) return;
+  /// Fetches the remote catalog. Returns the list of available examples,
+  /// or null if the fetch failed. Used by the onboarding UI.
+  Future<List<CatalogEntry>?> fetchCatalog() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_catalogBaseUrl/catalog.json'))
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode != 200) return null;
 
-    for (final entry in catalog) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final examples = data['examples'] as List;
+      return examples
+          .map((e) => CatalogEntry.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      debugPrint('ODS: Failed to fetch example catalog: $e');
+      return null;
+    }
+  }
+
+  /// Downloads and adds selected examples from the catalog.
+  /// Called by the onboarding flow after the user picks examples.
+  Future<void> addSelectedExamples(List<CatalogEntry> selected) async {
+    for (final entry in selected) {
       final specJson = await _fetchSpec(entry.file);
       if (specJson != null) {
         _apps.add(LoadedAppEntry(
@@ -135,15 +177,21 @@ class LoadedAppsStore {
       }
     }
 
+    _isFirstRun = false;
+    await _save();
+  }
+
+  /// Marks first run as complete without adding any examples.
+  /// Called when the user skips onboarding.
+  Future<void> completeFirstRun() async {
+    _isFirstRun = false;
     await _save();
   }
 
   /// Syncs example apps with the remote catalog: adds new ones and refreshes
-  /// existing ones whose spec content has changed. This ensures that when
-  /// example specs are updated upstream, users see the latest version
-  /// without losing their own user-added apps.
+  /// existing ones whose spec content has changed.
   Future<void> _syncExamplesFromCatalog() async {
-    final catalog = await _fetchCatalog();
+    final catalog = await fetchCatalog();
     if (catalog == null) return;
 
     final existingById = {for (final a in _apps) a.id: a};
@@ -157,7 +205,6 @@ class LoadedAppsStore {
       final existing = existingById[entryId];
 
       if (existing == null) {
-        // New example — add it.
         _apps.add(LoadedAppEntry(
           id: entryId,
           name: entry.name,
@@ -167,7 +214,6 @@ class LoadedAppsStore {
         ));
         changed = true;
       } else if (existing.isBundled && existing.specJson != specJson) {
-        // Existing example with updated spec — refresh it.
         final index = _apps.indexOf(existing);
         _apps[index] = LoadedAppEntry(
           id: entryId,
@@ -182,25 +228,6 @@ class LoadedAppsStore {
     }
 
     if (changed) await _save();
-  }
-
-  /// Fetches and parses the remote catalog.json. Returns null on failure.
-  Future<List<_CatalogEntry>?> _fetchCatalog() async {
-    try {
-      final response = await http
-          .get(Uri.parse('$_catalogBaseUrl/catalog.json'))
-          .timeout(const Duration(seconds: 10));
-      if (response.statusCode != 200) return null;
-
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final examples = data['examples'] as List;
-      return examples
-          .map((e) => _CatalogEntry.fromJson(e as Map<String, dynamic>))
-          .toList();
-    } catch (e) {
-      debugPrint('ODS: Failed to fetch example catalog: $e');
-      return null;
-    }
   }
 
   /// Fetches a single spec JSON file from the remote examples directory.
@@ -255,15 +282,13 @@ class LoadedAppsStore {
     await _save();
   }
 
-  /// Removes a user-added app from the list. Example apps are protected
-  /// from removal at the UI layer (remove button is not shown).
+  /// Removes a user-added app from the list.
   Future<void> removeApp(String id) async {
     _apps.removeWhere((app) => app.id == id);
     await _save();
   }
 
-  /// Archives an app (hides it without deleting). Works for both example
-  /// and user-added apps.
+  /// Archives an app (hides it without deleting).
   Future<void> archiveApp(String id) async {
     final index = _apps.indexWhere((a) => a.id == id);
     if (index == -1) return;
@@ -301,26 +326,4 @@ class LoadedAppsStore {
     final json = jsonEncode(_apps.map((a) => a.toJson()).toList());
     await file.writeAsString(json);
   }
-}
-
-/// A parsed entry from the remote catalog.json.
-class _CatalogEntry {
-  final String id;
-  final String name;
-  final String description;
-  final String file;
-
-  const _CatalogEntry({
-    required this.id,
-    required this.name,
-    required this.description,
-    required this.file,
-  });
-
-  factory _CatalogEntry.fromJson(Map<String, dynamic> json) => _CatalogEntry(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        description: json['description'] as String,
-        file: json['file'] as String,
-      );
 }

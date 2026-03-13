@@ -611,6 +611,16 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Show onboarding on first run.
+    if (_storeReady && _loadedAppsStore.isFirstRun) {
+      return _OnboardingScreen(
+        store: _loadedAppsStore,
+        onComplete: () {
+          if (mounted) setState(() {});
+        },
+      );
+    }
+
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isDark = theme.brightness == Brightness.dark;
@@ -859,6 +869,342 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
           // Bottom padding
           const SliverToBoxAdapter(child: SizedBox(height: 32)),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Onboarding screen — shown on first run to let the user pick examples
+// ---------------------------------------------------------------------------
+
+class _OnboardingScreen extends StatefulWidget {
+  final LoadedAppsStore store;
+  final VoidCallback onComplete;
+
+  const _OnboardingScreen({
+    required this.store,
+    required this.onComplete,
+  });
+
+  @override
+  State<_OnboardingScreen> createState() => _OnboardingScreenState();
+}
+
+class _OnboardingScreenState extends State<_OnboardingScreen> {
+  int _step = 0; // 0 = welcome, 1 = pick examples, 2 = downloading
+  List<CatalogEntry>? _catalog;
+  final Set<String> _selectedIds = {};
+  bool _loadingCatalog = true;
+  String? _catalogError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCatalog();
+  }
+
+  Future<void> _loadCatalog() async {
+    final catalog = await widget.store.fetchCatalog();
+    if (!mounted) return;
+    setState(() {
+      _catalog = catalog;
+      _loadingCatalog = false;
+      if (catalog == null) {
+        _catalogError = 'Could not reach the example catalog. '
+            'Check your internet connection and try again.';
+      } else {
+        // Pre-select all examples by default.
+        _selectedIds.addAll(catalog.map((e) => e.id));
+      }
+    });
+  }
+
+  Future<void> _downloadSelected() async {
+    if (_catalog == null) return;
+    setState(() => _step = 2);
+
+    final selected =
+        _catalog!.where((e) => _selectedIds.contains(e.id)).toList();
+    await widget.store.addSelectedExamples(selected);
+    widget.onComplete();
+  }
+
+  Future<void> _skip() async {
+    await widget.store.completeFirstRun();
+    widget.onComplete();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Scaffold(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? [const Color(0xFF1E1B4B), const Color(0xFF0F172A)]
+                : [const Color(0xFF4F46E5), const Color(0xFF7C3AED)],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: _step == 0
+                    ? _buildWelcome(theme)
+                    : _step == 1
+                        ? _buildPicker(theme, colorScheme)
+                        : _buildDownloading(theme),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWelcome(ThemeData theme) {
+    return Padding(
+      key: const ValueKey('welcome'),
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.auto_awesome, size: 64, color: Colors.white),
+          const SizedBox(height: 24),
+          Text(
+            'Welcome to\nOne Does Simply',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.headlineMedium?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'ODS apps are built from simple JSON specs. '
+            'You can create your own from scratch, or start by exploring '
+            'some example apps to see what\'s possible.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: Colors.white.withValues(alpha: 0.85),
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 40),
+          FilledButton.icon(
+            onPressed: () => setState(() => _step = 1),
+            icon: const Icon(Icons.explore),
+            label: const Text('Browse Example Apps'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: const Color(0xFF4F46E5),
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+              textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: _skip,
+            child: Text(
+              'Skip — I\'ll start from scratch',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPicker(ThemeData theme, ColorScheme colorScheme) {
+    return Card(
+      key: const ValueKey('picker'),
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Pick Your Examples',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Select the apps you\'d like to add. You can always find more later.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 20),
+            if (_loadingCatalog)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_catalogError != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Column(
+                  children: [
+                    Icon(Icons.cloud_off, size: 40, color: colorScheme.error),
+                    const SizedBox(height: 12),
+                    Text(
+                      _catalogError!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: colorScheme.error),
+                    ),
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _loadingCatalog = true;
+                          _catalogError = null;
+                        });
+                        _loadCatalog();
+                      },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              )
+            else ...[
+              // Select all / none toggle
+              Row(
+                children: [
+                  Text(
+                    '${_selectedIds.length} of ${_catalog!.length} selected',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        if (_selectedIds.length == _catalog!.length) {
+                          _selectedIds.clear();
+                        } else {
+                          _selectedIds.addAll(_catalog!.map((e) => e.id));
+                        }
+                      });
+                    },
+                    child: Text(
+                      _selectedIds.length == _catalog!.length
+                          ? 'Deselect All'
+                          : 'Select All',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: _catalog!.map((entry) {
+                      final selected = _selectedIds.contains(entry.id);
+                      return CheckboxListTile(
+                        value: selected,
+                        onChanged: (val) {
+                          setState(() {
+                            if (val == true) {
+                              _selectedIds.add(entry.id);
+                            } else {
+                              _selectedIds.remove(entry.id);
+                            }
+                          });
+                        },
+                        title: Text(
+                          entry.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(
+                          entry.description,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: _skip,
+                  child: const Text('Skip'),
+                ),
+                const Spacer(),
+                FilledButton.icon(
+                  onPressed:
+                      (_catalog != null && _selectedIds.isNotEmpty) ? _downloadSelected : null,
+                  icon: const Icon(Icons.download, size: 18),
+                  label: Text(
+                    _selectedIds.isEmpty
+                        ? 'Add Apps'
+                        : 'Add ${_selectedIds.length} App${_selectedIds.length == 1 ? '' : 's'}',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDownloading(ThemeData theme) {
+    return Padding(
+      key: const ValueKey('downloading'),
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 48,
+            height: 48,
+            child: CircularProgressIndicator(
+              color: Colors.white,
+              strokeWidth: 3,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Setting up your apps...',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Downloading example specs',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: Colors.white.withValues(alpha: 0.7),
+            ),
+          ),
         ],
       ),
     );
