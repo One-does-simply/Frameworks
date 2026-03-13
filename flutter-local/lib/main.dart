@@ -2468,7 +2468,7 @@ class _AppShellState extends State<AppShell> {
 // Settings dialog
 // ---------------------------------------------------------------------------
 
-class _SettingsDialog extends StatelessWidget {
+class _SettingsDialog extends StatefulWidget {
   final AppEngine engine;
   final SettingsStore settings;
   final OdsApp app;
@@ -2480,7 +2480,120 @@ class _SettingsDialog extends StatelessWidget {
   });
 
   @override
+  State<_SettingsDialog> createState() => _SettingsDialogState();
+}
+
+class _SettingsDialogState extends State<_SettingsDialog> {
+  bool _busy = false;
+
+  Future<void> _backupData() async {
+    setState(() => _busy = true);
+    try {
+      final backup = await widget.engine.backupData();
+      final appName = widget.app.appName.replaceAll(RegExp(r'[^\w]'), '_').toLowerCase();
+      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
+      final fileName = 'ods_backup_${appName}_$timestamp.json';
+      final jsonStr = jsonEncode(backup);
+
+      final outputPath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Backup',
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
+
+      if (outputPath != null) {
+        await File(outputPath).writeAsString(jsonStr);
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Backup saved to $outputPath')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Backup failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _restoreData() async {
+    // Confirm before overwriting.
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Restore from Backup'),
+        content: const Text(
+          'This will replace all current app data with the backup. '
+          'Any data entered since the backup was created will be lost.\n\n'
+          'Continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            child: const Text('Restore'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final result = await FilePicker.platform.pickFiles(
+      dialogTitle: 'Select Backup File',
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+    );
+
+    if (result == null || result.files.single.path == null) return;
+
+    setState(() => _busy = true);
+    try {
+      final file = File(result.files.single.path!);
+      final jsonStr = await file.readAsString();
+      final backup = jsonDecode(jsonStr) as Map<String, dynamic>;
+
+      // Basic validation.
+      if (!backup.containsKey('odsBackup') && !backup.containsKey('tables')) {
+        throw FormatException('Not a valid ODS backup file');
+      }
+
+      await widget.engine.restoreData(backup);
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Data restored from backup')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Restore failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final engine = widget.engine;
+    final settings = widget.settings;
+    final app = widget.app;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -2489,109 +2602,154 @@ class _SettingsDialog extends StatelessWidget {
       contentPadding: const EdgeInsets.fromLTRB(0, 16, 0, 0),
       content: SizedBox(
         width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // -- App settings (from spec) --
-            if (app.settings.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'APP SETTINGS',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.2,
+        child: _busy
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Please wait...'),
+                  ],
+                ),
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // -- App settings (from spec) --
+                  if (app.settings.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'APP SETTINGS',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    _AppSettingsList(engine: engine, settings: app.settings),
+                    const Divider(),
+                  ],
+                  // -- Data section --
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'DATA',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              _AppSettingsList(engine: engine, settings: app.settings),
-              const Divider(),
-            ],
-            // -- Framework settings --
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'FRAMEWORK',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
+                  const SizedBox(height: 4),
+                  ListTile(
+                    leading: const Icon(Icons.backup_outlined),
+                    title: const Text('Backup Data'),
+                    subtitle: const Text('Save all app data to a file'),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                    onTap: _backupData,
                   ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 4),
-            // Theme
-            ListTile(
-              leading: Icon(
-                settings.themeMode == ThemeMode.dark
-                    ? Icons.dark_mode
-                    : settings.themeMode == ThemeMode.light
-                        ? Icons.light_mode
-                        : Icons.auto_mode,
-              ),
-              title: const Text('Theme'),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-              trailing: SegmentedButton<ThemeMode>(
-                segments: const [
-                  ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode, size: 16)),
-                  ButtonSegment(value: ThemeMode.system, icon: Icon(Icons.auto_mode, size: 16)),
-                  ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode, size: 16)),
+                  ListTile(
+                    leading: const Icon(Icons.restore),
+                    title: const Text('Restore Data'),
+                    subtitle: const Text('Load data from a backup file'),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                    onTap: _restoreData,
+                  ),
+                  const Divider(),
+                  // -- Framework settings --
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'FRAMEWORK',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  // Theme
+                  ListTile(
+                    leading: Icon(
+                      settings.themeMode == ThemeMode.dark
+                          ? Icons.dark_mode
+                          : settings.themeMode == ThemeMode.light
+                              ? Icons.light_mode
+                              : Icons.auto_mode,
+                    ),
+                    title: const Text('Theme'),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                    trailing: SegmentedButton<ThemeMode>(
+                      segments: const [
+                        ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode, size: 16)),
+                        ButtonSegment(value: ThemeMode.system, icon: Icon(Icons.auto_mode, size: 16)),
+                        ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode, size: 16)),
+                      ],
+                      selected: {settings.themeMode},
+                      onSelectionChanged: (s) => settings.setThemeMode(s.first),
+                      showSelectedIcon: false,
+                      style: const ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ),
+                  // Tour
+                  if (app.tour.isNotEmpty)
+                    ListTile(
+                      leading: const Icon(Icons.tour_outlined),
+                      title: const Text('Replay Tour'),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                      onTap: () {
+                        Navigator.pop(context);
+                        AppTourDialog.show(
+                          context,
+                          steps: app.tour,
+                          appName: app.appName,
+                          onNavigateToPage: (pageId) => engine.navigateTo(pageId),
+                        );
+                      },
+                    ),
+                  // Debug
+                  ListTile(
+                    leading: Icon(
+                      engine.debugMode ? Icons.bug_report : Icons.bug_report_outlined,
+                      color: engine.debugMode ? Colors.orange : null,
+                    ),
+                    title: Text(engine.debugMode ? 'Hide Debug Panel' : 'Show Debug Panel'),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                    onTap: () {
+                      Navigator.pop(context);
+                      engine.toggleDebugMode();
+                    },
+                  ),
                 ],
-                selected: {settings.themeMode},
-                onSelectionChanged: (s) => settings.setThemeMode(s.first),
-                showSelectedIcon: false,
-                style: const ButtonStyle(
-                  visualDensity: VisualDensity.compact,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
               ),
-            ),
-            // Tour
-            if (app.tour.isNotEmpty)
-              ListTile(
-                leading: const Icon(Icons.tour_outlined),
-                title: const Text('Replay Tour'),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-                onTap: () {
-                  Navigator.pop(context);
-                  AppTourDialog.show(
-                    context,
-                    steps: app.tour,
-                    appName: app.appName,
-                    onNavigateToPage: (pageId) => engine.navigateTo(pageId),
-                  );
-                },
-              ),
-            // Debug
-            ListTile(
-              leading: Icon(
-                engine.debugMode ? Icons.bug_report : Icons.bug_report_outlined,
-                color: engine.debugMode ? Colors.orange : null,
-              ),
-              title: Text(engine.debugMode ? 'Hide Debug Panel' : 'Show Debug Panel'),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-              onTap: () {
-                Navigator.pop(context);
-                engine.toggleDebugMode();
-              },
-            ),
-          ],
-        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-      ],
+      actions: _busy
+          ? null
+          : [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
     );
   }
 }

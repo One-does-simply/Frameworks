@@ -300,6 +300,44 @@ class DataStore {
     return result;
   }
 
+  /// Imports data from a backup, replacing all existing user data.
+  /// Each key in [tables] is a table name, each value is a list of row maps.
+  /// Internal tables (prefixed with `_ods_`) are skipped.
+  Future<void> importAllData(Map<String, List<Map<String, dynamic>>> tables) async {
+    final db = _db!;
+
+    for (final entry in tables.entries) {
+      final tableName = entry.key;
+      if (tableName.startsWith('_ods_')) continue;
+
+      // Clear existing data.
+      try {
+        await db.delete(tableName);
+      } catch (_) {
+        // Table may not exist yet — will be created on first insert.
+      }
+
+      // Insert rows, recreating the table schema from column names if needed.
+      for (final row in entry.value) {
+        // Strip _id so SQLite auto-generates new IDs.
+        final cleanRow = Map<String, dynamic>.from(row)..remove('_id');
+
+        // Ensure table exists with all columns from this row.
+        if (!_knownTables.contains(tableName)) {
+          final cols = cleanRow.keys
+              .where((k) => k != '_createdAt')
+              .map((k) => OdsFieldDefinition(name: k, type: 'text'))
+              .toList();
+          await ensureTable(tableName, cols);
+        }
+
+        await db.insert(tableName, cleanRow);
+      }
+    }
+
+    _log('Imported ${tables.length} tables');
+  }
+
   /// Closes the database connection. Called on app reset and dispose.
   Future<void> close() async {
     await _db?.close();

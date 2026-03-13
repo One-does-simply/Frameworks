@@ -303,6 +303,52 @@ class AppEngine extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------------
+  // Backup & restore — save and reload all app data.
+  // ---------------------------------------------------------------------------
+
+  /// Creates a backup of all app data as a JSON-serializable map.
+  Future<Map<String, dynamic>> backupData() async {
+    final tables = await _dataStore.exportAllData();
+    final settings = await _dataStore.getAllAppSettings();
+    return {
+      'odsBackup': {
+        'appName': _app?.appName ?? 'unknown',
+        'createdAt': DateTime.now().toIso8601String(),
+        'version': '1.0',
+      },
+      'tables': tables,
+      'appSettings': settings,
+    };
+  }
+
+  /// Restores app data from a backup map, replacing all existing data.
+  /// Triggers a UI rebuild so lists refresh with the restored data.
+  Future<void> restoreData(Map<String, dynamic> backup) async {
+    final tablesRaw = backup['tables'] as Map<String, dynamic>?;
+    if (tablesRaw != null) {
+      final tables = tablesRaw.map<String, List<Map<String, dynamic>>>(
+        (key, value) => MapEntry(
+          key,
+          (value as List).map((e) => Map<String, dynamic>.from(e as Map)).toList(),
+        ),
+      );
+      await _dataStore.importAllData(tables);
+    }
+
+    // Restore app settings.
+    final settingsRaw = backup['appSettings'] as Map<String, dynamic>?;
+    if (settingsRaw != null) {
+      for (final entry in settingsRaw.entries) {
+        final value = entry.value.toString();
+        _appSettings[entry.key] = value;
+        await _dataStore.setAppSetting(entry.key, value);
+      }
+    }
+
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------------
   // Debug mode — toggle-able inspection tools for spec authors.
   // ---------------------------------------------------------------------------
 
