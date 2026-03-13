@@ -609,6 +609,16 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
   }
 
+  Future<void> _browseExamples() async {
+    final added = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => _ExampleCatalogDialog(store: _loadedAppsStore),
+    );
+    if (added == true && mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Show onboarding on first run.
@@ -734,6 +744,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     onPickFile: _pickFile,
                     onLoadUrl: _loadFromUrl,
                     onCreateNew: _showCreateNew,
+                    onBrowseExamples: _browseExamples,
                   ),
                 ],
               ),
@@ -1269,11 +1280,13 @@ class _AddAppButton extends StatelessWidget {
   final VoidCallback onPickFile;
   final VoidCallback onLoadUrl;
   final VoidCallback onCreateNew;
+  final VoidCallback onBrowseExamples;
 
   const _AddAppButton({
     required this.onPickFile,
     required this.onLoadUrl,
     required this.onCreateNew,
+    required this.onBrowseExamples,
   });
 
   @override
@@ -1287,11 +1300,24 @@ class _AddAppButton extends StatelessWidget {
             onLoadUrl();
           case 'new':
             onCreateNew();
+          case 'examples':
+            onBrowseExamples();
         }
       },
       offset: const Offset(0, 40),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       itemBuilder: (ctx) => [
+        const PopupMenuItem(
+          value: 'examples',
+          child: ListTile(
+            leading: Icon(Icons.explore),
+            title: Text('Browse Examples'),
+            subtitle: Text('Pick from the example catalog'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuDivider(),
         const PopupMenuItem(
           value: 'file',
           child: ListTile(
@@ -2566,6 +2592,233 @@ class _SettingsDialog extends StatelessWidget {
           child: const Text('Close'),
         ),
       ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Example catalog dialog — browse and add examples from the remote catalog
+// ---------------------------------------------------------------------------
+
+class _ExampleCatalogDialog extends StatefulWidget {
+  final LoadedAppsStore store;
+
+  const _ExampleCatalogDialog({required this.store});
+
+  @override
+  State<_ExampleCatalogDialog> createState() => _ExampleCatalogDialogState();
+}
+
+class _ExampleCatalogDialogState extends State<_ExampleCatalogDialog> {
+  List<CatalogEntry>? _catalog;
+  final Set<String> _selectedIds = {};
+  bool _loading = true;
+  bool _adding = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCatalog();
+  }
+
+  Future<void> _loadCatalog() async {
+    final catalog = await widget.store.fetchCatalog();
+    if (!mounted) return;
+
+    // Filter out examples the user already has.
+    final existingIds = widget.store.apps
+        .where((a) => a.isBundled)
+        .map((a) => a.id)
+        .toSet();
+
+    final available = catalog
+        ?.where((e) => !existingIds.contains('example_${e.id}'))
+        .toList();
+
+    setState(() {
+      _catalog = available;
+      _loading = false;
+      if (catalog == null) {
+        _error = 'Could not reach the example catalog. '
+            'Check your internet connection and try again.';
+      }
+    });
+  }
+
+  Future<void> _addSelected() async {
+    if (_catalog == null) return;
+    setState(() => _adding = true);
+
+    final selected =
+        _catalog!.where((e) => _selectedIds.contains(e.id)).toList();
+    await widget.store.addSelectedExamples(selected);
+
+    if (mounted) Navigator.pop(context, true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return AlertDialog(
+      title: const Text('Browse Examples'),
+      content: SizedBox(
+        width: 420,
+        child: _adding
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Downloading...'),
+                  ],
+                ),
+              )
+            : _loading
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 32),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                : _error != null
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.cloud_off,
+                              size: 40, color: colorScheme.error),
+                          const SizedBox(height: 12),
+                          Text(_error!,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: colorScheme.error)),
+                          const SizedBox(height: 16),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _loading = true;
+                                _error = null;
+                              });
+                              _loadCatalog();
+                            },
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Retry'),
+                          ),
+                        ],
+                      )
+                    : _catalog!.isEmpty
+                        ? const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 24),
+                            child: Text(
+                              'You already have all the example apps!',
+                              textAlign: TextAlign.center,
+                            ),
+                          )
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Select examples to add to your apps.',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Text(
+                                    '${_selectedIds.length} of ${_catalog!.length} selected',
+                                    style:
+                                        theme.textTheme.labelMedium?.copyWith(
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  TextButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        if (_selectedIds.length ==
+                                            _catalog!.length) {
+                                          _selectedIds.clear();
+                                        } else {
+                                          _selectedIds.addAll(
+                                              _catalog!.map((e) => e.id));
+                                        }
+                                      });
+                                    },
+                                    child: Text(
+                                      _selectedIds.length == _catalog!.length
+                                          ? 'Deselect All'
+                                          : 'Select All',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Flexible(
+                                child: SingleChildScrollView(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: _catalog!.map((entry) {
+                                      final selected =
+                                          _selectedIds.contains(entry.id);
+                                      return CheckboxListTile(
+                                        value: selected,
+                                        onChanged: (val) {
+                                          setState(() {
+                                            if (val == true) {
+                                              _selectedIds.add(entry.id);
+                                            } else {
+                                              _selectedIds.remove(entry.id);
+                                            }
+                                          });
+                                        },
+                                        title: Text(
+                                          entry.name,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w600),
+                                        ),
+                                        subtitle: Text(
+                                          entry.description,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                        ),
+                                        dense: true,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 4),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+      ),
+      actions: _adding || _loading
+          ? null
+          : [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              if (_catalog != null && _catalog!.isNotEmpty)
+                FilledButton.icon(
+                  onPressed: _selectedIds.isNotEmpty ? _addSelected : null,
+                  icon: const Icon(Icons.download, size: 18),
+                  label: Text(
+                    _selectedIds.isEmpty
+                        ? 'Add'
+                        : 'Add ${_selectedIds.length} App${_selectedIds.length == 1 ? '' : 's'}',
+                  ),
+                ),
+            ],
     );
   }
 }
