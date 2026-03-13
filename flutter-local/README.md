@@ -1,17 +1,45 @@
-# ods_framework_flutter
+# ODS Flutter Local Framework
 
-A new Flutter project.
+**Vibe Coding with Guardrails** — the Flutter Local reference implementation of [One Does Simply](https://github.com/One-does-simply).
+
+## What is this?
+
+This framework takes an ODS JSON spec and renders it as a fully functional Flutter app with local SQLite storage. No internet, no server, no account — your data stays on your device.
+
+Describe your app idea to the AI Build Helper, and it produces a valid ODS spec. Open it here and the framework handles the rest: UI, navigation, forms, lists, charts, data storage, and more.
+
+## Features
+
+- **Instant rendering** — open a JSON spec and your app is live
+- **Local SQLite storage** — all data stays on-device via `local://` data sources
+- **AI Build Helper** — create apps through conversation, not code
+- **Example catalog** — browse and pick from curated examples on first launch
+- **Off-ramp** — export your data (JSON/CSV/SQL) or generate a standalone Flutter project
+- **Cross-platform** — runs on Windows, macOS, Linux, iOS, and Android
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+1. Clone this repo
+2. Run `flutter pub get`
+3. Run `flutter run` (or `flutter build windows` / `flutter build macos` / etc.)
+4. On first launch, pick some example apps or create your own
 
-A few resources to get you started if this is your first Flutter project:
+## Project Structure
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+```
+lib/
+  models/      Pure Dart classes for the ODS spec
+  parser/      JSON → models, validation
+  engine/      AppEngine (state), ActionHandler, DataStore (SQLite)
+  renderer/    Flutter widgets, StyleResolver, components
+  loader/      File picker + URL loading
+  debug/       Debug panel overlay
+  screens/     About, tour dialog, help screen
+assets/        Build helper prompt
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Links
+
+- [ODS Specification](https://github.com/One-does-simply/Specification)
+- [Landing Page](https://one-does-simply.github.io/Specification/)
+- [Example Catalog](https://one-does-simply.github.io/Specification/Examples/catalog.json)

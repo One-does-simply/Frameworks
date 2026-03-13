@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 /// The "Learn More" screen — introduces ODS to new users.
 ///
-/// Accessible from the welcome screen "Learn More" link. Contains all
-/// the informational content that was previously in the banner, plus
-/// expanded details about the project.
+/// Accessible from the welcome screen "Learn More" link. Leads with
+/// the "Vibe Coding with Guardrails" message and explains the three
+/// pillars of ODS: Specification, Frameworks, and the Build Helper.
 class OdsAboutScreen extends StatelessWidget {
   const OdsAboutScreen({super.key});
 
@@ -70,6 +70,19 @@ class OdsAboutScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 32),
 
+                      // Lead with the core message
+                      _SectionCard(
+                        colorScheme: colorScheme,
+                        icon: Icons.auto_awesome,
+                        title: 'Vibe Coding with Guardrails',
+                        body: 'Traditional vibe coding lets AI generate arbitrary code you may not '
+                            'understand. ODS flips the model: describe your app idea and an AI Build '
+                            'Helper produces a structured JSON spec — validated, human-readable, and '
+                            'constrained to safe patterns.\n\n'
+                            'The framework handles the hard parts — UI, storage, security — so the AI '
+                            'never has to. You get the creative speed of vibe coding with the confidence '
+                            'that your app actually works, your data is safe, and you\'re never locked in.',
+                      ),
                       _SectionCard(
                         colorScheme: colorScheme,
                         icon: Icons.lightbulb_outline,
@@ -83,11 +96,11 @@ class OdsAboutScreen extends StatelessWidget {
                         colorScheme: colorScheme,
                         icon: Icons.architecture,
                         title: 'How It Works',
-                        body: '1. Describe your app in a JSON specification file\n'
-                            '2. Open the spec in this framework\n'
-                            '3. The framework renders your app instantly\n\n'
-                            'You can create spec files with the ODS Build Helper (an AI assistant) '
-                            'or write them by hand.',
+                        body: '1. Describe your app to the AI Build Helper (or write JSON by hand)\n'
+                            '2. The Build Helper produces a valid ODS spec — that\'s the guardrail\n'
+                            '3. Open the spec and the framework renders your app instantly\n\n'
+                            'The spec stays simple. The framework handles the complexity. '
+                            'And the AI can only produce specs that work.',
                       ),
                       _SectionCard(
                         colorScheme: colorScheme,
@@ -101,18 +114,11 @@ class OdsAboutScreen extends StatelessWidget {
                         colorScheme: colorScheme,
                         icon: Icons.exit_to_app,
                         title: 'The Off-Ramp',
-                        body: 'Unlike other low-code tools, ODS never locks you in. Your spec is a '
-                            'standard JSON file you own. In the future, frameworks will generate real '
-                            'source code from your spec, giving you a full codebase to customize.',
-                      ),
-                      _SectionCard(
-                        colorScheme: colorScheme,
-                        icon: Icons.auto_awesome,
-                        title: 'Vibe Coding with Guardrails',
-                        body: 'ODS embraces the vibe coding philosophy — describe what you want and '
-                            'let AI help build it. But unlike unconstrained AI coding, ODS provides '
-                            'guardrails: a well-defined spec, validation, and frameworks that ensure '
-                            'your app actually works.',
+                        body: 'Unlike other platforms, ODS never locks you in. Your spec is a '
+                            'standard JSON file you own. When you outgrow the framework, use Generate '
+                            'Code to produce a full Flutter project — real source code with models, '
+                            'database helpers, and UI widgets — and customize without limits.\n\n'
+                            'ODS is the on-ramp to real development, not a dead end.',
                       ),
                       _SectionCard(
                         colorScheme: colorScheme,

@@ -1002,9 +1002,9 @@ class _OnboardingScreenState extends State<_OnboardingScreen> {
           ),
           const SizedBox(height: 16),
           Text(
-            'ODS apps are built from simple JSON specs. '
-            'You can create your own from scratch, or start by exploring '
-            'some example apps to see what\'s possible.',
+            'Describe your app idea and let an AI Build Helper create it for you '
+            '— vibe coding with guardrails. Or explore some example apps to see '
+            'what\'s possible.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge?.copyWith(
               color: Colors.white.withValues(alpha: 0.85),
