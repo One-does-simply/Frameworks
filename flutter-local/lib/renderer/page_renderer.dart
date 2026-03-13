@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../engine/app_engine.dart';
 import '../models/ods_component.dart';
 import '../models/ods_page.dart';
+import '../models/ods_visible_when.dart';
 import 'components/button_component.dart';
 import 'components/chart_component.dart';
 import 'components/form_component.dart';
@@ -18,13 +19,8 @@ import 'style_resolver.dart';
 /// sealed [OdsComponent] class, guaranteeing at compile time that every
 /// component type is handled.
 ///
-/// ODS Ethos: Pages are simple — a vertical stack of components. No grid
-/// layouts, no columns, no overlapping. This makes the rendering predictable
-/// and the spec easy to reason about.
-///
-/// Architecture note: The [StyleResolver] is injected as a parameter to
-/// support future theming or custom style resolution without modifying
-/// component widgets.
+/// Components with a `visibleWhen` condition are wrapped in a visibility
+/// check that evaluates form field values or data source row counts.
 class PageRenderer extends StatelessWidget {
   final OdsPage page;
   final StyleResolver styleResolver;
@@ -43,11 +39,10 @@ class PageRenderer extends StatelessWidget {
     );
   }
 
-  /// Dispatches each component model to its corresponding widget.
-  /// The exhaustive switch ensures new component types added to the sealed
-  /// class will cause a compile error here until handled.
+  /// Dispatches each component model to its corresponding widget,
+  /// wrapping it in a visibility check if a `visibleWhen` condition exists.
   Widget _renderComponent(OdsComponent component) {
-    return switch (component) {
+    final widget = switch (component) {
       OdsTextComponent c => OdsTextWidget(model: c, styleResolver: styleResolver),
       OdsListComponent c => OdsListWidget(model: c),
       OdsFormComponent c => OdsFormWidget(model: c),
@@ -55,14 +50,88 @@ class PageRenderer extends StatelessWidget {
       OdsChartComponent c => OdsChartWidget(model: c),
       OdsUnknownComponent c => _UnknownComponentWidget(model: c),
     };
+
+    // Wrap with visibility check if condition is set.
+    if (component.visibleWhen != null) {
+      return _VisibilityWrapper(
+        condition: component.visibleWhen!,
+        child: widget,
+      );
+    }
+
+    return widget;
+  }
+}
+
+/// Wraps a component widget with a visibility condition.
+///
+/// For field-based conditions, watches form state via the engine.
+/// For data-based conditions, queries the data source row count.
+class _VisibilityWrapper extends StatelessWidget {
+  final OdsComponentVisibleWhen condition;
+  final Widget child;
+
+  const _VisibilityWrapper({required this.condition, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final engine = context.watch<AppEngine>();
+
+    if (condition.isFieldBased) {
+      return _buildFieldBased(engine);
+    }
+
+    if (condition.isDataBased) {
+      return _buildDataBased(engine);
+    }
+
+    // Invalid condition — show the component by default.
+    return child;
+  }
+
+  Widget _buildFieldBased(AppEngine engine) {
+    final formState = engine.getFormState(condition.form!);
+    final fieldValue = formState[condition.field!] ?? '';
+
+    bool visible = true;
+    if (condition.equals != null) {
+      visible = fieldValue == condition.equals;
+    } else if (condition.notEquals != null) {
+      visible = fieldValue != condition.notEquals;
+    }
+
+    if (!visible) return const SizedBox.shrink();
+    return child;
+  }
+
+  Widget _buildDataBased(AppEngine engine) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: engine.queryDataSource(condition.source!),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox.shrink();
+
+        final count = snapshot.data!.length;
+        bool visible = true;
+
+        if (condition.countEquals != null) {
+          visible = count == condition.countEquals;
+        }
+        if (visible && condition.countMin != null) {
+          visible = count >= condition.countMin!;
+        }
+        if (visible && condition.countMax != null) {
+          visible = count <= condition.countMax!;
+        }
+
+        if (!visible) return const SizedBox.shrink();
+        return child;
+      },
+    );
   }
 }
 
 /// Renders unknown component types — invisible in normal mode, shown as a
 /// warning card in debug mode.
-///
-/// ODS Ethos: Graceful degradation. A spec with future component types
-/// will still load and render the parts this framework understands.
 class _UnknownComponentWidget extends StatelessWidget {
   final OdsUnknownComponent model;
 

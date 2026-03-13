@@ -5,6 +5,7 @@ import '../models/ods_app.dart';
 import '../models/ods_component.dart';
 import '../models/ods_field_definition.dart';
 import 'data_store.dart';
+import 'expression_evaluator.dart';
 
 /// Executes ODS actions (navigate, submit, update) on behalf of the [AppEngine].
 ///
@@ -92,6 +93,9 @@ class ActionHandler {
     final storedData = Map<String, dynamic>.from(formData)
       ..removeWhere((key, _) => excludeNames.contains(key));
 
+    // Evaluate computed fields and merge into stored data.
+    _applyComputedFields(action.computedFields, storedData, storedFields);
+
     // "Form is the schema": use the field definitions to create or update the table.
     if (storedFields.isNotEmpty) {
       await dataStore.ensureTable(ds.tableName, storedFields);
@@ -150,6 +154,9 @@ class ActionHandler {
     final storedData = Map<String, dynamic>.from(formData)
       ..removeWhere((key, _) => excludeNames.contains(key));
 
+    // Evaluate computed fields and merge into stored data.
+    _applyComputedFields(action.computedFields, storedData, storedFields);
+
     // Ensure table schema is up to date.
     if (storedFields.isNotEmpty) {
       await dataStore.ensureTable(ds.tableName, storedFields);
@@ -167,6 +174,30 @@ class ActionHandler {
     }
 
     return const ActionResult(submitted: true);
+  }
+
+  /// Evaluates computed fields from an action and merges them into the data
+  /// map. Also adds field definitions for computed columns so the table schema
+  /// includes them.
+  void _applyComputedFields(
+    List<OdsComputedField> computedFields,
+    Map<String, dynamic> data,
+    List<OdsFieldDefinition> fields,
+  ) {
+    if (computedFields.isEmpty) return;
+
+    final formValues = data.map((k, v) => MapEntry(k, v.toString()));
+    final existingFieldNames = fields.map((f) => f.name).toSet();
+
+    for (final cf in computedFields) {
+      final value = ExpressionEvaluator.evaluate(cf.expression, formValues);
+      data[cf.field] = value;
+      // Ensure the computed column exists in the schema.
+      if (!existingFieldNames.contains(cf.field)) {
+        fields.add(OdsFieldDefinition(name: cf.field, type: 'text'));
+        existingFieldNames.add(cf.field);
+      }
+    }
   }
 
   /// Checks whether a field is currently hidden by a visibleWhen condition.

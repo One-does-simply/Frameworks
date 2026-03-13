@@ -1,6 +1,7 @@
 import 'ods_action.dart';
 import 'ods_field_definition.dart';
 import 'ods_style_hint.dart';
+import 'ods_visible_when.dart';
 
 /// Base class for all ODS components, using Dart 3 sealed classes.
 ///
@@ -20,7 +21,11 @@ sealed class OdsComponent {
   /// Optional styling hints interpreted by the renderer.
   final OdsStyleHint styleHint;
 
-  const OdsComponent({required this.component, required this.styleHint});
+  /// Optional visibility condition. When set, the component is only shown
+  /// if the condition is met (form field value or data source row count).
+  final OdsComponentVisibleWhen? visibleWhen;
+
+  const OdsComponent({required this.component, required this.styleHint, this.visibleWhen});
 
   /// Factory that dispatches to the correct subclass based on the
   /// `component` field. Unknown types become [OdsUnknownComponent],
@@ -57,12 +62,16 @@ class OdsTextComponent extends OdsComponent {
   const OdsTextComponent({
     required this.content,
     required super.styleHint,
+    super.visibleWhen,
   }) : super(component: 'text');
 
   factory OdsTextComponent.fromJson(Map<String, dynamic> json) {
     return OdsTextComponent(
       content: json['content'] as String,
       styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
+      visibleWhen: json['visibleWhen'] != null
+          ? OdsComponentVisibleWhen.fromJson(json['visibleWhen'] as Map<String, dynamic>)
+          : null,
     );
   }
 }
@@ -194,6 +203,7 @@ class OdsListComponent extends OdsComponent {
     this.rowActions = const [],
     this.summary = const [],
     required super.styleHint,
+    super.visibleWhen,
   }) : super(component: 'list');
 
   factory OdsListComponent.fromJson(Map<String, dynamic> json) {
@@ -211,6 +221,9 @@ class OdsListComponent extends OdsComponent {
               .toList() ??
           const [],
       styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
+      visibleWhen: json['visibleWhen'] != null
+          ? OdsComponentVisibleWhen.fromJson(json['visibleWhen'] as Map<String, dynamic>)
+          : null,
     );
   }
 }
@@ -237,6 +250,7 @@ class OdsFormComponent extends OdsComponent {
     required this.id,
     required this.fields,
     required super.styleHint,
+    super.visibleWhen,
   }) : super(component: 'form');
 
   factory OdsFormComponent.fromJson(Map<String, dynamic> json) {
@@ -246,6 +260,9 @@ class OdsFormComponent extends OdsComponent {
           .map((f) => OdsFieldDefinition.fromJson(f as Map<String, dynamic>))
           .toList(),
       styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
+      visibleWhen: json['visibleWhen'] != null
+          ? OdsComponentVisibleWhen.fromJson(json['visibleWhen'] as Map<String, dynamic>)
+          : null,
     );
   }
 }
@@ -265,6 +282,7 @@ class OdsButtonComponent extends OdsComponent {
     required this.label,
     required this.onClick,
     required super.styleHint,
+    super.visibleWhen,
   }) : super(component: 'button');
 
   factory OdsButtonComponent.fromJson(Map<String, dynamic> json) {
@@ -274,6 +292,9 @@ class OdsButtonComponent extends OdsComponent {
           .map((a) => OdsAction.fromJson(a as Map<String, dynamic>))
           .toList(),
       styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
+      visibleWhen: json['visibleWhen'] != null
+          ? OdsComponentVisibleWhen.fromJson(json['visibleWhen'] as Map<String, dynamic>)
+          : null,
     );
   }
 }
@@ -306,6 +327,7 @@ class OdsChartComponent extends OdsComponent {
     required this.valueField,
     this.title,
     required super.styleHint,
+    super.visibleWhen,
   }) : super(component: 'chart');
 
   factory OdsChartComponent.fromJson(Map<String, dynamic> json) {
@@ -316,6 +338,9 @@ class OdsChartComponent extends OdsComponent {
       valueField: json['valueField'] as String,
       title: json['title'] as String?,
       styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
+      visibleWhen: json['visibleWhen'] != null
+          ? OdsComponentVisibleWhen.fromJson(json['visibleWhen'] as Map<String, dynamic>)
+          : null,
     );
   }
 }
@@ -334,6 +359,7 @@ class OdsUnknownComponent extends OdsComponent {
     required String type,
     required this.rawJson,
     required super.styleHint,
+    super.visibleWhen,
   }) : super(component: type);
 
   factory OdsUnknownComponent.fromJson(Map<String, dynamic> json) {
@@ -341,6 +367,9 @@ class OdsUnknownComponent extends OdsComponent {
       type: json['component'] as String? ?? 'unknown',
       rawJson: json,
       styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
+      visibleWhen: json['visibleWhen'] != null
+          ? OdsComponentVisibleWhen.fromJson(json['visibleWhen'] as Map<String, dynamic>)
+          : null,
     );
   }
 }

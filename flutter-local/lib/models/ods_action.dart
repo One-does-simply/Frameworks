@@ -13,6 +13,34 @@
 /// and "update" cover the core CRUD flows a citizen developer needs:
 /// "where do I go?", "where does new data go?", and "how do I change
 /// existing data?"
+/// A field value computed at submit time from an expression.
+///
+/// ODS Spec: `computedFields` on submit/update actions allow derived values
+/// to be calculated and stored. Supports ternary comparisons for quiz scoring,
+/// math expressions, string interpolation, and magic values like "NOW".
+class OdsComputedField {
+  /// The field name to store the computed value in.
+  final String field;
+
+  /// The expression to evaluate. Supports:
+  ///   - Ternary: `{answer} == {correctAnswer} ? '1' : '0'`
+  ///   - Math: `{quantity} * {unitPrice}`
+  ///   - String interpolation: `{firstName} {lastName}`
+  ///   - Magic values: `NOW` (current ISO datetime)
+  final String expression;
+
+  const OdsComputedField({required this.field, required this.expression});
+
+  factory OdsComputedField.fromJson(Map<String, dynamic> json) {
+    return OdsComputedField(
+      field: json['field'] as String,
+      expression: json['expression'] as String,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'field': field, 'expression': expression};
+}
+
 class OdsAction {
   final String action;
 
@@ -36,6 +64,11 @@ class OdsAction {
   /// action executes. The user must confirm to proceed.
   final String? confirm;
 
+  /// Fields computed at submit time from expressions. Evaluated after form
+  /// data is collected but before database write. The computed values are
+  /// merged into the stored data.
+  final List<OdsComputedField> computedFields;
+
   const OdsAction({
     required this.action,
     this.target,
@@ -43,6 +76,7 @@ class OdsAction {
     this.matchField,
     this.withData,
     this.confirm,
+    this.computedFields = const [],
   });
 
   bool get isNavigate => action == 'navigate';
@@ -57,6 +91,10 @@ class OdsAction {
       matchField: json['matchField'] as String?,
       withData: json['withData'] as Map<String, dynamic>?,
       confirm: json['confirm'] as String?,
+      computedFields: (json['computedFields'] as List<dynamic>?)
+              ?.map((c) => OdsComputedField.fromJson(c as Map<String, dynamic>))
+              .toList() ??
+          const [],
     );
   }
 
@@ -67,5 +105,7 @@ class OdsAction {
         if (matchField != null) 'matchField': matchField,
         if (withData != null) 'withData': withData,
         if (confirm != null) 'confirm': confirm,
+        if (computedFields.isNotEmpty)
+          'computedFields': computedFields.map((c) => c.toJson()).toList(),
       };
 }
