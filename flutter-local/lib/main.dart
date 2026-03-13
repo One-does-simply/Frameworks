@@ -10,7 +10,9 @@ import 'debug/debug_panel.dart';
 import 'engine/app_engine.dart';
 import 'engine/code_generator.dart';
 import 'engine/data_exporter.dart';
+import 'engine/data_store.dart';
 import 'engine/loaded_apps_store.dart';
+import 'parser/spec_parser.dart';
 import 'engine/settings_store.dart';
 import 'loader/spec_loader.dart';
 import 'models/ods_app.dart';
@@ -403,6 +405,203 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _exportAppData(LoadedAppEntry app) async {
+    // Parse spec to get app name for database lookup.
+    String appName;
+    try {
+      final parsed = jsonDecode(app.specJson) as Map<String, dynamic>;
+      appName = parsed['appName'] as String? ?? app.name;
+    } catch (_) {
+      appName = app.name;
+    }
+
+    // Pick export format.
+    final format = await showDialog<ExportFormat>(
+      context: context,
+      builder: (ctx) => const _ExportFormatDialog(),
+    );
+    if (format == null) return;
+
+    try {
+      // Open a temporary DataStore to read existing data.
+      final dataStore = DataStore();
+      await dataStore.initialize(appName);
+      final tables = await dataStore.exportAllData();
+      await dataStore.close();
+
+      final exportData = {
+        'odsExport': {
+          'appName': appName,
+          'exportedAt': DateTime.now().toIso8601String(),
+          'version': '1.0',
+        },
+        'tables': tables,
+      };
+
+      final exporter = DataExporter();
+      final outputPath = await exporter.export(
+        appName: appName,
+        exportData: exportData,
+        format: format,
+      );
+
+      if (outputPath != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Data exported to $outputPath')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _generateAppCode(LoadedAppEntry app) async {
+    // Parse the spec to get an OdsApp model.
+    final parser = SpecParser();
+    final result = parser.parse(app.specJson);
+    if (result.app == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not parse spec: ${result.parseError ?? "unknown error"}')),
+        );
+      }
+      return;
+    }
+    final odsApp = result.app!;
+
+    // Show the generation dialog with explanation and folder picker.
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Generate Flutter Project'),
+        content: const SizedBox(
+          width: 380,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'This will generate a standalone Flutter project from your ODS '
+                'app — complete source code that you fully own and can customize '
+                'without limits.',
+              ),
+              SizedBox(height: 12),
+              Text(
+                'The generated project includes:',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              SizedBox(height: 4),
+              Text('  • main.dart with MaterialApp and routing'),
+              Text('  • One page widget per screen'),
+              Text('  • SQLite database helper with CRUD'),
+              Text('  • Forms, lists, buttons, and charts'),
+              Text('  • pubspec.yaml with all dependencies'),
+              SizedBox(height: 12),
+              Text(
+                'Choose an empty folder to write the project files into. '
+                'A README.md is included with step-by-step instructions '
+                'for getting the app running — even if you\'ve never '
+                'used Flutter before.',
+                style: TextStyle(fontStyle: FontStyle.italic),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.folder_open),
+            label: const Text('Choose Folder'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    // Pick a folder.
+    final outputDir = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Choose folder for generated project',
+    );
+    if (outputDir == null || !context.mounted) return;
+
+    try {
+      final generator = CodeGenerator();
+      final files = generator.generate(odsApp);
+
+      int fileCount = 0;
+      for (final entry in files.entries) {
+        final file = File('$outputDir/${entry.key}');
+        await file.parent.create(recursive: true);
+        await file.writeAsString(entry.value);
+        fileCount++;
+      }
+
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            icon: Icon(Icons.check_circle_outline, color: Theme.of(ctx).colorScheme.primary, size: 48),
+            title: const Text('Code Generation Complete'),
+            content: SizedBox(
+              width: 360,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Generated $fileCount files in:'),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Theme.of(ctx).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      outputDir,
+                      style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Open the folder and follow the README.md to get your app running.',
+                    style: TextStyle(fontStyle: FontStyle.italic),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Done'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Code generation failed: $e'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    }
+  }
+
   void _showCreateNew() {
     Navigator.push(
       context,
@@ -610,6 +809,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       onEditSpec: () => _editApp(app),
                       onEditWithAi: () => _editWithAi(app),
                       onArchive: () => _archiveApp(app),
+                      onExportData: () => _exportAppData(app),
+                      onGenerateCode: () => _generateAppCode(app),
                       onRemove: app.isBundled ? null : () => _removeApp(app),
                     );
                   },
@@ -815,6 +1016,8 @@ class _AppListTile extends StatelessWidget {
   final VoidCallback onEditWithAi;
   final VoidCallback onArchive;
   final VoidCallback? onRemove;
+  final VoidCallback onExportData;
+  final VoidCallback onGenerateCode;
 
   const _AppListTile({
     required this.app,
@@ -823,6 +1026,8 @@ class _AppListTile extends StatelessWidget {
     required this.onEditSpec,
     required this.onEditWithAi,
     required this.onArchive,
+    required this.onExportData,
+    required this.onGenerateCode,
     this.onRemove,
   });
 
@@ -902,6 +1107,10 @@ class _AppListTile extends StatelessWidget {
                         onEditWithAi();
                       case 'editSpec':
                         onEditSpec();
+                      case 'exportData':
+                        onExportData();
+                      case 'generateCode':
+                        onGenerateCode();
                       case 'archive':
                         onArchive();
                       case 'remove':
@@ -928,6 +1137,25 @@ class _AppListTile extends StatelessWidget {
                           contentPadding: EdgeInsets.zero,
                         ),
                       ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      value: 'exportData',
+                      child: ListTile(
+                        leading: Icon(Icons.download_outlined),
+                        title: Text('Export Data'),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'generateCode',
+                      child: ListTile(
+                        leading: Icon(Icons.code),
+                        title: Text('Generate Code'),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
                     const PopupMenuDivider(),
                     const PopupMenuItem(
                       value: 'archive',
@@ -1680,136 +1908,6 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
-  Future<void> _exportData(BuildContext context, AppEngine engine) async {
-    // Show format picker
-    final format = await showDialog<ExportFormat>(
-      context: context,
-      builder: (ctx) => const _ExportFormatDialog(),
-    );
-    if (format == null) return;
-
-    try {
-      final data = await engine.exportData();
-      final appName = engine.app?.appName ?? 'ods_app';
-      final exporter = DataExporter();
-      final outputPath = await exporter.export(
-        appName: appName,
-        exportData: data,
-        format: format,
-      );
-
-      if (outputPath != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Data exported to $outputPath')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _showGenerateCode(BuildContext context, AppEngine engine) async {
-    final app = engine.app;
-    if (app == null) return;
-
-    // Show the generation dialog with explanation and folder picker.
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Generate Flutter Project'),
-        content: const SizedBox(
-          width: 380,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'This will generate a standalone Flutter project from your ODS '
-                'app — complete source code that you fully own and can customize '
-                'without limits.',
-              ),
-              SizedBox(height: 12),
-              Text(
-                'The generated project includes:',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              SizedBox(height: 4),
-              Text('  • main.dart with MaterialApp and routing'),
-              Text('  • One page widget per screen'),
-              Text('  • SQLite database helper with CRUD'),
-              Text('  • Forms, lists, buttons, and charts'),
-              Text('  • pubspec.yaml with all dependencies'),
-              SizedBox(height: 12),
-              Text(
-                'Choose an empty folder to write the project files into. '
-                'A README.md is included with step-by-step instructions '
-                'for getting the app running — even if you\'ve never '
-                'used Flutter before.',
-                style: TextStyle(fontStyle: FontStyle.italic),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(ctx, true),
-            icon: const Icon(Icons.folder_open),
-            label: const Text('Choose Folder'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !context.mounted) return;
-
-    // Pick a folder
-    final outputDir = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: 'Choose folder for generated project',
-    );
-    if (outputDir == null || !context.mounted) return;
-
-    try {
-      // Generate the files
-      final generator = CodeGenerator();
-      final files = generator.generate(app);
-
-      // Write them to disk
-      int fileCount = 0;
-      for (final entry in files.entries) {
-        final file = File('$outputDir/${entry.key}');
-        await file.parent.create(recursive: true);
-        await file.writeAsString(entry.value);
-        fileCount++;
-      }
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Generated $fileCount files in $outputDir'),
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Code generation failed: $e'),
-            backgroundColor: Colors.red.shade700,
-          ),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final engine = context.watch<AppEngine>();
@@ -1955,48 +2053,6 @@ class _AppShellState extends State<AppShell> {
                     app: app,
                   ),
                 );
-              },
-            ),
-            const Divider(),
-            Padding(
-              padding: const EdgeInsets.only(left: 24, top: 8, bottom: 4),
-              child: Text(
-                'OFF-RAMP',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.download_outlined),
-              title: const Text('Export Data'),
-              subtitle: Text(
-                'JSON, CSV, or SQL',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-              onTap: () async {
-                Navigator.pop(context);
-                await _exportData(context, engine);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.code),
-              title: const Text('Generate Code'),
-              subtitle: Text(
-                'Standalone Flutter project',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-              onTap: () {
-                Navigator.pop(context);
-                _showGenerateCode(context, engine);
               },
             ),
             const Divider(),
