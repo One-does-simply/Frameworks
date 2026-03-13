@@ -279,6 +279,6 @@ class SpecValidator {
   }
 
   /// The set of field types defined in the ODS spec.
-  static const _validFieldTypes = {'text', 'email', 'number', 'date', 'datetime', 'multiline', 'select', 'checkbox'};
+  static const _validFieldTypes = {'text', 'email', 'number', 'date', 'datetime', 'multiline', 'select', 'checkbox', 'hidden'};
   static const _validSummaryFunctions = {'sum', 'avg', 'count', 'min', 'max'};
 }

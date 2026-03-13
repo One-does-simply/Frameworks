@@ -46,10 +46,25 @@ class _OdsFormWidgetState extends State<OdsFormWidget> {
 
   /// Checks whether a field should be visible based on its `visibleWhen` condition.
   bool _isFieldVisible(OdsFieldDefinition field, Map<String, String> formState) {
+    // Hidden fields carry data (e.g., correct answers in quizzes) but never render.
+    if (field.type == 'hidden') return false;
     final condition = field.visibleWhen;
     if (condition == null) return true;
     final watchedValue = formState[condition.field] ?? '';
     return watchedValue == condition.equals;
+  }
+
+  /// Initializes default values for hidden fields so they participate in form
+  /// state without rendering any UI.
+  void _initHiddenDefaults(AppEngine engine) {
+    final formState = engine.getFormState(widget.model.id);
+    for (final field in widget.model.fields) {
+      if (field.type != 'hidden') continue;
+      if (formState.containsKey(field.name)) continue;
+      if (field.defaultValue != null) {
+        engine.updateFormField(widget.model.id, field.name, field.defaultValue!);
+      }
+    }
   }
 
   @override
@@ -60,6 +75,7 @@ class _OdsFormWidgetState extends State<OdsFormWidget> {
         valueListenable: _fieldChangeNotifier,
         builder: (context, _, __) {
           final engine = context.watch<AppEngine>();
+          _initHiddenDefaults(engine);
           final formState = engine.getFormState(widget.model.id);
 
           return Column(
