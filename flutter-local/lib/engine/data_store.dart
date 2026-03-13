@@ -338,6 +338,35 @@ class DataStore {
     _log('Imported ${tables.length} tables');
   }
 
+  /// Appends rows to a specific table without clearing existing data.
+  /// Ensures the table exists and has all necessary columns before inserting.
+  /// Returns the number of rows imported.
+  Future<int> importTableRows(
+      String tableName, List<Map<String, dynamic>> rows) async {
+    if (rows.isEmpty) return 0;
+
+    // Ensure table exists with columns from the first row.
+    if (!_knownTables.contains(tableName)) {
+      final cols = rows.first.keys
+          .where((k) => k != '_id' && k != '_createdAt')
+          .map((k) => OdsFieldDefinition(name: k, type: 'text'))
+          .toList();
+      await ensureTable(tableName, cols);
+    }
+
+    int count = 0;
+    for (final row in rows) {
+      final cleanRow = Map<String, dynamic>.from(row)
+        ..remove('_id')
+        ..putIfAbsent('_createdAt', () => DateTime.now().toIso8601String());
+      await _db!.insert(tableName, cleanRow);
+      count++;
+    }
+
+    _log('Imported $count rows into "$tableName"');
+    return count;
+  }
+
   /// Closes the database connection. Called on app reset and dispose.
   Future<void> close() async {
     await _db?.close();

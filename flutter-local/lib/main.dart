@@ -2589,6 +2589,168 @@ class _SettingsDialogState extends State<_SettingsDialog> {
     }
   }
 
+  Future<void> _importData() async {
+    final result = await FilePicker.platform.pickFiles(
+      dialogTitle: 'Select CSV or JSON file to import',
+      type: FileType.custom,
+      allowedExtensions: ['csv', 'json'],
+    );
+
+    if (result == null || result.files.single.path == null || !mounted) return;
+
+    final filePath = result.files.single.path!;
+    final file = File(filePath);
+    final content = await file.readAsString();
+    final isCsv = filePath.toLowerCase().endsWith('.csv');
+
+    // Parse rows from the file.
+    List<Map<String, dynamic>> rows;
+    try {
+      if (isCsv) {
+        rows = _parseCsv(content);
+      } else {
+        final decoded = jsonDecode(content);
+        if (decoded is List) {
+          rows = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        } else if (decoded is Map && decoded.containsKey('rows')) {
+          rows = (decoded['rows'] as List)
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+        } else {
+          throw const FormatException('JSON must be an array of objects or {"rows": [...]}');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not parse file: $e')),
+        );
+      }
+      return;
+    }
+
+    if (rows.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('File contains no data rows')),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
+    // Let the user pick which table to import into.
+    final tables = widget.engine.localTableNames;
+    final columns = rows.first.keys.where((k) => k != '_id' && k != '_createdAt').toList();
+
+    final targetTable = await showDialog<String>(
+      context: context,
+      builder: (ctx) => _ImportPreviewDialog(
+        tables: tables,
+        columns: columns,
+        rowCount: rows.length,
+        fileName: filePath.split('/').last.split('\\').last,
+      ),
+    );
+
+    if (targetTable == null || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      final count = await widget.engine.importTableRows(targetTable, rows);
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Imported $count rows into "$targetTable"')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Import failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Parses a CSV string into a list of row maps.
+  /// Handles quoted fields with commas and newlines.
+  List<Map<String, dynamic>> _parseCsv(String content) {
+    final lines = _parseCsvLines(content);
+    if (lines.length < 2) return [];
+
+    final headers = lines.first;
+    final rows = <Map<String, dynamic>>[];
+    for (var i = 1; i < lines.length; i++) {
+      final values = lines[i];
+      if (values.length != headers.length) continue; // skip malformed rows
+      final row = <String, dynamic>{};
+      for (var j = 0; j < headers.length; j++) {
+        row[headers[j]] = values[j];
+      }
+      rows.add(row);
+    }
+    return rows;
+  }
+
+  /// Splits CSV content into a list of rows, each being a list of field values.
+  /// Handles RFC 4180 quoting (double-quote escaping, embedded commas/newlines).
+  List<List<String>> _parseCsvLines(String content) {
+    final rows = <List<String>>[];
+    var fields = <String>[];
+    var field = StringBuffer();
+    var inQuotes = false;
+    var i = 0;
+
+    while (i < content.length) {
+      final c = content[i];
+
+      if (inQuotes) {
+        if (c == '"') {
+          if (i + 1 < content.length && content[i + 1] == '"') {
+            field.write('"');
+            i += 2;
+          } else {
+            inQuotes = false;
+            i++;
+          }
+        } else {
+          field.write(c);
+          i++;
+        }
+      } else {
+        if (c == '"') {
+          inQuotes = true;
+          i++;
+        } else if (c == ',') {
+          fields.add(field.toString().trim());
+          field = StringBuffer();
+          i++;
+        } else if (c == '\r') {
+          i++;
+        } else if (c == '\n') {
+          fields.add(field.toString().trim());
+          if (fields.any((f) => f.isNotEmpty)) rows.add(fields);
+          fields = <String>[];
+          field = StringBuffer();
+          i++;
+        } else {
+          field.write(c);
+          i++;
+        }
+      }
+    }
+
+    // Last row (no trailing newline).
+    fields.add(field.toString().trim());
+    if (fields.any((f) => f.isNotEmpty)) rows.add(fields);
+
+    return rows;
+  }
+
   @override
   Widget build(BuildContext context) {
     final engine = widget.engine;
@@ -2666,6 +2828,13 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                     subtitle: const Text('Load data from a backup file'),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 24),
                     onTap: _restoreData,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.file_upload_outlined),
+                    title: const Text('Import Data'),
+                    subtitle: const Text('Add rows from a CSV or JSON file'),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                    onTap: _importData,
                   ),
                   const Divider(),
                   // -- Framework settings --
@@ -3124,6 +3293,104 @@ class _AppSettingsListState extends State<_AppSettingsList> {
           },
         );
       }).toList(),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Import Preview Dialog
+// ---------------------------------------------------------------------------
+
+class _ImportPreviewDialog extends StatefulWidget {
+  final List<String> tables;
+  final List<String> columns;
+  final int rowCount;
+  final String fileName;
+
+  const _ImportPreviewDialog({
+    required this.tables,
+    required this.columns,
+    required this.rowCount,
+    required this.fileName,
+  });
+
+  @override
+  State<_ImportPreviewDialog> createState() => _ImportPreviewDialogState();
+}
+
+class _ImportPreviewDialogState extends State<_ImportPreviewDialog> {
+  String? _selectedTable;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.tables.isNotEmpty) _selectedTable = widget.tables.first;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Import Data'),
+      content: SizedBox(
+        width: 340,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.fileName,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text('${widget.rowCount} row${widget.rowCount == 1 ? '' : 's'} detected'),
+            const SizedBox(height: 4),
+            Text(
+              'Columns: ${widget.columns.join(', ')}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 16),
+            if (widget.tables.isEmpty)
+              Text(
+                'No tables available. Load a spec with local data sources first.',
+                style: TextStyle(color: theme.colorScheme.error),
+              )
+            else ...[
+              Text('Import into:', style: theme.textTheme.labelMedium),
+              const SizedBox(height: 4),
+              DropdownButtonFormField<String>(
+                value: _selectedTable,
+                items: widget.tables
+                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedTable = v),
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: widget.tables.isEmpty || _selectedTable == null
+              ? null
+              : () => Navigator.pop(context, _selectedTable),
+          child: const Text('Import'),
+        ),
+      ],
     );
   }
 }

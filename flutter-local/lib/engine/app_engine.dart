@@ -349,6 +349,30 @@ class AppEngine extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------------
+  // Table import — append rows to a specific table from CSV/JSON.
+  // ---------------------------------------------------------------------------
+
+  /// Returns the list of local table names defined in the app's data sources.
+  List<String> get localTableNames {
+    if (_app == null) return [];
+    return _app!.dataSources.values
+        .where((ds) => ds.isLocal)
+        .map((ds) => ds.tableName)
+        .toSet()
+        .toList()
+      ..sort();
+  }
+
+  /// Imports rows into a specific table and triggers a UI rebuild.
+  /// Returns the number of rows imported.
+  Future<int> importTableRows(
+      String tableName, List<Map<String, dynamic>> rows) async {
+    final count = await _dataStore.importTableRows(tableName, rows);
+    notifyListeners();
+    return count;
+  }
+
+  // ---------------------------------------------------------------------------
   // Debug mode — toggle-able inspection tools for spec authors.
   // ---------------------------------------------------------------------------
 
