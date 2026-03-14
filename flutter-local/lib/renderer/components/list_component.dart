@@ -145,6 +145,16 @@ class _OdsListWidgetState extends State<OdsListWidget> {
     return computed;
   }
 
+  /// Returns the set of field names that are number type (for fallback currency).
+  Set<String> _getNumericFields(AppEngine engine) {
+    final ds = engine.app?.dataSources[widget.model.dataSource];
+    if (ds?.fields == null) return {};
+    return ds!.fields!
+        .where((f) => f.type == 'number')
+        .map((f) => f.name)
+        .toSet();
+  }
+
   /// Formats a value with currency prefix if the column is marked `currency: true`.
   String _formatCurrency(String value, String? currencySymbol) {
     if (currencySymbol == null || currencySymbol.isEmpty) return value;
@@ -309,18 +319,19 @@ class _OdsListWidgetState extends State<OdsListWidget> {
   }
 
   /// Builds the summary row displayed below the data table.
-  /// Checks if a column is marked as currency.
-  bool _isColumnCurrency(String fieldName) {
+  /// Checks if a column should show currency formatting.
+  bool _isColumnCurrency(String fieldName, Set<String> fallbackFields) {
     for (final col in widget.model.columns) {
       if (col.field == fieldName) return col.currency;
     }
-    return false;
+    return fallbackFields.contains(fieldName);
   }
 
   Widget _buildSummaryRow(
     List<Map<String, dynamic>> filteredRows,
     Map<String, OdsFieldDefinition> computedFields, {
     String? currencySymbol,
+    Set<String> fallbackCurrencyFields = const {},
   }) {
     if (widget.model.summary.isEmpty) return const SizedBox.shrink();
 
@@ -337,7 +348,7 @@ class _OdsListWidgetState extends State<OdsListWidget> {
               var value = _computeAggregate(rule, filteredRows, computedFields);
               // Apply currency formatting to summary values for currency columns.
               if (rule.function != 'count' &&
-                  _isColumnCurrency(rule.column)) {
+                  _isColumnCurrency(rule.column, fallbackCurrencyFields)) {
                 value = _formatCurrency(value, currencySymbol);
               }
               final label = rule.label ??
@@ -379,6 +390,13 @@ class _OdsListWidgetState extends State<OdsListWidget> {
     final hasRowActions = widget.model.rowActions.isNotEmpty;
     final computedFields = _getComputedFields(engine);
     final currencySymbol = engine.getAppSetting('currency');
+    // If no columns explicitly opt in to currency, fall back to applying
+    // the currency symbol to all number-type columns (backwards compat).
+    final anyColumnHasCurrency =
+        widget.model.columns.any((col) => col.currency);
+    final fallbackCurrencyFields = !anyColumnHasCurrency && currencySymbol != null
+        ? _getNumericFields(engine)
+        : <String>{};
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -468,7 +486,9 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                       cells: [
                         ...widget.model.columns.map((col) {
                           final value = _getCellValue(row, col.field, computedFields);
-                          var display = col.currency
+                          final useCurrency = col.currency ||
+                              fallbackCurrencyFields.contains(col.field);
+                          var display = useCurrency
                               ? _formatCurrency(value, currencySymbol)
                               : value;
                           // Apply displayMap to transform raw values.
@@ -542,7 +562,8 @@ class _OdsListWidgetState extends State<OdsListWidget> {
               ),
               // Summary/aggregation row below the table.
               _buildSummaryRow(filteredRows, computedFields,
-                  currencySymbol: currencySymbol),
+                  currencySymbol: currencySymbol,
+                  fallbackCurrencyFields: fallbackCurrencyFields),
               // Show filtered count when filters are active.
               if (_filters.values.any((v) => v != null))
                 Padding(

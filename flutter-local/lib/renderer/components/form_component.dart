@@ -153,9 +153,11 @@ class _OdsComputedFieldWidget extends StatelessWidget {
           engine.updateFormField(formId, field.name, result);
         }
 
-        // Apply currency symbol for fields marked with currency: true.
+        // Apply currency symbol for fields marked with currency: true,
+        // or fall back to all number computed fields when no field opts in.
         var displayResult = result;
-        if (field.currency) {
+        final anyCurrency = allFields.any((f) => f.currency);
+        if (field.currency || (!anyCurrency && field.type == 'number')) {
           final currency = engine.getAppSetting('currency');
           if (currency != null &&
               currency.isNotEmpty &&
