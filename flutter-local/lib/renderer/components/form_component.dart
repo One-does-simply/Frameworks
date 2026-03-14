@@ -351,6 +351,11 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
       }
     }
 
+    // Read-only fields display their value but don't accept input.
+    if (widget.field.readOnly) {
+      return _buildReadOnly(currentValue);
+    }
+
     switch (widget.field.type) {
       case 'select':
         return _buildSelect(currentValue);
@@ -365,6 +370,58 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
     }
   }
 
+  Widget _buildReadOnly(String currentValue) {
+    final variant = widget.field.displayVariant;
+    final label = widget.field.label ?? widget.field.name;
+
+    // Plain/heading/caption variants render as clean text, not a form field.
+    if (variant == 'plain' || variant == 'heading' || variant == 'caption') {
+      TextStyle? valueStyle;
+      switch (variant) {
+        case 'heading':
+          valueStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              );
+          break;
+        case 'caption':
+          valueStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.outline,
+              );
+          break;
+        default: // plain
+          valueStyle = Theme.of(context).textTheme.bodyLarge;
+      }
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Theme.of(context).colorScheme.outline,
+                ),
+          ),
+          const SizedBox(height: 4),
+          Text(currentValue, style: valueStyle),
+        ],
+      );
+    }
+
+    // Default: disabled input style.
+    return TextField(
+      controller: _controller,
+      readOnly: true,
+      enabled: false,
+      maxLines: widget.field.type == 'multiline' ? null : 1,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+        filled: true,
+        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+      ),
+    );
+  }
+
   Widget _buildSelect(String currentValue) {
     final optionsFrom = widget.field.optionsFrom;
     if (optionsFrom != null) {
@@ -373,8 +430,19 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
     return _buildStaticSelect(currentValue, widget.field.options ?? []);
   }
 
+  /// Resolves `{fieldName}` references in a template string using form state.
+  String _resolveTemplate(String template) {
+    final engine = context.read<AppEngine>();
+    final formState = engine.getFormState(widget.formId);
+    final fieldPattern = RegExp(r'\{(\w+)\}');
+    return template.replaceAllMapped(fieldPattern, (match) {
+      return formState[match.group(1)!] ?? '';
+    });
+  }
+
   Widget _buildStaticSelect(String currentValue, List<String> options) {
     final effectiveValue = options.contains(currentValue) ? currentValue : null;
+    final labels = widget.field.optionLabels;
 
     return DropdownButtonFormField<String>(
       initialValue: effectiveValue,
@@ -384,10 +452,15 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
         border: const OutlineInputBorder(),
         errorText: _validationError,
       ),
-      items: options.map((option) {
+      items: options.asMap().entries.map((entry) {
+        final option = entry.value;
+        // Use resolved optionLabel if available, otherwise plain option text.
+        final displayText = (labels != null && entry.key < labels.length)
+            ? _resolveTemplate(labels[entry.key])
+            : option;
         return DropdownMenuItem<String>(
           value: option,
-          child: Text(option),
+          child: Text(displayText),
         );
       }).toList(),
       onChanged: (value) {

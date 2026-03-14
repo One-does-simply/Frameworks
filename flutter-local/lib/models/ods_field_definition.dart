@@ -185,6 +185,19 @@ class OdsFieldDefinition {
   /// others accept input (e.g., the user's answer).
   final bool readOnly;
 
+  /// Optional display variant for readOnly fields. Supported values:
+  ///   - "plain" → renders as clean text (no input borders/background)
+  ///   - "heading" → renders as larger, bold text
+  ///   - "caption" → renders as smaller, muted text
+  /// When null, readOnly fields use the default disabled-input style.
+  final String? displayVariant;
+
+  /// Optional display labels for select options, parallel to [options].
+  /// Supports `{fieldName}` references resolved from the current form state.
+  /// e.g., `["A: {optionA}", "B: {optionB}"]` shows enriched labels while
+  /// still storing the raw option value ("A", "B").
+  final List<String>? optionLabels;
+
   /// Whether this field is computed (has a formula).
   bool get isComputed => formula != null;
 
@@ -202,6 +215,8 @@ class OdsFieldDefinition {
     this.validation,
     this.currency = false,
     this.readOnly = false,
+    this.displayVariant,
+    this.optionLabels,
   });
 
   factory OdsFieldDefinition.fromJson(Map<String, dynamic> json) {
@@ -225,6 +240,8 @@ class OdsFieldDefinition {
           : null,
       currency: json['currency'] as bool? ?? false,
       readOnly: json['readOnly'] as bool? ?? false,
+      displayVariant: json['displayVariant'] as String?,
+      optionLabels: (json['optionLabels'] as List<dynamic>?)?.cast<String>(),
     );
   }
 
@@ -236,9 +253,11 @@ class OdsFieldDefinition {
         if (placeholder != null) 'placeholder': placeholder,
         if (defaultValue != null) 'default': defaultValue,
         if (options != null) 'options': options,
+        if (optionLabels != null) 'optionLabels': optionLabels,
         if (optionsFrom != null) 'optionsFrom': optionsFrom!.toJson(),
         if (formula != null) 'formula': formula,
         if (readOnly) 'readOnly': readOnly,
+        if (displayVariant != null) 'displayVariant': displayVariant,
         if (visibleWhen != null) 'visibleWhen': visibleWhen!.toJson(),
         if (validation != null) 'validation': validation!.toJson(),
       };
