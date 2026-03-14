@@ -168,7 +168,8 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
 
       final templateBody = _templateJson!['template'];
       final rendered = TemplateEngine.render(templateBody, context);
-      final specJson = jsonEncode(rendered);
+      final specJson = const JsonEncoder.withIndent('  ').convert(rendered);
+      debugPrint('ODS Quick Build rendered spec:\n$specJson');
 
       Navigator.pop(this.context, specJson);
     } catch (e) {
@@ -365,6 +366,7 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
             'select' => _buildSelectQuestion(id, question),
             'checkbox' => _buildCheckboxQuestion(id, question),
             'field-list' => _buildFieldListQuestion(id, question, theme),
+            'field-ref' => _buildFieldRefQuestion(id, question),
             _ => Text('Unsupported question type: $type'),
           },
         ],
@@ -408,6 +410,33 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
       onChanged: (value) => setState(() => _answers[id] = value),
       title: Text(question['label'] as String),
       contentPadding: EdgeInsets.zero,
+    );
+  }
+
+  Widget _buildFieldRefQuestion(String id, Map<String, dynamic> question) {
+    final ref = question['ref'] as String?;
+    final fields = ref != null ? (_fieldLists[ref] ?? []) : <Map<String, dynamic>>[];
+
+    if (fields.isEmpty) {
+      return Text(
+        'Add fields above first',
+        style: TextStyle(color: Theme.of(context).colorScheme.outline),
+      );
+    }
+
+    return DropdownButtonFormField<String>(
+      decoration: InputDecoration(
+        border: const OutlineInputBorder(),
+        hintText: question['placeholder'] as String?,
+      ),
+      value: _answers[id] as String?,
+      items: fields
+          .map((f) => DropdownMenuItem(
+                value: f['name'] as String,
+                child: Text(f['label'] as String? ?? f['name'] as String),
+              ))
+          .toList(),
+      onChanged: (value) => setState(() => _answers[id] = value),
     );
   }
 
@@ -561,6 +590,7 @@ class _AddFieldDialogState extends State<_AddFieldDialog> {
     ('text', 'Text'),
     ('number', 'Number'),
     ('date', 'Date'),
+    ('datetime', 'Date & Time'),
     ('select', 'Dropdown'),
     ('multiline', 'Long Text'),
     ('email', 'Email'),
