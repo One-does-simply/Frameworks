@@ -61,17 +61,16 @@ class OdsButtonWidget extends StatelessWidget {
         onPressed: () async {
           final engine = context.read<AppEngine>();
 
-          // Check for confirm on any action in the chain. If any action has a
-          // confirm property, show it before executing that action. We process
-          // actions one-by-one to support per-action confirmation.
-          for (final action in model.onClick) {
-            if (action.confirm != null && context.mounted) {
-              final proceed = await _showConfirmation(context, action.confirm!);
-              if (!proceed) return;
-            }
-            await engine.executeActions([action]);
-            if (engine.lastActionError != null) break;
-          }
+          // Pass the full action chain to the engine so it can handle
+          // chain termination (e.g., record cursor onEnd stops remaining
+          // actions) and share the form state snapshot across all actions.
+          await engine.executeActions(
+            model.onClick,
+            confirmFn: (message) async {
+              if (!context.mounted) return false;
+              return await _showConfirmation(context, message);
+            },
+          );
 
           // Show a SnackBar if an action failed (e.g., required validation).
           if (engine.lastActionError != null && context.mounted) {

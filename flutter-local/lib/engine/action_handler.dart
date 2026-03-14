@@ -233,6 +233,7 @@ class ActionHandler {
     final errors = <String>[];
     for (final field in fields) {
       if (field.isComputed) continue;
+      if (field.readOnly) continue;
       if (_isFieldHidden(field, formData)) continue;
 
       final value = formData[field.name]?.trim() ?? '';

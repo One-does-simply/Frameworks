@@ -180,6 +180,11 @@ class OdsFieldDefinition {
   /// When true, the field displays values with the app's currency symbol prefix.
   final bool currency;
 
+  /// When true, the field renders as non-editable. Useful for record-cursor
+  /// forms where some fields display context (e.g., a quiz question) while
+  /// others accept input (e.g., the user's answer).
+  final bool readOnly;
+
   /// Whether this field is computed (has a formula).
   bool get isComputed => formula != null;
 
@@ -196,6 +201,7 @@ class OdsFieldDefinition {
     this.visibleWhen,
     this.validation,
     this.currency = false,
+    this.readOnly = false,
   });
 
   factory OdsFieldDefinition.fromJson(Map<String, dynamic> json) {
@@ -218,6 +224,7 @@ class OdsFieldDefinition {
           ? OdsValidation.fromJson(json['validation'] as Map<String, dynamic>)
           : null,
       currency: json['currency'] as bool? ?? false,
+      readOnly: json['readOnly'] as bool? ?? false,
     );
   }
 
@@ -231,6 +238,7 @@ class OdsFieldDefinition {
         if (options != null) 'options': options,
         if (optionsFrom != null) 'optionsFrom': optionsFrom!.toJson(),
         if (formula != null) 'formula': formula,
+        if (readOnly) 'readOnly': readOnly,
         if (visibleWhen != null) 'visibleWhen': visibleWhen!.toJson(),
         if (validation != null) 'validation': validation!.toJson(),
       };

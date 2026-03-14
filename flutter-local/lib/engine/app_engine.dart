@@ -254,7 +254,15 @@ class AppEngine extends ChangeNotifier {
   /// Form state is snapshotted before the chain starts so that later actions
   /// (e.g., nextRecord after submit) can still resolve field values even
   /// after the form has been cleared.
-  Future<void> executeActions(List<OdsAction> actions) async {
+  ///
+  /// The optional [confirmFn] callback is invoked when an action has a
+  /// `confirm` property. It should show a dialog and return true to proceed
+  /// or false to abort the chain. This keeps the engine UI-free while
+  /// supporting per-action confirmation.
+  Future<void> executeActions(
+    List<OdsAction> actions, {
+    Future<bool> Function(String message)? confirmFn,
+  }) async {
     _lastActionError = null;
 
     // Snapshot form state so later actions in the chain can still read values
@@ -262,8 +270,13 @@ class AppEngine extends ChangeNotifier {
     final formSnapshot = _formStates.map(
       (k, v) => MapEntry(k, Map<String, String>.from(v)),
     );
-
     for (final action in actions) {
+      // Per-action confirmation: show a dialog before executing.
+      if (action.confirm != null && confirmFn != null) {
+        final proceed = await confirmFn(action.confirm!);
+        if (!proceed) return;
+      }
+
       // Record cursor actions are handled directly by the engine.
       if (action.isRecordAction) {
         final onEndAction = await _handleRecordAction(action, formSnapshot);
