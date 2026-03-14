@@ -46,9 +46,11 @@ class OdsAction {
 
   /// For "navigate": the target page ID.
   /// For "submit"/"update": the target form ID.
+  /// For "navigateToRow": the target page ID to navigate to.
   final String? target;
 
   /// For "submit"/"update": the data source ID to write form data into.
+  /// For "navigateToRow": the data source ID to query rows from.
   final String? dataSource;
 
   /// For "update" only: the field name used to match the row to update.
@@ -69,6 +71,26 @@ class OdsAction {
   /// merged into the stored data.
   final List<OdsComputedField> computedFields;
 
+  /// For "navigateToRow": key-value filter to match rows. Values can contain
+  /// `{fieldName}` references resolved from current form state.
+  final Map<String, String>? filter;
+
+  /// For "navigateToRow": field to sort results by (default: "_id").
+  final String? sort;
+
+  /// For "navigateToRow": sort direction — "asc" or "desc" (default: "asc").
+  final String? sortOrder;
+
+  /// For "navigateToRow": row offset (0-based). Can be an integer literal
+  /// or a `{fieldName}` expression like `"{_rowIndex} + 1"`.
+  final String? offset;
+
+  /// For "navigateToRow": form ID to populate with the matched row data.
+  final String? populateForm;
+
+  /// For "navigateToRow": action to execute if no matching row is found.
+  final OdsAction? fallback;
+
   const OdsAction({
     required this.action,
     this.target,
@@ -77,6 +99,12 @@ class OdsAction {
     this.withData,
     this.confirm,
     this.computedFields = const [],
+    this.filter,
+    this.sort,
+    this.sortOrder,
+    this.offset,
+    this.populateForm,
+    this.fallback,
   });
 
   bool get isNavigate => action == 'navigate';
@@ -84,6 +112,9 @@ class OdsAction {
   bool get isUpdate => action == 'update';
 
   factory OdsAction.fromJson(Map<String, dynamic> json) {
+    final filterRaw = json['filter'] as Map<String, dynamic>?;
+    final fallbackRaw = json['fallback'] as Map<String, dynamic>?;
+
     return OdsAction(
       action: json['action'] as String,
       target: json['target'] as String?,
@@ -95,6 +126,12 @@ class OdsAction {
               ?.map((c) => OdsComputedField.fromJson(c as Map<String, dynamic>))
               .toList() ??
           const [],
+      filter: filterRaw?.map((k, v) => MapEntry(k, v.toString())),
+      sort: json['sort'] as String?,
+      sortOrder: json['sortOrder'] as String?,
+      offset: json['offset']?.toString(),
+      populateForm: json['populateForm'] as String?,
+      fallback: fallbackRaw != null ? OdsAction.fromJson(fallbackRaw) : null,
     );
   }
 
@@ -107,5 +144,11 @@ class OdsAction {
         if (confirm != null) 'confirm': confirm,
         if (computedFields.isNotEmpty)
           'computedFields': computedFields.map((c) => c.toJson()).toList(),
+        if (filter != null) 'filter': filter,
+        if (sort != null) 'sort': sort,
+        if (sortOrder != null) 'sortOrder': sortOrder,
+        if (offset != null) 'offset': offset,
+        if (populateForm != null) 'populateForm': populateForm,
+        if (fallback != null) 'fallback': fallback!.toJson(),
       };
 }

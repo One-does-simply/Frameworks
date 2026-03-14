@@ -212,14 +212,24 @@ class AppEngine extends ChangeNotifier {
   /// ODS Spec: Actions in an onClick array run in order. A submit followed
   /// by a navigate gives the natural "save and go" flow. If any action
   /// errors, it is logged and the remaining actions continue.
+  ///
+  /// Form state is snapshotted before the chain starts so that later actions
+  /// (e.g., navigateToRow after submit) can still read field values even
+  /// after the form has been cleared.
   Future<void> executeActions(List<OdsAction> actions) async {
     _lastActionError = null;
+
+    // Snapshot all form states so later actions can resolve {field} references
+    // even after a submit clears the original form.
+    final formSnapshot = _formStates.map(
+      (k, v) => MapEntry(k, Map<String, String>.from(v)),
+    );
 
     for (final action in actions) {
       final result = await _actionHandler.execute(
         action: action,
         app: _app!,
-        formStates: _formStates,
+        formStates: formSnapshot,
       );
 
       if (result.error != null) {
@@ -234,6 +244,16 @@ class AppEngine extends ChangeNotifier {
       // Clear the form after a successful submit so fields reset.
       if (result.submitted && action.target != null) {
         clearForm(action.target!);
+      }
+
+      // Handle navigateToRow: populate a form with the matched row data
+      // before navigating.
+      if (result.populateData != null && result.populateFormId != null) {
+        final state = _formStates.putIfAbsent(result.populateFormId!, () => {});
+        state.clear();
+        for (final entry in result.populateData!.entries) {
+          state[entry.key] = entry.value?.toString() ?? '';
+        }
       }
 
       if (result.navigateTo != null) {

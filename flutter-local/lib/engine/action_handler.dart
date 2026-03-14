@@ -6,6 +6,7 @@ import '../models/ods_component.dart';
 import '../models/ods_field_definition.dart';
 import 'data_store.dart';
 import 'expression_evaluator.dart';
+import 'formula_evaluator.dart';
 
 /// Executes ODS actions (navigate, submit, update) on behalf of the [AppEngine].
 ///
@@ -42,6 +43,9 @@ class ActionHandler {
 
       case 'update':
         return await _handleUpdate(action, app, formStates);
+
+      case 'navigateToRow':
+        return await _handleNavigateToRow(action, app, formStates);
 
       default:
         // Graceful degradation: unknown action types are logged, not crashed.
@@ -85,13 +89,15 @@ class ActionHandler {
       return const ActionResult(error: 'External dataSources not supported in local mode');
     }
 
-    // Strip computed and hidden fields — they are not stored.
+    // Strip computed, hidden, and framework-injected fields — they are not stored.
     final excludeNames = _fieldsToExclude(formFields, formData);
     final storedFields = formFields
         .where((f) => !f.isComputed && !excludeNames.contains(f.name))
         .toList();
+    final declaredNames = formFields.map((f) => f.name).toSet();
     final storedData = Map<String, dynamic>.from(formData)
-      ..removeWhere((key, _) => excludeNames.contains(key));
+      ..removeWhere((key, _) =>
+          excludeNames.contains(key) || !declaredNames.contains(key));
 
     // Evaluate computed fields and merge into stored data.
     _applyComputedFields(action.computedFields, storedData, storedFields);
@@ -146,13 +152,15 @@ class ActionHandler {
       return const ActionResult(error: 'External dataSources not supported in local mode');
     }
 
-    // Strip computed and hidden fields — they are not stored.
+    // Strip computed, hidden, and framework-injected fields — they are not stored.
     final excludeNames = _fieldsToExclude(formFields, formData);
     final storedFields = formFields
         .where((f) => !f.isComputed && !excludeNames.contains(f.name))
         .toList();
+    final declaredNames = formFields.map((f) => f.name).toSet();
     final storedData = Map<String, dynamic>.from(formData)
-      ..removeWhere((key, _) => excludeNames.contains(key));
+      ..removeWhere((key, _) =>
+          excludeNames.contains(key) || !declaredNames.contains(key));
 
     // Evaluate computed fields and merge into stored data.
     _applyComputedFields(action.computedFields, storedData, storedFields);
@@ -198,6 +206,126 @@ class ActionHandler {
         existingFieldNames.add(cf.field);
       }
     }
+  }
+
+  /// Handles the "navigateToRow" action: queries a data source with optional
+  /// filter, sort, and offset, then navigates to the target page with the
+  /// matched row populating a form. If no row matches, executes a fallback.
+  Future<ActionResult> _handleNavigateToRow(
+    OdsAction action,
+    OdsApp app,
+    Map<String, Map<String, String>> formStates,
+  ) async {
+    final dataSourceId = action.dataSource;
+    final targetPage = action.target;
+    final populateFormId = action.populateForm;
+
+    if (dataSourceId == null || targetPage == null) {
+      return const ActionResult(error: 'navigateToRow missing dataSource or target');
+    }
+
+    final ds = app.dataSources[dataSourceId];
+    if (ds == null || !ds.isLocal) {
+      return const ActionResult(error: 'navigateToRow: unknown or non-local dataSource');
+    }
+
+    // Build a flat map of all form field values for reference resolution.
+    final allValues = <String, String>{};
+    for (final formState in formStates.values) {
+      allValues.addAll(formState);
+    }
+
+    // Resolve {fieldName} references in filter values.
+    final resolvedFilter = <String, String>{};
+    if (action.filter != null) {
+      for (final entry in action.filter!.entries) {
+        resolvedFilter[entry.key] = _resolveReferences(entry.value, allValues);
+      }
+    }
+
+    // Resolve the offset expression.
+    int offset = 0;
+    if (action.offset != null) {
+      offset = _resolveOffset(action.offset!, allValues);
+    }
+
+    final sortField = action.sort ?? '_id';
+    final sortOrder = action.sortOrder ?? 'asc';
+
+    // Query the data store for the specific row.
+    try {
+      final row = await dataStore.queryFiltered(
+        ds.tableName,
+        filter: resolvedFilter.isNotEmpty ? resolvedFilter : null,
+        sort: sortField,
+        sortOrder: sortOrder,
+        offset: offset,
+      );
+
+      if (row != null) {
+        // Inject _rowIndex so subsequent navigateToRow can compute the next offset.
+        final rowData = Map<String, dynamic>.from(row);
+        rowData['_rowIndex'] = offset.toString();
+
+        return ActionResult(
+          navigateTo: targetPage,
+          populateFormId: populateFormId,
+          populateData: rowData,
+        );
+      } else {
+        // No matching row — execute fallback if provided.
+        if (action.fallback != null) {
+          return await execute(
+            action: action.fallback!,
+            app: app,
+            formStates: formStates,
+          );
+        }
+        return const ActionResult();
+      }
+    } catch (e) {
+      debugPrint('ODS navigateToRow error: $e');
+      // On error (e.g., table doesn't exist yet), execute fallback.
+      if (action.fallback != null) {
+        return await execute(
+          action: action.fallback!,
+          app: app,
+          formStates: formStates,
+        );
+      }
+      return ActionResult(error: 'navigateToRow query failed: $e');
+    }
+  }
+
+  /// Resolves `{fieldName}` references in a string using form field values.
+  String _resolveReferences(String input, Map<String, String> values) {
+    return input.replaceAllMapped(RegExp(r'\{(\w+)\}'), (match) {
+      final fieldName = match.group(1)!;
+      return values[fieldName] ?? '';
+    });
+  }
+
+  /// Resolves an offset expression to an integer.
+  ///
+  /// Supports literal integers ("0", "5") and simple math expressions
+  /// with field references ("{_rowIndex} + 1").
+  int _resolveOffset(String offsetExpr, Map<String, String> values) {
+    // Try parsing as a plain integer first.
+    final plainInt = int.tryParse(offsetExpr.trim());
+    if (plainInt != null) return plainInt;
+
+    // Resolve field references and evaluate as math.
+    final resolved = _resolveReferences(offsetExpr, values);
+    try {
+      final result = FormulaEvaluator.evaluate(offsetExpr, 'number', values);
+      final parsed = double.tryParse(result);
+      if (parsed != null) return parsed.toInt();
+    } catch (_) {
+      // Fall through.
+    }
+
+    // Last resort: try parsing the resolved string as an integer.
+    return int.tryParse(resolved.trim()) ?? 0;
   }
 
   /// Checks whether a field is currently hidden by a visibleWhen condition.
@@ -274,7 +402,7 @@ class ActionHandler {
 
 /// The outcome of executing a single action.
 class ActionResult {
-  /// Page ID to navigate to (from a "navigate" action).
+  /// Page ID to navigate to (from a "navigate" or "navigateToRow" action).
   final String? navigateTo;
 
   /// Whether a "submit" action completed successfully.
@@ -283,5 +411,17 @@ class ActionResult {
   /// Human-readable error message if the action failed.
   final String? error;
 
-  const ActionResult({this.navigateTo, this.submitted = false, this.error});
+  /// For "navigateToRow": the form ID to populate with the matched row data.
+  final String? populateFormId;
+
+  /// For "navigateToRow": the row data to populate into the form.
+  final Map<String, dynamic>? populateData;
+
+  const ActionResult({
+    this.navigateTo,
+    this.submitted = false,
+    this.error,
+    this.populateFormId,
+    this.populateData,
+  });
 }

@@ -205,6 +205,44 @@ class DataStore {
     return rows;
   }
 
+  /// Queries a table with optional WHERE filter, ORDER BY, and OFFSET/LIMIT.
+  ///
+  /// Used by the `navigateToRow` action to find a specific row by filter
+  /// and position. Returns at most one row (the row at the given offset).
+  Future<Map<String, dynamic>?> queryFiltered(
+    String tableName, {
+    Map<String, String>? filter,
+    String sort = '_id',
+    String sortOrder = 'ASC',
+    int offset = 0,
+  }) async {
+    final db = _db!;
+
+    final whereClauses = <String>[];
+    final whereArgs = <String>[];
+    if (filter != null) {
+      for (final entry in filter.entries) {
+        whereClauses.add('"${entry.key}" = ?');
+        whereArgs.add(entry.value);
+      }
+    }
+
+    final whereStr = whereClauses.isNotEmpty ? whereClauses.join(' AND ') : null;
+    final order = sortOrder.toUpperCase() == 'DESC' ? 'DESC' : 'ASC';
+
+    final rows = await db.query(
+      tableName,
+      where: whereStr,
+      whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
+      orderBy: '"$sort" $order',
+      limit: 1,
+      offset: offset,
+    );
+
+    _log('SELECT FILTERED from "$tableName" WHERE $filter ORDER BY $sort $order OFFSET $offset → ${rows.length} rows');
+    return rows.isNotEmpty ? rows.first : null;
+  }
+
   /// Returns the number of rows in a table, or 0 if the table doesn't exist.
   Future<int> getRowCount(String tableName) async {
     final db = _db!;
