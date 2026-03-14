@@ -318,9 +318,17 @@ class OdsFormComponent extends OdsComponent {
   /// Ordered list of input fields rendered in the form.
   final List<OdsFieldDefinition> fields;
 
+  /// Optional data source ID that backs this form as a record cursor.
+  ///
+  /// When set, the form can step through records from this data source
+  /// using firstRecord/nextRecord/previousRecord/lastRecord actions.
+  /// The form's fields are populated from the current record automatically.
+  final String? recordSource;
+
   const OdsFormComponent({
     required this.id,
     required this.fields,
+    this.recordSource,
     required super.styleHint,
     super.visibleWhen,
   }) : super(component: 'form');
@@ -331,6 +339,7 @@ class OdsFormComponent extends OdsComponent {
       fields: (json['fields'] as List<dynamic>)
           .map((f) => OdsFieldDefinition.fromJson(f as Map<String, dynamic>))
           .toList(),
+      recordSource: json['recordSource'] as String?,
       styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
       visibleWhen: json['visibleWhen'] != null
           ? OdsComponentVisibleWhen.fromJson(json['visibleWhen'] as Map<String, dynamic>)

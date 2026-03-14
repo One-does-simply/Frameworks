@@ -2,10 +2,33 @@ import 'package:flutter/material.dart';
 
 import '../models/ods_app.dart';
 import '../models/ods_action.dart';
+import '../models/ods_component.dart';
 import '../parser/spec_parser.dart';
 import '../parser/spec_validator.dart';
 import 'action_handler.dart';
 import 'data_store.dart';
+
+/// Holds a filtered dataset and a cursor position for record-source forms.
+///
+/// Used by forms with `recordSource` to step through rows one at a time
+/// (e.g., quiz questions). The cursor loads all matching rows upfront and
+/// navigates by index, keeping the flow snappy without repeated DB queries.
+class RecordCursor {
+  final List<Map<String, dynamic>> rows;
+  int currentIndex;
+
+  RecordCursor({required this.rows, this.currentIndex = 0});
+
+  Map<String, dynamic>? get currentRecord =>
+      (currentIndex >= 0 && currentIndex < rows.length)
+          ? rows[currentIndex]
+          : null;
+
+  bool get hasNext => currentIndex < rows.length - 1;
+  bool get hasPrevious => currentIndex > 0;
+  bool get isEmpty => rows.isEmpty;
+  int get count => rows.length;
+}
 
 /// The central state manager for a running ODS application.
 ///
@@ -29,6 +52,13 @@ class AppEngine extends ChangeNotifier {
   final DataStore _dataStore = DataStore();
   late final ActionHandler _actionHandler;
   ValidationResult? _validation;
+
+  /// Record cursors for forms with `recordSource`. Keyed by form ID.
+  final Map<String, RecordCursor> _recordCursors = {};
+
+  /// Incremented when any record cursor moves. Used by form widgets as a key
+  /// suffix to force dropdown recreation on record change.
+  int _recordGeneration = 0;
   String? _loadError;
   bool _debugMode = false;
   bool _isLoading = false;
@@ -73,6 +103,13 @@ class AppEngine extends ChangeNotifier {
   /// The most recent action error, if any. Used by the UI to show feedback
   /// (e.g., SnackBar) when required fields are missing on submit.
   String? get lastActionError => _lastActionError;
+
+  /// The record cursor generation counter. Incremented whenever a cursor
+  /// moves, so form widgets can use it as a key to force full rebuild.
+  int get recordGeneration => _recordGeneration;
+
+  /// Returns the record cursor for a form, if one has been loaded.
+  RecordCursor? getRecordCursor(String formId) => _recordCursors[formId];
 
   /// Returns the current field values for a form, creating the map if needed.
   /// Called by form widgets to initialize their text controllers.
@@ -138,6 +175,7 @@ class AppEngine extends ChangeNotifier {
     _currentPageId = _app!.startPage;
     _navigationStack.clear();
     _formStates.clear();
+    _recordCursors.clear();
     _isLoading = false;
     notifyListeners();
     return true;
@@ -214,18 +252,29 @@ class AppEngine extends ChangeNotifier {
   /// errors, it is logged and the remaining actions continue.
   ///
   /// Form state is snapshotted before the chain starts so that later actions
-  /// (e.g., navigateToRow after submit) can still read field values even
+  /// (e.g., nextRecord after submit) can still resolve field values even
   /// after the form has been cleared.
   Future<void> executeActions(List<OdsAction> actions) async {
     _lastActionError = null;
 
-    // Snapshot all form states so later actions can resolve {field} references
-    // even after a submit clears the original form.
+    // Snapshot form state so later actions in the chain can still read values
+    // after submit clears the original form.
     final formSnapshot = _formStates.map(
       (k, v) => MapEntry(k, Map<String, String>.from(v)),
     );
 
     for (final action in actions) {
+      // Record cursor actions are handled directly by the engine.
+      if (action.isRecordAction) {
+        final onEndAction = await _handleRecordAction(action, formSnapshot);
+        if (onEndAction != null) {
+          // The cursor hit the end — execute the onEnd action and stop this chain.
+          await executeActions([onEndAction]);
+          return;
+        }
+        continue;
+      }
+
       final result = await _actionHandler.execute(
         action: action,
         app: _app!,
@@ -234,8 +283,6 @@ class AppEngine extends ChangeNotifier {
 
       if (result.error != null) {
         debugPrint('ODS Action Error: ${result.error}');
-        // Surface the error to the UI so the user sees feedback
-        // (e.g., "Required fields missing: Amount, Description").
         _lastActionError = result.error;
         notifyListeners();
         return; // Stop executing further actions in the chain.
@@ -246,20 +293,177 @@ class AppEngine extends ChangeNotifier {
         clearForm(action.target!);
       }
 
-      // Handle navigateToRow: populate a form with the matched row data
-      // before navigating.
-      if (result.populateData != null && result.populateFormId != null) {
-        final state = _formStates.putIfAbsent(result.populateFormId!, () => {});
-        state.clear();
-        for (final entry in result.populateData!.entries) {
-          state[entry.key] = entry.value?.toString() ?? '';
-        }
-      }
-
       if (result.navigateTo != null) {
         navigateTo(result.navigateTo!);
       }
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Record cursor — step-through navigation for forms with recordSource.
+  // ---------------------------------------------------------------------------
+
+  /// Handles a record cursor action (firstRecord, nextRecord, etc.).
+  ///
+  /// Returns the `onEnd` action if the cursor went past the end/start,
+  /// or null if the cursor moved successfully.
+  Future<OdsAction?> _handleRecordAction(
+    OdsAction action,
+    Map<String, Map<String, String>> formSnapshot,
+  ) async {
+    final formId = action.target;
+    if (formId == null || _app == null) return null;
+
+    switch (action.action) {
+      case 'firstRecord':
+        return await _handleFirstRecord(formId, action, formSnapshot);
+      case 'nextRecord':
+        return _handleNextRecord(formId, action);
+      case 'previousRecord':
+        return _handlePreviousRecord(formId, action);
+      case 'lastRecord':
+        return await _handleLastRecord(formId, action, formSnapshot);
+      default:
+        return null;
+    }
+  }
+
+  /// Loads all matching records for a form and moves to the first one.
+  Future<OdsAction?> _handleFirstRecord(
+    String formId,
+    OdsAction action,
+    Map<String, Map<String, String>> formSnapshot,
+  ) async {
+    // Find the form component to get its recordSource.
+    final form = _findFormComponent(formId);
+    if (form == null || form.recordSource == null) {
+      debugPrint('ODS: firstRecord — form "$formId" has no recordSource');
+      return null;
+    }
+
+    final ds = _app!.dataSources[form.recordSource!];
+    if (ds == null || !ds.isLocal) return null;
+
+    // Resolve {field} references in the filter from current form state.
+    final resolvedFilter = _resolveFilter(action.filter, formSnapshot);
+
+    // Query all matching rows.
+    List<Map<String, dynamic>> rows;
+    try {
+      if (resolvedFilter != null && resolvedFilter.isNotEmpty) {
+        rows = await _dataStore.queryWithFilter(ds.tableName, resolvedFilter);
+      } else {
+        rows = await _dataStore.query(ds.tableName);
+      }
+    } catch (e) {
+      debugPrint('ODS: firstRecord query failed: $e');
+      return action.onEnd;
+    }
+
+    if (rows.isEmpty) {
+      return action.onEnd;
+    }
+
+    // Create cursor and populate form.
+    _recordCursors[formId] = RecordCursor(rows: rows, currentIndex: 0);
+    _populateFormFromCursor(formId);
+    return null;
+  }
+
+  /// Moves the cursor to the next record. Returns onEnd if past the last row.
+  OdsAction? _handleNextRecord(String formId, OdsAction action) {
+    final cursor = _recordCursors[formId];
+    if (cursor == null || !cursor.hasNext) {
+      return action.onEnd;
+    }
+
+    cursor.currentIndex++;
+    _populateFormFromCursor(formId);
+    return null;
+  }
+
+  /// Moves the cursor to the previous record. Returns onEnd if before first.
+  OdsAction? _handlePreviousRecord(String formId, OdsAction action) {
+    final cursor = _recordCursors[formId];
+    if (cursor == null || !cursor.hasPrevious) {
+      return action.onEnd;
+    }
+
+    cursor.currentIndex--;
+    _populateFormFromCursor(formId);
+    return null;
+  }
+
+  /// Loads all matching records and moves to the last one.
+  Future<OdsAction?> _handleLastRecord(
+    String formId,
+    OdsAction action,
+    Map<String, Map<String, String>> formSnapshot,
+  ) async {
+    // Reuse firstRecord logic to load data, then jump to end.
+    final result = await _handleFirstRecord(formId, action, formSnapshot);
+    if (result != null) return result; // onEnd (empty)
+
+    final cursor = _recordCursors[formId];
+    if (cursor != null && cursor.rows.isNotEmpty) {
+      cursor.currentIndex = cursor.rows.length - 1;
+      _populateFormFromCursor(formId);
+    }
+    return null;
+  }
+
+  /// Populates a form's state map from the current record in its cursor.
+  void _populateFormFromCursor(String formId) {
+    final cursor = _recordCursors[formId];
+    final record = cursor?.currentRecord;
+    if (record == null) return;
+
+    final state = _formStates.putIfAbsent(formId, () => {});
+    state.clear();
+    for (final entry in record.entries) {
+      state[entry.key] = entry.value?.toString() ?? '';
+    }
+
+    _recordGeneration++;
+    notifyListeners();
+  }
+
+  /// Resolves `{fieldName}` references in a filter map using all form states.
+  Map<String, String>? _resolveFilter(
+    Map<String, String>? filter,
+    Map<String, Map<String, String>> formSnapshot,
+  ) {
+    if (filter == null || filter.isEmpty) return null;
+
+    // Build a flat map of all form values for reference resolution.
+    final allValues = <String, String>{};
+    for (final formState in formSnapshot.values) {
+      allValues.addAll(formState);
+    }
+    // Also include current (non-snapshot) form state for recently populated forms.
+    for (final formState in _formStates.values) {
+      allValues.addAll(formState);
+    }
+
+    final fieldPattern = RegExp(r'\{(\w+)\}');
+    return filter.map((key, value) {
+      final resolved = value.replaceAllMapped(fieldPattern, (match) {
+        return allValues[match.group(1)!] ?? '';
+      });
+      return MapEntry(key, resolved);
+    });
+  }
+
+  /// Finds a form component by ID across all pages.
+  OdsFormComponent? _findFormComponent(String formId) {
+    for (final page in _app!.pages.values) {
+      for (final component in page.content) {
+        if (component is OdsFormComponent && component.id == formId) {
+          return component;
+        }
+      }
+    }
+    return null;
   }
 
   // ---------------------------------------------------------------------------
@@ -445,6 +649,7 @@ class AppEngine extends ChangeNotifier {
     _currentPageId = null;
     _navigationStack.clear();
     _formStates.clear();
+    _recordCursors.clear();
     _appSettings.clear();
     _validation = null;
     _loadError = null;

@@ -78,9 +78,28 @@ class _OdsFormWidgetState extends State<OdsFormWidget> {
           _initHiddenDefaults(engine);
           final formState = engine.getFormState(widget.model.id);
 
+          // Use recordGeneration in keys so that when a record cursor moves,
+          // all fields (especially dropdowns) are fully recreated with new values.
+          final recordGen = engine.recordGeneration;
+          final cursor = engine.getRecordCursor(widget.model.id);
+
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: widget.model.fields.where((field) {
+            children: [
+              // Show record position indicator for forms backed by a record cursor.
+              if (cursor != null && cursor.count > 0)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'Record ${cursor.currentIndex + 1} of ${cursor.count}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ...widget.model.fields.where((field) {
               return _isFieldVisible(field, formState);
             }).map((field) {
               return Padding(
@@ -93,12 +112,14 @@ class _OdsFormWidgetState extends State<OdsFormWidget> {
                         changeNotifier: _fieldChangeNotifier,
                       )
                     : _OdsFieldWidget(
+                        key: ValueKey('${widget.model.id}_${field.name}_$recordGen'),
                         formId: widget.model.id,
                         field: field,
                         onChanged: _onFieldChanged,
                       ),
               );
-            }).toList(),
+            }),
+            ],
           );
         },
       ),
@@ -190,6 +211,7 @@ class _OdsFieldWidget extends StatefulWidget {
   final VoidCallback? onChanged;
 
   const _OdsFieldWidget({
+    super.key,
     required this.formId,
     required this.field,
     this.onChanged,
