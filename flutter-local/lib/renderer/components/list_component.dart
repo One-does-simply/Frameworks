@@ -519,7 +519,11 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                           DataCell(
                             Row(
                               mainAxisSize: MainAxisSize.min,
-                              children: widget.model.rowActions.map((action) {
+                              children: widget.model.rowActions
+                                  .where((action) =>
+                                      action.hideWhen == null ||
+                                      !action.hideWhen!.matches(row))
+                                  .map((action) {
                                 final needsConfirm = action.confirm != null || action.isDelete;
                                 return Padding(
                                   padding: const EdgeInsets.only(right: 4),

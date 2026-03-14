@@ -236,14 +236,23 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
   static String _resolveDefault(String defaultValue, String fieldType) {
     final upper = defaultValue.toUpperCase();
     if (upper == 'NOW' || upper == 'CURRENTDATE') {
-      final now = DateTime.now();
-      if (fieldType == 'datetime') {
-        return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} '
-            '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-      }
-      return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      return _formatDateTime(DateTime.now(), fieldType);
+    }
+    // Relative date: "+7d" means 7 days from now, "-3d" means 3 days ago.
+    final relativeMatch = RegExp(r'^([+-]?\d+)d$', caseSensitive: false).firstMatch(defaultValue);
+    if (relativeMatch != null) {
+      final days = int.parse(relativeMatch.group(1)!);
+      return _formatDateTime(DateTime.now().add(Duration(days: days)), fieldType);
     }
     return defaultValue;
+  }
+
+  static String _formatDateTime(DateTime dt, String fieldType) {
+    if (fieldType == 'datetime') {
+      return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
+          '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    }
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 
   TextInputType _inputType() {

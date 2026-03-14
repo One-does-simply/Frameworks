@@ -132,6 +132,26 @@ class OdsListColumn {
 ///   - "update": sets new values on the matched row (requires `values` map)
 ///   - "delete": removes the matched row entirely (no `values` needed)
 /// The `matchField` identifies which row to target.
+/// Condition to hide a row action based on the row's field values.
+class OdsRowActionHideWhen {
+  final String field;
+  final String equals;
+
+  const OdsRowActionHideWhen({required this.field, required this.equals});
+
+  factory OdsRowActionHideWhen.fromJson(Map<String, dynamic> json) {
+    return OdsRowActionHideWhen(
+      field: json['field'] as String,
+      equals: json['equals'] as String,
+    );
+  }
+
+  /// Returns true if the action should be hidden for this row.
+  bool matches(Map<String, dynamic> row) {
+    return (row[field]?.toString() ?? '') == equals;
+  }
+}
+
 class OdsRowAction {
   final String label;
   final String action;
@@ -146,6 +166,10 @@ class OdsRowAction {
   /// For delete actions, overrides the default "Are you sure?" message.
   final String? confirm;
 
+  /// Optional condition to hide this action for specific rows.
+  /// e.g., hide "Mark Done" when done=true.
+  final OdsRowActionHideWhen? hideWhen;
+
   const OdsRowAction({
     required this.label,
     required this.action,
@@ -153,6 +177,7 @@ class OdsRowAction {
     required this.matchField,
     this.values = const {},
     this.confirm,
+    this.hideWhen,
   });
 
   bool get isDelete => action == 'delete';
@@ -168,6 +193,9 @@ class OdsRowAction {
               ?.map((k, v) => MapEntry(k, v.toString())) ??
           const {},
       confirm: json['confirm'] as String?,
+      hideWhen: json['hideWhen'] != null
+          ? OdsRowActionHideWhen.fromJson(json['hideWhen'] as Map<String, dynamic>)
+          : null,
     );
   }
 }
