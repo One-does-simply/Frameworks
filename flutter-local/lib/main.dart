@@ -21,6 +21,7 @@ import 'renderer/page_renderer.dart';
 import 'screens/app_help_screen.dart';
 import 'screens/app_tour_dialog.dart';
 import 'screens/ods_about_screen.dart';
+import 'screens/quick_build_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Entry point
@@ -609,6 +610,16 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     );
   }
 
+  Future<void> _quickBuild() async {
+    final specJson = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => const QuickBuildScreen()),
+    );
+    if (specJson != null && mounted) {
+      await _handleNewSpec(specJson);
+    }
+  }
+
   Future<void> _browseExamples() async {
     final added = await showDialog<bool>(
       context: context,
@@ -745,6 +756,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     onLoadUrl: _loadFromUrl,
                     onCreateNew: _showCreateNew,
                     onBrowseExamples: _browseExamples,
+                    onQuickBuild: _quickBuild,
                   ),
                 ],
               ),
@@ -1281,12 +1293,14 @@ class _AddAppButton extends StatelessWidget {
   final VoidCallback onLoadUrl;
   final VoidCallback onCreateNew;
   final VoidCallback onBrowseExamples;
+  final VoidCallback onQuickBuild;
 
   const _AddAppButton({
     required this.onPickFile,
     required this.onLoadUrl,
     required this.onCreateNew,
     required this.onBrowseExamples,
+    required this.onQuickBuild,
   });
 
   @override
@@ -1300,6 +1314,8 @@ class _AddAppButton extends StatelessWidget {
             onLoadUrl();
           case 'new':
             onCreateNew();
+          case 'quickBuild':
+            onQuickBuild();
           case 'examples':
             onBrowseExamples();
         }
@@ -1307,6 +1323,16 @@ class _AddAppButton extends StatelessWidget {
       offset: const Offset(0, 40),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       itemBuilder: (ctx) => [
+        const PopupMenuItem(
+          value: 'quickBuild',
+          child: ListTile(
+            leading: Icon(Icons.bolt),
+            title: Text('Quick Build'),
+            subtitle: Text('Build an app in seconds from a template'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
         const PopupMenuItem(
           value: 'examples',
           child: ListTile(
