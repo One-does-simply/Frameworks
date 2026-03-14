@@ -177,6 +177,9 @@ class OdsFieldDefinition {
   /// Optional. Validation constraints beyond `required` — min, max, minLength, pattern.
   final OdsValidation? validation;
 
+  /// When true, the field displays values with the app's currency symbol prefix.
+  final bool currency;
+
   /// Whether this field is computed (has a formula).
   bool get isComputed => formula != null;
 
@@ -192,6 +195,7 @@ class OdsFieldDefinition {
     this.formula,
     this.visibleWhen,
     this.validation,
+    this.currency = false,
   });
 
   factory OdsFieldDefinition.fromJson(Map<String, dynamic> json) {
@@ -213,6 +217,7 @@ class OdsFieldDefinition {
       validation: json['validation'] != null
           ? OdsValidation.fromJson(json['validation'] as Map<String, dynamic>)
           : null,
+      currency: json['currency'] as bool? ?? false,
     );
   }
 

@@ -88,11 +88,25 @@ class OdsListColumn {
   /// When true, a filter dropdown is shown above the list for this column.
   final bool filterable;
 
+  /// When true, the column displays values with the app's currency symbol prefix.
+  final bool currency;
+
+  /// Maps cell values to color names for conditional styling.
+  /// e.g., `{"1": "green", "0": "red"}` turns correct/incorrect answers green/red.
+  final Map<String, String>? colorMap;
+
+  /// Maps cell values to display labels.
+  /// e.g., `{"1": "Correct", "0": "Wrong"}` transforms raw values for display.
+  final Map<String, String>? displayMap;
+
   const OdsListColumn({
     required this.header,
     required this.field,
     this.sortable = false,
     this.filterable = false,
+    this.currency = false,
+    this.colorMap,
+    this.displayMap,
   });
 
   factory OdsListColumn.fromJson(Map<String, dynamic> json) {
@@ -101,6 +115,11 @@ class OdsListColumn {
       field: json['field'] as String,
       sortable: json['sortable'] as bool? ?? false,
       filterable: json['filterable'] as bool? ?? false,
+      currency: json['currency'] as bool? ?? false,
+      colorMap: (json['colorMap'] as Map<String, dynamic>?)
+          ?.map((k, v) => MapEntry(k, v as String)),
+      displayMap: (json['displayMap'] as Map<String, dynamic>?)
+          ?.map((k, v) => MapEntry(k, v as String)),
     );
   }
 }

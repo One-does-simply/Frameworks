@@ -5,16 +5,17 @@
 /// These are resolved at runtime by querying the data source and
 /// computing the aggregate value.
 ///
-/// Supported functions: SUM, COUNT, AVG, MIN, MAX
+/// Supported functions: SUM, COUNT, AVG, MIN, MAX, PCT
 /// Syntax variants:
 ///   - `{FUNC(dataSourceId, field)}` — aggregate a field across all rows
 ///   - `{FUNC(dataSourceId)}` — COUNT all rows (no field needed)
 ///   - `{FUNC(dataSourceId, field=value)}` — filtered aggregate
+///   - `{PCT(dataSourceId, field=value)}` — percentage of rows matching filter
 class AggregateEvaluator {
   /// Matches aggregate function calls in text content.
   /// Groups: 1=function, 2=dataSourceId, 3=optional remainder (field or field=value)
   static final _aggregatePattern = RegExp(
-    r'\{(SUM|COUNT|AVG|MIN|MAX)\((\w+)(?:,\s*(.+?))?\)\}',
+    r'\{(SUM|COUNT|AVG|MIN|MAX|PCT)\((\w+)(?:,\s*(.+?))?\)\}',
     caseSensitive: false,
   );
 
@@ -76,7 +77,18 @@ class AggregateEvaluator {
       }
 
       // Compute aggregate.
-      final value = _compute(func, rows, field);
+      String value;
+      if (func == 'PCT') {
+        // PCT needs the total (unfiltered) row count.
+        final allRows = cache[dataSourceId]!;
+        if (allRows.isEmpty) {
+          value = '0';
+        } else {
+          value = _formatNumber((rows.length / allRows.length) * 100);
+        }
+      } else {
+        value = _compute(func, rows, field);
+      }
       result = result.replaceRange(match.start, match.end, value);
     }
 
