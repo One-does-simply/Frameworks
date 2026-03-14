@@ -184,6 +184,24 @@ class OdsSummaryRule {
 /// Optionally includes `rowActions` for inline per-row action buttons,
 /// `summary` for aggregation rows, and `filterable` columns for dropdown filters.
 /// The framework queries the referenced data source and renders a DataTable.
+/// Describes what happens when a list row is tapped.
+class OdsRowTap {
+  /// The page to navigate to.
+  final String target;
+
+  /// Optional form ID to pre-fill with the tapped row's data.
+  final String? populateForm;
+
+  const OdsRowTap({required this.target, this.populateForm});
+
+  factory OdsRowTap.fromJson(Map<String, dynamic> json) {
+    return OdsRowTap(
+      target: json['target'] as String,
+      populateForm: json['populateForm'] as String?,
+    );
+  }
+}
+
 class OdsListComponent extends OdsComponent {
   /// The ID of the data source to read rows from.
   final String dataSource;
@@ -197,11 +215,15 @@ class OdsListComponent extends OdsComponent {
   /// Optional summary/aggregation rules displayed below the data table.
   final List<OdsSummaryRule> summary;
 
+  /// Optional row-tap handler — navigates to a page and optionally pre-fills a form.
+  final OdsRowTap? onRowTap;
+
   const OdsListComponent({
     required this.dataSource,
     required this.columns,
     this.rowActions = const [],
     this.summary = const [],
+    this.onRowTap,
     required super.styleHint,
     super.visibleWhen,
   }) : super(component: 'list');
@@ -220,6 +242,9 @@ class OdsListComponent extends OdsComponent {
               ?.map((s) => OdsSummaryRule.fromJson(s as Map<String, dynamic>))
               .toList() ??
           const [],
+      onRowTap: json['onRowTap'] != null
+          ? OdsRowTap.fromJson(json['onRowTap'] as Map<String, dynamic>)
+          : null,
       styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
       visibleWhen: json['visibleWhen'] != null
           ? OdsComponentVisibleWhen.fromJson(json['visibleWhen'] as Map<String, dynamic>)

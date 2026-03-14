@@ -246,6 +246,13 @@ class ActionHandler {
         if (error != null) {
           errors.add('${field.label ?? field.name}: $error');
         }
+      } else if (field.type == 'email' && value.isNotEmpty) {
+        // Always validate email format even without an explicit validation block.
+        const emailValidation = OdsValidation();
+        final error = emailValidation.validate(value, 'email');
+        if (error != null) {
+          errors.add('${field.label ?? field.name}: $error');
+        }
       }
     }
     return errors;

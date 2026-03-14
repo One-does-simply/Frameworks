@@ -158,6 +158,22 @@ class AppEngine extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Populates a form with data from a map (e.g., a tapped list row) and
+  /// navigates to the target page. Internal fields (_id, _createdAt) are
+  /// stored so update actions can match on them.
+  void populateFormAndNavigate({
+    required String formId,
+    required String pageId,
+    required Map<String, dynamic> rowData,
+  }) {
+    final state = _formStates.putIfAbsent(formId, () => {});
+    state.clear();
+    for (final entry in rowData.entries) {
+      state[entry.key] = entry.value?.toString() ?? '';
+    }
+    navigateTo(pageId);
+  }
+
   bool canGoBack() => _navigationStack.isNotEmpty;
 
   /// Pops the navigation stack and returns to the previous page.

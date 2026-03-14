@@ -78,6 +78,14 @@ class OdsValidation {
   String? validate(String value, String fieldType) {
     if (value.isEmpty) return null; // Empty check is handled by `required`.
 
+    // Email format validation.
+    if (fieldType == 'email') {
+      final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+      if (!emailRegex.hasMatch(value)) {
+        return message ?? 'Please enter a valid email address';
+      }
+    }
+
     if (minLength != null && value.length < minLength!) {
       return message ?? 'Must be at least $minLength characters';
     }

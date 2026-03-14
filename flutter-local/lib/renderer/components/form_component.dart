@@ -153,8 +153,19 @@ class _OdsComputedFieldWidget extends StatelessWidget {
           engine.updateFormField(formId, field.name, result);
         }
 
+        // Apply currency symbol for number fields if configured.
+        var displayResult = result;
+        if (field.type == 'number') {
+          final currency = engine.getAppSetting('currency');
+          if (currency != null &&
+              currency.isNotEmpty &&
+              num.tryParse(result) != null) {
+            displayResult = '$currency$result';
+          }
+        }
+
         return TextField(
-          controller: TextEditingController(text: result),
+          controller: TextEditingController(text: displayResult),
           readOnly: true,
           enabled: false,
           decoration: InputDecoration(
@@ -255,13 +266,14 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
   /// Called on every change so the user sees feedback as they type.
   void _runValidation(String value) {
     final validation = widget.field.validation;
-    if (validation == null) {
-      if (_validationError != null) {
-        setState(() => _validationError = null);
-      }
-      return;
+    String? error;
+    if (validation != null) {
+      error = validation.validate(value, widget.field.type);
+    } else if (widget.field.type == 'email' && value.isNotEmpty) {
+      // Always validate email format even without explicit validation rules.
+      const emailValidation = OdsValidation();
+      error = emailValidation.validate(value, 'email');
     }
-    final error = validation.validate(value, widget.field.type);
     if (error != _validationError) {
       setState(() => _validationError = error);
     }

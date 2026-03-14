@@ -279,6 +279,7 @@ class DataStore {
 
   /// Gets all app settings as a map.
   Future<Map<String, String>> getAllAppSettings() async {
+    if (_db == null) return {};
     await _ensureSettingsTable();
     final db = _db!;
     final rows = await db.query('_ods_settings');
@@ -287,7 +288,9 @@ class DataStore {
 
   /// Exports all user data tables as a map of table name → list of row maps.
   /// Internal tables (prefixed with `_ods_`) are excluded.
+  /// Returns an empty map if the database is not open.
   Future<Map<String, List<Map<String, dynamic>>>> exportAllData() async {
+    if (_db == null) return {};
     final db = _db!;
     final tables = await listTables();
     final result = <String, List<Map<String, dynamic>>>{};

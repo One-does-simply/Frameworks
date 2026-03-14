@@ -2776,7 +2776,8 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                   ],
                 ),
               )
-            : Column(
+            : SingleChildScrollView(
+                child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // -- App settings (from spec) --
@@ -2909,6 +2910,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                     },
                   ),
                 ],
+              ),
               ),
       ),
       actions: _busy
