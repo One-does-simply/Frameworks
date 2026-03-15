@@ -105,6 +105,13 @@ class SpecValidator {
             context: 'page: $pageId',
           );
         }
+        // F3: Warn if rowColorMap is set without rowColorField.
+        if (component.rowColorMap != null && component.rowColorField == null) {
+          result.warning(
+            'List has rowColorMap but no rowColorField — colors will not be applied',
+            context: 'page: $pageId',
+          );
+        }
         // Validate summary rules reference existing columns.
         final columnFields = component.columns.map((c) => c.field).toSet();
         for (final rule in component.summary) {
@@ -265,6 +272,67 @@ class SpecValidator {
             'Chart component has unknown chartType "${component.chartType}"',
             context: 'page: $pageId',
           );
+        }
+      }
+
+      // F4: Validate summary component data source references.
+      if (component is OdsSummaryComponent) {
+        // Summary components don't directly reference a data source in their
+        // model, but their value expressions may use aggregates that do.
+        // No additional validation needed beyond expression syntax.
+      }
+
+      // F6: Validate tabs component — each tab must have content.
+      if (component is OdsTabsComponent) {
+        if (component.tabs.isEmpty) {
+          result.warning(
+            'Tabs component has no tabs defined',
+            context: 'page: $pageId',
+          );
+        }
+        for (var i = 0; i < component.tabs.length; i++) {
+          final tab = component.tabs[i];
+          if (tab.content.isEmpty) {
+            result.warning(
+              'Tab "${tab.label}" has no content',
+              context: 'page: $pageId',
+            );
+          }
+          // Recursively validate nested components in each tab.
+          for (final nested in tab.content) {
+            if (nested is OdsListComponent && !app.dataSources.containsKey(nested.dataSource)) {
+              result.warning(
+                'List in tab "${tab.label}" references unknown dataSource "${nested.dataSource}"',
+                context: 'page: $pageId',
+              );
+            }
+          }
+        }
+      }
+
+      // F9: Validate detail component data source references.
+      if (component is OdsDetailComponent) {
+        if (!app.dataSources.containsKey(component.dataSource)) {
+          result.warning(
+            'Detail component references unknown dataSource "${component.dataSource}"',
+            context: 'page: $pageId',
+          );
+        }
+      }
+
+      // F8: Validate dependent dropdown filter references.
+      if (component is OdsFormComponent) {
+        for (final field in component.fields) {
+          if (field.optionsFrom?.filter != null) {
+            final filter = field.optionsFrom!.filter!;
+            final fieldNames = component.fields.map((f) => f.name).toSet();
+            if (!fieldNames.contains(filter.fromField)) {
+              result.warning(
+                'Field "${field.name}" optionsFrom.filter.fromField references unknown sibling field "${filter.fromField}"',
+                context: 'page: $pageId, form: "${component.id}"',
+              );
+            }
+          }
         }
       }
 

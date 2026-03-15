@@ -95,7 +95,11 @@ class AggregateEvaluator {
     return result;
   }
 
-  /// Computes a single aggregate function over a list of rows.
+  /// Computes a single aggregate function over a list of [rows].
+  ///
+  /// For COUNT, returns the row count (ignores [field]).
+  /// For SUM/AVG/MIN/MAX, extracts numeric values from [field] in each row,
+  /// skipping non-numeric values. Returns '0' if no numeric values are found.
   static String _compute(
     String func,
     List<Map<String, dynamic>> rows,

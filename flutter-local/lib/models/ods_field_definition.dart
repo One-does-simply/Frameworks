@@ -1,3 +1,24 @@
+/// Filters dynamic options based on a sibling form field's value,
+/// enabling dependent/cascading dropdowns.
+class OdsOptionsFilter {
+  /// The column name in the data source to filter on.
+  final String field;
+
+  /// The name of a sibling form field whose current value is used as the filter.
+  final String fromField;
+
+  const OdsOptionsFilter({required this.field, required this.fromField});
+
+  factory OdsOptionsFilter.fromJson(Map<String, dynamic> json) {
+    return OdsOptionsFilter(
+      field: json['field'] as String,
+      fromField: json['fromField'] as String,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'field': field, 'fromField': fromField};
+}
+
 /// Describes how a select field should dynamically load its options from
 /// a GET data source instead of using a static [options] array.
 class OdsOptionsFrom {
@@ -7,18 +28,31 @@ class OdsOptionsFrom {
   /// The field/column name whose values become the dropdown options.
   final String valueField;
 
-  const OdsOptionsFrom({required this.dataSource, required this.valueField});
+  /// Optional filter for dependent dropdowns. When set, only rows where
+  /// [filter.field] matches the sibling form field [filter.fromField]'s
+  /// current value are included.
+  final OdsOptionsFilter? filter;
+
+  const OdsOptionsFrom({
+    required this.dataSource,
+    required this.valueField,
+    this.filter,
+  });
 
   factory OdsOptionsFrom.fromJson(Map<String, dynamic> json) {
     return OdsOptionsFrom(
       dataSource: json['dataSource'] as String,
       valueField: json['valueField'] as String,
+      filter: json['filter'] != null
+          ? OdsOptionsFilter.fromJson(json['filter'] as Map<String, dynamic>)
+          : null,
     );
   }
 
   Map<String, dynamic> toJson() => {
         'dataSource': dataSource,
         'valueField': valueField,
+        if (filter != null) 'filter': filter!.toJson(),
       };
 }
 

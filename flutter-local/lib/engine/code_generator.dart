@@ -968,6 +968,12 @@ include: package:flutter_lints/flutter.yaml
         _genButtonComponent(buf, c, app, pageId);
       case OdsChartComponent c:
         _genChartComponent(buf, c);
+      case OdsSummaryComponent _:
+        buf.writeln("          // Summary component — code generation not yet supported");
+      case OdsTabsComponent _:
+        buf.writeln("          // Tabs component — code generation not yet supported");
+      case OdsDetailComponent _:
+        buf.writeln("          // Detail component — code generation not yet supported");
       case OdsUnknownComponent _:
         buf.writeln("          // Unknown component type — skipped");
     }

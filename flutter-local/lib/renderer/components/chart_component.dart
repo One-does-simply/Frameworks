@@ -48,8 +48,10 @@ class OdsChartWidget extends StatelessWidget {
           }
 
           // Aggregate data: group by labelField, sum valueField.
+          // Cap rows to prevent excessive memory use with large datasets.
+          final cappedRows = rows.length > 10000 ? rows.sublist(0, 10000) : rows;
           final aggregated = <String, double>{};
-          for (final row in rows) {
+          for (final row in cappedRows) {
             final label = row[model.labelField]?.toString() ?? 'Unknown';
             final value = double.tryParse(row[model.valueField]?.toString() ?? '') ?? 0;
             aggregated[label] = (aggregated[label] ?? 0) + value;

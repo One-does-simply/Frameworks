@@ -35,6 +35,8 @@ class OdsListWidget extends StatefulWidget {
 }
 
 class _OdsListWidgetState extends State<OdsListWidget> {
+  /// Width of each card in card layout mode.
+  static const double _cardWidth = 280;
   /// The field currently used for sorting, or null if unsorted.
   String? _sortField;
 
@@ -43,6 +45,9 @@ class _OdsListWidgetState extends State<OdsListWidget> {
 
   /// Active filter values keyed by field name. Null or "All" means no filter.
   final Map<String, String?> _filters = {};
+
+  /// Current search query for searchable lists (F2).
+  String _searchQuery = '';
 
   /// Sorts rows in-memory by the current sort field and direction.
   List<Map<String, dynamic>> _sortRows(List<Map<String, dynamic>> rows) {
@@ -63,6 +68,22 @@ class _OdsListWidgetState extends State<OdsListWidget> {
       return _sortAscending ? cmp : -cmp;
     });
     return sorted;
+  }
+
+  /// Filters rows based on search query across all displayed columns (F2).
+  List<Map<String, dynamic>> _searchRows(
+    List<Map<String, dynamic>> rows,
+    Map<String, OdsFieldDefinition> computedFields,
+  ) {
+    if (_searchQuery.isEmpty) return rows;
+    final query = _searchQuery.toLowerCase();
+    return rows.where((row) {
+      for (final col in widget.model.columns) {
+        final value = _getCellValue(row, col.field, computedFields).toLowerCase();
+        if (value.contains(query)) return true;
+      }
+      return false;
+    }).toList();
   }
 
   /// Filters rows based on active filter selections.
@@ -254,6 +275,39 @@ class _OdsListWidgetState extends State<OdsListWidget> {
         : value.toStringAsFixed(2);
   }
 
+  /// Builds the search bar for searchable lists (F2).
+  Widget _buildSearchBar() {
+    if (!widget.model.searchable) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: TextField(
+        decoration: const InputDecoration(
+          prefixIcon: Icon(Icons.search),
+          hintText: 'Search...',
+          border: OutlineInputBorder(),
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        ),
+        onChanged: (value) {
+          setState(() => _searchQuery = value);
+        },
+      ),
+    );
+  }
+
+  /// Resolves the background color for a row based on rowColorField/rowColorMap (F3).
+  WidgetStateProperty<Color?>? _resolveRowColor(Map<String, dynamic> row) {
+    final colorField = widget.model.rowColorField;
+    final colorMap = widget.model.rowColorMap;
+    if (colorField == null || colorMap == null) return null;
+    final fieldValue = row[colorField]?.toString() ?? '';
+    final colorName = colorMap[fieldValue];
+    if (colorName == null) return null;
+    final color = _resolveColor(colorName);
+    if (color == null) return null;
+    return WidgetStatePropertyAll(color.withOpacity(0.15));
+  }
+
   /// Builds filter dropdown widgets for filterable columns.
   Widget _buildFilters(
     List<Map<String, dynamic>> allRows,
@@ -418,9 +472,10 @@ class _OdsListWidgetState extends State<OdsListWidget> {
             );
           }
 
-          // Apply filters, then sort.
+          // Apply filters, search, then sort.
           final filteredRows = _filterRows(allRows);
-          final sortedRows = _sortRows(filteredRows);
+          final searchedRows = _searchRows(filteredRows, computedFields);
+          final sortedRows = _sortRows(searchedRows);
 
           // Find the column index for the current sort field (for DataTable).
           int? sortColumnIndex;
@@ -436,144 +491,39 @@ class _OdsListWidgetState extends State<OdsListWidget> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Search bar for searchable lists (F2).
+              _buildSearchBar(),
               // Filter dropdowns above the table.
               _buildFilters(allRows, computedFields),
-              // Data table.
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  showCheckboxColumn: false,
+              // Data display — table or cards (F5).
+              if (widget.model.displayAs == 'cards')
+                _buildCards(
+                  sortedRows,
+                  computedFields,
+                  engine,
+                  currencySymbol: currencySymbol,
+                  fallbackCurrencyFields: fallbackCurrencyFields,
+                )
+              else
+                _buildTable(
+                  sortedRows,
+                  computedFields,
+                  engine,
                   sortColumnIndex: sortColumnIndex,
-                  sortAscending: _sortAscending,
-                  columns: [
-                    ...widget.model.columns.map((col) {
-                      return DataColumn(
-                        label: Text(col.header),
-                        onSort: col.sortable
-                            ? (columnIndex, ascending) {
-                                setState(() {
-                                  if (_sortField == col.field) {
-                                    _sortAscending = !_sortAscending;
-                                  } else {
-                                    _sortField = col.field;
-                                    _sortAscending = true;
-                                  }
-                                });
-                              }
-                            : null,
-                      );
-                    }),
-                    // Add an "Actions" column when rowActions are defined.
-                    if (hasRowActions)
-                      const DataColumn(label: Text('Actions')),
-                  ],
-                  rows: sortedRows.map((row) {
-                    final rowTap = widget.model.onRowTap;
-                    return DataRow(
-                      onSelectChanged: rowTap != null
-                          ? (_) {
-                              if (rowTap.populateForm != null) {
-                                engine.populateFormAndNavigate(
-                                  formId: rowTap.populateForm!,
-                                  pageId: rowTap.target,
-                                  rowData: row,
-                                );
-                              } else {
-                                engine.navigateTo(rowTap.target);
-                              }
-                            }
-                          : null,
-                      cells: [
-                        ...widget.model.columns.map((col) {
-                          final value = _getCellValue(row, col.field, computedFields);
-                          final useCurrency = col.currency ||
-                              fallbackCurrencyFields.contains(col.field);
-                          var display = useCurrency
-                              ? _formatCurrency(value, currencySymbol)
-                              : value;
-                          // Apply displayMap to transform raw values.
-                          if (col.displayMap != null &&
-                              col.displayMap!.containsKey(value)) {
-                            display = col.displayMap![value]!;
-                          }
-                          // Apply colorMap styling if defined.
-                          Color? textColor;
-                          if (col.colorMap != null) {
-                            final colorName = col.colorMap![value];
-                            if (colorName != null) {
-                              textColor = _resolveColor(colorName);
-                            }
-                          }
-                          return DataCell(Text(
-                            display,
-                            style: textColor != null
-                                ? TextStyle(
-                                    color: textColor,
-                                    fontWeight: FontWeight.w600,
-                                  )
-                                : null,
-                          ));
-                        }),
-                        // Render action buttons for each row.
-                        if (hasRowActions)
-                          DataCell(
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: widget.model.rowActions
-                                  .where((action) =>
-                                      action.hideWhen == null ||
-                                      !action.hideWhen!.matches(row))
-                                  .map((action) {
-                                final needsConfirm = action.confirm != null || action.isDelete;
-                                return Padding(
-                                  padding: const EdgeInsets.only(right: 4),
-                                  child: TextButton(
-                                    style: action.isDelete
-                                        ? TextButton.styleFrom(
-                                            foregroundColor:
-                                                Theme.of(context).colorScheme.error,
-                                          )
-                                        : null,
-                                    onPressed: () {
-                                      if (needsConfirm) {
-                                        _confirmRowAction(
-                                          context,
-                                          engine,
-                                          action,
-                                          row,
-                                        );
-                                      } else {
-                                        final matchValue =
-                                            row[action.matchField]?.toString() ?? '';
-                                        engine.executeRowAction(
-                                          dataSourceId: action.dataSource,
-                                          matchField: action.matchField,
-                                          matchValue: matchValue,
-                                          values: action.values,
-                                        );
-                                      }
-                                    },
-                                    child: Text(action.label),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                      ],
-                    );
-                  }).toList(),
+                  hasRowActions: hasRowActions,
+                  currencySymbol: currencySymbol,
+                  fallbackCurrencyFields: fallbackCurrencyFields,
                 ),
-              ),
               // Summary/aggregation row below the table.
-              _buildSummaryRow(filteredRows, computedFields,
+              _buildSummaryRow(searchedRows, computedFields,
                   currencySymbol: currencySymbol,
                   fallbackCurrencyFields: fallbackCurrencyFields),
-              // Show filtered count when filters are active.
-              if (_filters.values.any((v) => v != null))
+              // Show filtered/searched count when active.
+              if (_filters.values.any((v) => v != null) || _searchQuery.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    'Showing ${filteredRows.length} of ${allRows.length} records',
+                    'Showing ${searchedRows.length} of ${allRows.length} records',
                     style: TextStyle(
                       fontSize: 12,
                       color: Theme.of(context).colorScheme.outline,
@@ -584,6 +534,284 @@ class _OdsListWidgetState extends State<OdsListWidget> {
           );
         },
       ),
+    );
+  }
+
+  /// Builds the DataTable view (default display mode).
+  Widget _buildTable(
+    List<Map<String, dynamic>> sortedRows,
+    Map<String, OdsFieldDefinition> computedFields,
+    AppEngine engine, {
+    int? sortColumnIndex,
+    required bool hasRowActions,
+    String? currencySymbol,
+    Set<String> fallbackCurrencyFields = const {},
+  }) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        showCheckboxColumn: false,
+        sortColumnIndex: sortColumnIndex,
+        sortAscending: _sortAscending,
+        columns: [
+          ...widget.model.columns.map((col) {
+            return DataColumn(
+              label: Text(col.header),
+              onSort: col.sortable
+                  ? (columnIndex, ascending) {
+                      setState(() {
+                        if (_sortField == col.field) {
+                          _sortAscending = !_sortAscending;
+                        } else {
+                          _sortField = col.field;
+                          _sortAscending = true;
+                        }
+                      });
+                    }
+                  : null,
+            );
+          }),
+          if (hasRowActions)
+            const DataColumn(label: Text('Actions')),
+        ],
+        rows: sortedRows.map((row) {
+          final rowTap = widget.model.onRowTap;
+          return DataRow(
+            key: ValueKey(row['_id'] ?? row.hashCode),
+            color: _resolveRowColor(row),
+            onSelectChanged: rowTap != null
+                ? (_) {
+                    if (rowTap.populateForm != null) {
+                      engine.populateFormAndNavigate(
+                        formId: rowTap.populateForm!,
+                        pageId: rowTap.target,
+                        rowData: row,
+                      );
+                    } else {
+                      engine.navigateTo(rowTap.target);
+                    }
+                  }
+                : null,
+            cells: [
+              ...widget.model.columns.map((col) {
+                final value = _getCellValue(row, col.field, computedFields);
+                final useCurrency = col.currency ||
+                    fallbackCurrencyFields.contains(col.field);
+                var display = useCurrency
+                    ? _formatCurrency(value, currencySymbol)
+                    : value;
+                if (col.displayMap != null &&
+                    col.displayMap!.containsKey(value)) {
+                  display = col.displayMap![value]!;
+                }
+                Color? textColor;
+                if (col.colorMap != null) {
+                  final colorName = col.colorMap![value];
+                  if (colorName != null) {
+                    textColor = _resolveColor(colorName);
+                  }
+                }
+                return DataCell(Text(
+                  display,
+                  style: textColor != null
+                      ? TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.w600,
+                        )
+                      : null,
+                ));
+              }),
+              if (hasRowActions)
+                DataCell(
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: widget.model.rowActions
+                        .where((action) =>
+                            action.hideWhen == null ||
+                            !action.hideWhen!.matches(row))
+                        .map((action) {
+                      final needsConfirm = action.confirm != null || action.isDelete;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: TextButton(
+                          style: action.isDelete
+                              ? TextButton.styleFrom(
+                                  foregroundColor:
+                                      Theme.of(context).colorScheme.error,
+                                )
+                              : null,
+                          onPressed: () {
+                            if (needsConfirm) {
+                              _confirmRowAction(context, engine, action, row);
+                            } else {
+                              final matchValue =
+                                  row[action.matchField]?.toString() ?? '';
+                              engine.executeRowAction(
+                                dataSourceId: action.dataSource,
+                                matchField: action.matchField,
+                                matchValue: matchValue,
+                                values: action.values,
+                              );
+                            }
+                          },
+                          child: Text(action.label),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  /// Builds a card-based layout for list data (F5: displayAs = 'cards').
+  Widget _buildCards(
+    List<Map<String, dynamic>> sortedRows,
+    Map<String, OdsFieldDefinition> computedFields,
+    AppEngine engine, {
+    String? currencySymbol,
+    Set<String> fallbackCurrencyFields = const {},
+  }) {
+    final hasRowActions = widget.model.rowActions.isNotEmpty;
+    final theme = Theme.of(context);
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: sortedRows.map((row) {
+        final rowKey = ValueKey(row['_id'] ?? row.hashCode);
+        // Resolve row background color (F3).
+        Color? cardColor;
+        final colorField = widget.model.rowColorField;
+        final colorMap = widget.model.rowColorMap;
+        if (colorField != null && colorMap != null) {
+          final fieldValue = row[colorField]?.toString() ?? '';
+          final colorName = colorMap[fieldValue];
+          if (colorName != null) {
+            cardColor = _resolveColor(colorName)?.withOpacity(0.15);
+          }
+        }
+
+        final rowTap = widget.model.onRowTap;
+        return SizedBox(
+          key: rowKey,
+          width: _cardWidth,
+          child: Card(
+            color: cardColor,
+            elevation: 1,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: rowTap != null
+                  ? () {
+                      if (rowTap.populateForm != null) {
+                        engine.populateFormAndNavigate(
+                          formId: rowTap.populateForm!,
+                          pageId: rowTap.target,
+                          rowData: row,
+                        );
+                      } else {
+                        engine.navigateTo(rowTap.target);
+                      }
+                    }
+                  : null,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ...widget.model.columns.map((col) {
+                      final value = _getCellValue(row, col.field, computedFields);
+                      final useCurrency = col.currency ||
+                          fallbackCurrencyFields.contains(col.field);
+                      var display = useCurrency
+                          ? _formatCurrency(value, currencySymbol)
+                          : value;
+                      if (col.displayMap != null &&
+                          col.displayMap!.containsKey(value)) {
+                        display = col.displayMap![value]!;
+                      }
+                      Color? textColor;
+                      if (col.colorMap != null) {
+                        final colorName = col.colorMap![value];
+                        if (colorName != null) {
+                          textColor = _resolveColor(colorName);
+                        }
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 90,
+                              child: Text(
+                                col.header,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                display,
+                                style: textColor != null
+                                    ? TextStyle(
+                                        color: textColor,
+                                        fontWeight: FontWeight.w600,
+                                      )
+                                    : null,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                    if (hasRowActions) ...[
+                      const Divider(),
+                      Wrap(
+                        spacing: 4,
+                        children: widget.model.rowActions
+                            .where((action) =>
+                                action.hideWhen == null ||
+                                !action.hideWhen!.matches(row))
+                            .map((action) {
+                          final needsConfirm = action.confirm != null || action.isDelete;
+                          return TextButton(
+                            style: action.isDelete
+                                ? TextButton.styleFrom(
+                                    foregroundColor: theme.colorScheme.error,
+                                  )
+                                : null,
+                            onPressed: () {
+                              if (needsConfirm) {
+                                _confirmRowAction(context, engine, action, row);
+                              } else {
+                                final matchValue =
+                                    row[action.matchField]?.toString() ?? '';
+                                engine.executeRowAction(
+                                  dataSourceId: action.dataSource,
+                                  matchField: action.matchField,
+                                  matchValue: matchValue,
+                                  values: action.values,
+                                );
+                              }
+                            },
+                            child: Text(action.label),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 }

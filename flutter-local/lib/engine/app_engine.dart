@@ -15,9 +15,16 @@ import 'data_store.dart';
 /// navigates by index, keeping the flow snappy without repeated DB queries.
 class RecordCursor {
   final List<Map<String, dynamic>> rows;
-  int currentIndex;
+  int _currentIndex;
 
-  RecordCursor({required this.rows, this.currentIndex = 0});
+  RecordCursor({required this.rows, int currentIndex = 0})
+      : _currentIndex = currentIndex;
+
+  /// The current position in the row list. Clamped to valid bounds on set.
+  int get currentIndex => _currentIndex;
+  set currentIndex(int value) {
+    _currentIndex = value.clamp(0, rows.isEmpty ? 0 : rows.length - 1);
+  }
 
   Map<String, dynamic>? get currentRecord =>
       (currentIndex >= 0 && currentIndex < rows.length)
@@ -68,6 +75,13 @@ class AppEngine extends ChangeNotifier {
   /// SnackBar feedback to the user.
   String? _lastActionError;
 
+  /// The most recent informational message from a `showMessage` action.
+  ///
+  /// Lifecycle: Cleared at the start of every [executeActions] call. Set when
+  /// a `showMessage` result is returned by the [ActionHandler]. The UI layer
+  /// reads this after `executeActions` completes to show a SnackBar.
+  String? _lastMessage;
+
   AppEngine() {
     _actionHandler = ActionHandler(dataStore: _dataStore);
   }
@@ -104,12 +118,19 @@ class AppEngine extends ChangeNotifier {
   /// (e.g., SnackBar) when required fields are missing on submit.
   String? get lastActionError => _lastActionError;
 
+  /// The most recent informational message from a showMessage action.
+  String? get lastMessage => _lastMessage;
+
   /// The record cursor generation counter. Incremented whenever a cursor
   /// moves, so form widgets can use it as a key to force full rebuild.
   int get recordGeneration => _recordGeneration;
 
   /// Returns the record cursor for a form, if one has been loaded.
   RecordCursor? getRecordCursor(String formId) => _recordCursors[formId];
+
+  /// Returns all form states. Used by expression-based visibility to
+  /// collect all field values into a flat map for evaluation.
+  Map<String, Map<String, String>> get allFormStates => _formStates;
 
   /// Returns the current field values for a form, creating the map if needed.
   /// Called by form widgets to initialize their text controllers.
@@ -264,6 +285,7 @@ class AppEngine extends ChangeNotifier {
     Future<bool> Function(String message)? confirmFn,
   }) async {
     _lastActionError = null;
+    _lastMessage = null;
 
     // Snapshot form state so later actions in the chain can still read values
     // after submit clears the original form.
@@ -299,6 +321,11 @@ class AppEngine extends ChangeNotifier {
         _lastActionError = result.error;
         notifyListeners();
         return; // Stop executing further actions in the chain.
+      }
+
+      if (result.message != null) {
+        _lastMessage = result.message;
+        notifyListeners();
       }
 
       // Clear the form after a successful submit so fields reset.

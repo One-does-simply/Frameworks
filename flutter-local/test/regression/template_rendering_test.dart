@@ -111,6 +111,75 @@ void main() {
       'topic': 'Math',
       'wantProgress': false,
     },
+    'inventory.json': {
+      'appName': 'Test Inventory',
+      'itemName': 'Supplies',
+      'fields': [
+        {'name': 'name', 'label': 'Name', 'type': 'text'},
+        {'name': 'quantity', 'label': 'Quantity', 'type': 'number'},
+        {'name': 'category', 'label': 'Category', 'type': 'select', 'options': ['Tools', 'Parts']},
+        {'name': 'location', 'label': 'Location', 'type': 'text'},
+      ],
+      'wantChart': false,
+      'chartField': 'category',
+    },
+    'approval.json': {
+      'appName': 'Test Approvals',
+      'requestName': 'Leave',
+      'fields': [
+        {'name': 'title', 'label': 'Title', 'type': 'text'},
+        {'name': 'requestedBy', 'label': 'Requested By', 'type': 'text'},
+        {'name': 'date', 'label': 'Date', 'type': 'date'},
+        {'name': 'description', 'label': 'Description', 'type': 'multiline'},
+      ],
+      'wantChart': false,
+    },
+    'directory.json': {
+      'appName': 'Test Directory',
+      'entryName': 'Contact',
+      'fields': [
+        {'name': 'name', 'label': 'Name', 'type': 'text'},
+        {'name': 'email', 'label': 'Email', 'type': 'email'},
+        {'name': 'phone', 'label': 'Phone', 'type': 'text'},
+        {'name': 'role', 'label': 'Role', 'type': 'text'},
+      ],
+    },
+    'checklist.json': {
+      'appName': 'Test Checklist',
+      'checklistName': 'Safety Items',
+      'fields': [
+        {'name': 'itemName', 'label': 'Item Name', 'type': 'text'},
+        {'name': 'result', 'label': 'Result', 'type': 'select', 'options': ['Pass', 'Fail', 'N/A']},
+        {'name': 'inspector', 'label': 'Inspector', 'type': 'text'},
+        {'name': 'date', 'label': 'Date', 'type': 'date'},
+      ],
+    },
+    'master-detail.json': {
+      'appName': 'Test Projects',
+      'parentName': 'Project',
+      'parentFields': [
+        {'name': 'name', 'label': 'Name', 'type': 'text'},
+        {'name': 'status', 'label': 'Status', 'type': 'select', 'options': ['Active', 'Complete']},
+      ],
+      'childName': 'Task',
+      'childFields': [
+        {'name': 'name', 'label': 'Name', 'type': 'text'},
+        {'name': 'status', 'label': 'Status', 'type': 'select', 'options': ['To Do', 'Done']},
+        {'name': 'dueDate', 'label': 'Due Date', 'type': 'date'},
+      ],
+    },
+    'booking.json': {
+      'appName': 'Test Bookings',
+      'bookingName': 'Room',
+      'fields': [
+        {'name': 'name', 'label': 'Name', 'type': 'text'},
+        {'name': 'date', 'label': 'Date', 'type': 'date'},
+        {'name': 'time', 'label': 'Time', 'type': 'text'},
+        {'name': 'attendees', 'label': 'Attendees', 'type': 'number'},
+      ],
+      'wantChart': false,
+      'chartField': 'name',
+    },
   };
 
   group('Template rendering produces valid ODS specs', () {

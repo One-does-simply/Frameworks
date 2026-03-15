@@ -5,15 +5,10 @@ import 'ods_visible_when.dart';
 
 /// Base class for all ODS components, using Dart 3 sealed classes.
 ///
-/// ODS Spec alignment: The spec defines four component types — text, list,
-/// form, and button. Using a sealed class lets the renderer use exhaustive
-/// switch expressions (see PageRenderer), guaranteeing every component type
-/// is handled at compile time.
-///
-/// ODS Ethos: Four components is all you need. Text for content, List for
-/// data display, Form for data entry, Button for actions. This constraint
-/// is intentional — it forces simplicity and makes every ODS app instantly
-/// understandable.
+/// ODS Spec alignment: Components are the building blocks of ODS pages.
+/// Using a sealed class lets the renderer use exhaustive switch expressions
+/// (see PageRenderer), guaranteeing every component type is handled at
+/// compile time.
 sealed class OdsComponent {
   /// The component type string from the spec (e.g., "text", "list").
   final String component;
@@ -25,7 +20,17 @@ sealed class OdsComponent {
   /// if the condition is met (form field value or data source row count).
   final OdsComponentVisibleWhen? visibleWhen;
 
-  const OdsComponent({required this.component, required this.styleHint, this.visibleWhen});
+  /// Optional expression-based visibility. A lightweight alternative to
+  /// [visibleWhen] that evaluates a string expression against form state.
+  /// e.g., `"{status} == 'Open'"`. Component is shown when truthy.
+  final String? visible;
+
+  const OdsComponent({
+    required this.component,
+    required this.styleHint,
+    this.visibleWhen,
+    this.visible,
+  });
 
   /// Factory that dispatches to the correct subclass based on the
   /// `component` field. Unknown types become [OdsUnknownComponent],
@@ -43,6 +48,12 @@ sealed class OdsComponent {
         return OdsButtonComponent.fromJson(json);
       case 'chart':
         return OdsChartComponent.fromJson(json);
+      case 'summary':
+        return OdsSummaryComponent.fromJson(json);
+      case 'tabs':
+        return OdsTabsComponent.fromJson(json);
+      case 'detail':
+        return OdsDetailComponent.fromJson(json);
       default:
         // Graceful degradation: unknown components are captured, not rejected.
         // This keeps forward compatibility — a spec with future component types
@@ -52,29 +63,61 @@ sealed class OdsComponent {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Shared helpers for parsing common base-class fields
+// ---------------------------------------------------------------------------
+
+OdsComponentVisibleWhen? _parseVisibleWhen(Map<String, dynamic> json) {
+  return json['visibleWhen'] != null
+      ? OdsComponentVisibleWhen.fromJson(json['visibleWhen'] as Map<String, dynamic>)
+      : null;
+}
+
+OdsStyleHint _parseStyleHint(Map<String, dynamic> json) {
+  return OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?);
+}
+
+String? _parseVisible(Map<String, dynamic> json) {
+  return json['visible'] as String?;
+}
+
+// ---------------------------------------------------------------------------
+// Text Component
+// ---------------------------------------------------------------------------
+
 /// Displays static or dynamic text content on a page.
 ///
 /// ODS Spec: `textComponent` — requires `content` string, optional `styleHint`
 /// with a `variant` key (heading, subheading, body, caption).
+/// Optional `format` controls rendering: 'plain' (default) or 'markdown'.
 class OdsTextComponent extends OdsComponent {
   final String content;
 
+  /// Text format: 'plain' (default) or 'markdown'.
+  final String format;
+
   const OdsTextComponent({
     required this.content,
+    this.format = 'plain',
     required super.styleHint,
     super.visibleWhen,
+    super.visible,
   }) : super(component: 'text');
 
   factory OdsTextComponent.fromJson(Map<String, dynamic> json) {
     return OdsTextComponent(
       content: json['content'] as String,
-      styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
-      visibleWhen: json['visibleWhen'] != null
-          ? OdsComponentVisibleWhen.fromJson(json['visibleWhen'] as Map<String, dynamic>)
-          : null,
+      format: json['format'] as String? ?? 'plain',
+      styleHint: _parseStyleHint(json),
+      visibleWhen: _parseVisibleWhen(json),
+      visible: _parseVisible(json),
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// List Component helpers
+// ---------------------------------------------------------------------------
 
 /// Defines a column mapping for list components: a display header and the
 /// data field name to read from each row.
@@ -126,12 +169,6 @@ class OdsListColumn {
 
 /// Defines an inline action button rendered in each row of a list.
 ///
-/// ODS Spec: Row actions let the builder add per-row buttons (e.g., "Mark Done",
-/// "Delete") that operate on a record directly using the row's own data — no
-/// separate form page needed. Supported action types:
-///   - "update": sets new values on the matched row (requires `values` map)
-///   - "delete": removes the matched row entirely (no `values` needed)
-/// The `matchField` identifies which row to target.
 /// Condition to hide a row action based on the row's field values.
 class OdsRowActionHideWhen {
   final String field;
@@ -201,10 +238,6 @@ class OdsRowAction {
 }
 
 /// Defines a summary/aggregation rule for a list column.
-///
-/// ODS Spec: Summary rules specify a column and an aggregation function
-/// (sum, avg, count, min, max). The framework computes the aggregate
-/// and renders it as a summary row below the data table.
 class OdsSummaryRule {
   final String column;
   final String function;
@@ -225,12 +258,6 @@ class OdsSummaryRule {
   }
 }
 
-/// Displays tabular data from a data source.
-///
-/// ODS Spec: `listComponent` — requires a `dataSource` ID and `columns` array.
-/// Optionally includes `rowActions` for inline per-row action buttons,
-/// `summary` for aggregation rows, and `filterable` columns for dropdown filters.
-/// The framework queries the referenced data source and renders a DataTable.
 /// Describes what happens when a list row is tapped.
 class OdsRowTap {
   /// The page to navigate to.
@@ -249,6 +276,11 @@ class OdsRowTap {
   }
 }
 
+// ---------------------------------------------------------------------------
+// List Component
+// ---------------------------------------------------------------------------
+
+/// Displays tabular data from a data source, as a table or card grid.
 class OdsListComponent extends OdsComponent {
   /// The ID of the data source to read rows from.
   final String dataSource;
@@ -265,14 +297,31 @@ class OdsListComponent extends OdsComponent {
   /// Optional row-tap handler — navigates to a page and optionally pre-fills a form.
   final OdsRowTap? onRowTap;
 
+  /// When true, a search bar appears above the list.
+  final bool searchable;
+
+  /// Display mode: 'table' (default DataTable) or 'cards' (card grid).
+  final String displayAs;
+
+  /// Field name to evaluate for row-level background coloring.
+  final String? rowColorField;
+
+  /// Maps field values to color names for entire rows. Requires [rowColorField].
+  final Map<String, String>? rowColorMap;
+
   const OdsListComponent({
     required this.dataSource,
     required this.columns,
     this.rowActions = const [],
     this.summary = const [],
     this.onRowTap,
+    this.searchable = false,
+    this.displayAs = 'table',
+    this.rowColorField,
+    this.rowColorMap,
     required super.styleHint,
     super.visibleWhen,
+    super.visible,
   }) : super(component: 'list');
 
   factory OdsListComponent.fromJson(Map<String, dynamic> json) {
@@ -292,25 +341,23 @@ class OdsListComponent extends OdsComponent {
       onRowTap: json['onRowTap'] != null
           ? OdsRowTap.fromJson(json['onRowTap'] as Map<String, dynamic>)
           : null,
-      styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
-      visibleWhen: json['visibleWhen'] != null
-          ? OdsComponentVisibleWhen.fromJson(json['visibleWhen'] as Map<String, dynamic>)
-          : null,
+      searchable: json['searchable'] as bool? ?? false,
+      displayAs: json['displayAs'] as String? ?? 'table',
+      rowColorField: json['rowColorField'] as String?,
+      rowColorMap: (json['rowColorMap'] as Map<String, dynamic>?)
+          ?.map((k, v) => MapEntry(k, v as String)),
+      styleHint: _parseStyleHint(json),
+      visibleWhen: _parseVisibleWhen(json),
+      visible: _parseVisible(json),
     );
   }
 }
 
+// ---------------------------------------------------------------------------
+// Form Component
+// ---------------------------------------------------------------------------
+
 /// Renders an input form for data entry.
-///
-/// ODS Spec: `formComponent` — requires a unique `id` and a `fields` array.
-/// The form ID links this form to submit actions: when a button's onClick
-/// includes `{"action": "submit", "target": "<formId>"}`, the engine collects
-/// this form's field values and writes them to the specified data source.
-///
-/// ODS Ethos: "The form is the schema." If a data source has no explicit field
-/// definitions, the form's fields implicitly define the database table columns
-/// on first submission. This eliminates the need for citizen developers to
-/// think about database design at all.
 class OdsFormComponent extends OdsComponent {
   /// Unique identifier referenced by submit actions.
   final String id;
@@ -319,10 +366,6 @@ class OdsFormComponent extends OdsComponent {
   final List<OdsFieldDefinition> fields;
 
   /// Optional data source ID that backs this form as a record cursor.
-  ///
-  /// When set, the form can step through records from this data source
-  /// using firstRecord/nextRecord/previousRecord/lastRecord actions.
-  /// The form's fields are populated from the current record automatically.
   final String? recordSource;
 
   const OdsFormComponent({
@@ -331,6 +374,7 @@ class OdsFormComponent extends OdsComponent {
     this.recordSource,
     required super.styleHint,
     super.visibleWhen,
+    super.visible,
   }) : super(component: 'form');
 
   factory OdsFormComponent.fromJson(Map<String, dynamic> json) {
@@ -340,19 +384,18 @@ class OdsFormComponent extends OdsComponent {
           .map((f) => OdsFieldDefinition.fromJson(f as Map<String, dynamic>))
           .toList(),
       recordSource: json['recordSource'] as String?,
-      styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
-      visibleWhen: json['visibleWhen'] != null
-          ? OdsComponentVisibleWhen.fromJson(json['visibleWhen'] as Map<String, dynamic>)
-          : null,
+      styleHint: _parseStyleHint(json),
+      visibleWhen: _parseVisibleWhen(json),
+      visible: _parseVisible(json),
     );
   }
 }
 
+// ---------------------------------------------------------------------------
+// Button Component
+// ---------------------------------------------------------------------------
+
 /// A tappable button that triggers one or more actions.
-///
-/// ODS Spec: `buttonComponent` — requires a `label` and an `onClick` array
-/// of actions. Actions execute sequentially: typically a submit followed by
-/// a navigate, giving the user a natural "save and go" flow.
 class OdsButtonComponent extends OdsComponent {
   final String label;
 
@@ -364,6 +407,7 @@ class OdsButtonComponent extends OdsComponent {
     required this.onClick,
     required super.styleHint,
     super.visibleWhen,
+    super.visible,
   }) : super(component: 'button');
 
   factory OdsButtonComponent.fromJson(Map<String, dynamic> json) {
@@ -372,33 +416,23 @@ class OdsButtonComponent extends OdsComponent {
       onClick: (json['onClick'] as List<dynamic>)
           .map((a) => OdsAction.fromJson(a as Map<String, dynamic>))
           .toList(),
-      styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
-      visibleWhen: json['visibleWhen'] != null
-          ? OdsComponentVisibleWhen.fromJson(json['visibleWhen'] as Map<String, dynamic>)
-          : null,
+      styleHint: _parseStyleHint(json),
+      visibleWhen: _parseVisibleWhen(json),
+      visible: _parseVisible(json),
     );
   }
 }
 
+// ---------------------------------------------------------------------------
+// Chart Component
+// ---------------------------------------------------------------------------
+
 /// Renders a data visualization chart from a data source.
-///
-/// ODS Spec: `chartComponent` — requires a `dataSource` ID, a `chartType`
-/// (bar, line, or pie), and field mappings (`labelField` and `valueField`).
-/// The framework queries the data source and renders the appropriate chart.
 class OdsChartComponent extends OdsComponent {
-  /// The ID of the data source to read rows from.
   final String dataSource;
-
-  /// The chart type: "bar", "line", or "pie".
   final String chartType;
-
-  /// The field to use for category labels (X axis or pie slices).
   final String labelField;
-
-  /// The field to use for numeric values (Y axis or pie values).
   final String valueField;
-
-  /// Optional chart title displayed above the chart.
   final String? title;
 
   const OdsChartComponent({
@@ -409,6 +443,7 @@ class OdsChartComponent extends OdsComponent {
     this.title,
     required super.styleHint,
     super.visibleWhen,
+    super.visible,
   }) : super(component: 'chart');
 
   factory OdsChartComponent.fromJson(Map<String, dynamic> json) {
@@ -418,20 +453,145 @@ class OdsChartComponent extends OdsComponent {
       labelField: json['labelField'] as String,
       valueField: json['valueField'] as String,
       title: json['title'] as String?,
-      styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
-      visibleWhen: json['visibleWhen'] != null
-          ? OdsComponentVisibleWhen.fromJson(json['visibleWhen'] as Map<String, dynamic>)
-          : null,
+      styleHint: _parseStyleHint(json),
+      visibleWhen: _parseVisibleWhen(json),
+      visible: _parseVisible(json),
     );
   }
 }
 
+// ---------------------------------------------------------------------------
+// Summary Component (NEW — Feature 4)
+// ---------------------------------------------------------------------------
+
+/// Renders a styled KPI card with a label, a large aggregate value, and
+/// an optional icon. Ideal for dashboard-style displays.
+class OdsSummaryComponent extends OdsComponent {
+  /// The label text shown above the value (e.g., "Total Spent").
+  final String label;
+
+  /// The value expression. Supports aggregate syntax like
+  /// `{SUM(expenses, amount)}` or static text.
+  final String value;
+
+  /// Optional Material icon name (e.g., "attach_money", "trending_up").
+  final String? icon;
+
+  const OdsSummaryComponent({
+    required this.label,
+    required this.value,
+    this.icon,
+    required super.styleHint,
+    super.visibleWhen,
+    super.visible,
+  }) : super(component: 'summary');
+
+  factory OdsSummaryComponent.fromJson(Map<String, dynamic> json) {
+    return OdsSummaryComponent(
+      label: json['label'] as String,
+      value: json['value'] as String,
+      icon: json['icon'] as String?,
+      styleHint: _parseStyleHint(json),
+      visibleWhen: _parseVisibleWhen(json),
+      visible: _parseVisible(json),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tabs Component (NEW — Feature 6)
+// ---------------------------------------------------------------------------
+
+/// A single tab definition with a label and content array.
+class OdsTabDefinition {
+  final String label;
+  final List<OdsComponent> content;
+
+  const OdsTabDefinition({required this.label, required this.content});
+
+  factory OdsTabDefinition.fromJson(Map<String, dynamic> json) {
+    return OdsTabDefinition(
+      label: json['label'] as String,
+      content: (json['content'] as List<dynamic>)
+          .map((c) => OdsComponent.fromJson(c as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+/// Renders a tabbed layout within a page. Each tab has its own content array.
+class OdsTabsComponent extends OdsComponent {
+  final List<OdsTabDefinition> tabs;
+
+  const OdsTabsComponent({
+    required this.tabs,
+    required super.styleHint,
+    super.visibleWhen,
+    super.visible,
+  }) : super(component: 'tabs');
+
+  factory OdsTabsComponent.fromJson(Map<String, dynamic> json) {
+    return OdsTabsComponent(
+      tabs: (json['tabs'] as List<dynamic>)
+          .map((t) => OdsTabDefinition.fromJson(t as Map<String, dynamic>))
+          .toList(),
+      styleHint: _parseStyleHint(json),
+      visibleWhen: _parseVisibleWhen(json),
+      visible: _parseVisible(json),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Detail Component (NEW — Feature 9)
+// ---------------------------------------------------------------------------
+
+/// Renders a read-only detail view showing field values from a data source
+/// record or form state. Ideal for "view record" pages.
+class OdsDetailComponent extends OdsComponent {
+  /// The ID of the GET data source to read from.
+  /// Optional when `fromForm` is provided instead.
+  final String dataSource;
+
+  /// Optional list of field names to display, in order.
+  /// If null, all columns from the record are shown.
+  final List<String>? fields;
+
+  /// Optional map of field names to display labels.
+  final Map<String, String>? labels;
+
+  /// Optional form ID whose current state provides the record to display.
+  final String? fromForm;
+
+  const OdsDetailComponent({
+    this.dataSource = '',
+    this.fields,
+    this.labels,
+    this.fromForm,
+    required super.styleHint,
+    super.visibleWhen,
+    super.visible,
+  }) : super(component: 'detail');
+
+  factory OdsDetailComponent.fromJson(Map<String, dynamic> json) {
+    return OdsDetailComponent(
+      dataSource: (json['dataSource'] as String?) ?? '',
+      fields: (json['fields'] as List<dynamic>?)?.cast<String>(),
+      labels: (json['labels'] as Map<String, dynamic>?)
+          ?.map((k, v) => MapEntry(k, v as String)),
+      fromForm: json['fromForm'] as String?,
+      styleHint: _parseStyleHint(json),
+      visibleWhen: _parseVisibleWhen(json),
+      visible: _parseVisible(json),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Unknown Component (forward compatibility)
+// ---------------------------------------------------------------------------
+
 /// Placeholder for component types not recognized by this framework version.
-///
-/// ODS Ethos: Graceful degradation over hard failure. Unknown components are
-/// silently skipped in normal mode and shown with a warning card in debug mode.
-/// This means a spec authored for a newer ODS version will still load in an
-/// older framework — it just won't render the unknown parts.
 class OdsUnknownComponent extends OdsComponent {
   /// The original JSON for debugging and inspection.
   final Map<String, dynamic> rawJson;
@@ -441,16 +601,16 @@ class OdsUnknownComponent extends OdsComponent {
     required this.rawJson,
     required super.styleHint,
     super.visibleWhen,
+    super.visible,
   }) : super(component: type);
 
   factory OdsUnknownComponent.fromJson(Map<String, dynamic> json) {
     return OdsUnknownComponent(
       type: json['component'] as String? ?? 'unknown',
       rawJson: json,
-      styleHint: OdsStyleHint.fromJson(json['styleHint'] as Map<String, dynamic>?),
-      visibleWhen: json['visibleWhen'] != null
-          ? OdsComponentVisibleWhen.fromJson(json['visibleWhen'] as Map<String, dynamic>)
-          : null,
+      styleHint: _parseStyleHint(json),
+      visibleWhen: _parseVisibleWhen(json),
+      visible: _parseVisible(json),
     );
   }
 }

@@ -481,7 +481,16 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
       String currentValue, OdsOptionsFrom optionsFrom) {
     final engine = context.read<AppEngine>();
 
+    // When a filter is defined, key the FutureBuilder on the sibling field's
+    // value so that changing the dependency rebuilds the options list.
+    String? filterKey;
+    if (optionsFrom.filter != null) {
+      final formState = engine.getFormState(widget.formId);
+      filterKey = formState[optionsFrom.filter!.fromField] ?? '';
+    }
+
     return FutureBuilder<List<Map<String, dynamic>>>(
+      key: filterKey != null ? ValueKey('${optionsFrom.dataSource}_$filterKey') : null,
       future: engine.queryDataSource(optionsFrom.dataSource),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -498,7 +507,21 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
           );
         }
 
-        final rows = snapshot.data ?? [];
+        var rows = snapshot.data ?? [];
+
+        // Apply dependent dropdown filter: only show options where the
+        // filter field matches the sibling form field's current value.
+        if (optionsFrom.filter != null) {
+          final formState = engine.getFormState(widget.formId);
+          final siblingValue = formState[optionsFrom.filter!.fromField] ?? '';
+          if (siblingValue.isNotEmpty) {
+            rows = rows
+                .where((row) =>
+                    row[optionsFrom.filter!.field]?.toString() == siblingValue)
+                .toList();
+          }
+        }
+
         final options = rows
             .map((row) => row[optionsFrom.valueField]?.toString())
             .where((v) => v != null && v.isNotEmpty)

@@ -42,6 +42,9 @@ class ActionHandler {
       case 'update':
         return await _handleUpdate(action, app, formStates);
 
+      case 'showMessage':
+        return ActionResult(message: action.message ?? '');
+
       default:
         // Graceful degradation: unknown action types are logged, not crashed.
         debugPrint('ODS: Unknown action type "${action.action}"');
@@ -72,7 +75,7 @@ class ActionHandler {
     final formFields = _findFormFields(formId, app);
     final errors = _validateFields(formFields, formData);
     if (errors.isNotEmpty) {
-      return ActionResult(error: errors.join(', '));
+      return ActionResult(error: _formatErrors(errors));
     }
 
     final ds = app.dataSources[dataSourceId];
@@ -135,7 +138,7 @@ class ActionHandler {
     final formFields = _findFormFields(formId, app);
     final errors = _validateFields(formFields, formData);
     if (errors.isNotEmpty) {
-      return ActionResult(error: errors.join(', '));
+      return ActionResult(error: _formatErrors(errors));
     }
 
     final ds = app.dataSources[dataSourceId];
@@ -262,6 +265,16 @@ class ActionHandler {
     return errors;
   }
 
+  /// Formats a list of validation errors into a user-friendly string.
+  ///
+  /// Caps at 5 errors to keep SnackBar messages readable. If there are more,
+  /// appends a count of the remaining errors.
+  String _formatErrors(List<String> errors) {
+    if (errors.length <= 5) return errors.join(', ');
+    final shown = errors.take(5).join(', ');
+    return '$shown, and ${errors.length - 5} more';
+  }
+
   /// Searches all pages for a form component with the given ID and returns
   /// its field definitions. Used to auto-create table schemas.
   List<OdsFieldDefinition> _findFormFields(String formId, OdsApp app) {
@@ -287,5 +300,13 @@ class ActionResult {
   /// Human-readable error message if the action failed.
   final String? error;
 
-  const ActionResult({this.navigateTo, this.submitted = false, this.error});
+  /// Informational message to display as a snackbar (from "showMessage" action).
+  final String? message;
+
+  const ActionResult({
+    this.navigateTo,
+    this.submitted = false,
+    this.error,
+    this.message,
+  });
 }

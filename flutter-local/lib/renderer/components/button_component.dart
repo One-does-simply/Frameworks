@@ -72,12 +72,24 @@ class OdsButtonWidget extends StatelessWidget {
             },
           );
 
+          if (!context.mounted) return;
+
           // Show a SnackBar if an action failed (e.g., required validation).
-          if (engine.lastActionError != null && context.mounted) {
+          if (engine.lastActionError != null) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(engine.lastActionError!),
                 backgroundColor: Colors.red.shade700,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+
+          // Show an info SnackBar from showMessage actions.
+          if (engine.lastMessage != null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(engine.lastMessage!),
                 behavior: SnackBarBehavior.floating,
               ),
             );

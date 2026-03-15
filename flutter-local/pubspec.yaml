@@ -18,6 +18,11 @@ dependencies:
   http: ^1.2.2
   archive: ^4.0.4
   fl_chart: ^0.70.2
+  # markdown is loaded from a local copy (packages/) because pub.dev was
+  # unreachable on the corporate network at time of development. To switch
+  # to pub.dev, replace with: markdown: ^7.3.0
+  markdown:
+    path: packages
 
 dev_dependencies:
   flutter_test:

@@ -76,6 +76,9 @@ class OdsAction {
   /// no more records in that direction (e.g., navigate to results page).
   final OdsAction? onEnd;
 
+  /// For "showMessage": the text to display in a snackbar notification.
+  final String? message;
+
   const OdsAction({
     required this.action,
     this.target,
@@ -86,11 +89,13 @@ class OdsAction {
     this.computedFields = const [],
     this.filter,
     this.onEnd,
+    this.message,
   });
 
   bool get isNavigate => action == 'navigate';
   bool get isSubmit => action == 'submit';
   bool get isUpdate => action == 'update';
+  bool get isShowMessage => action == 'showMessage';
   bool get isRecordAction =>
       action == 'firstRecord' ||
       action == 'nextRecord' ||
@@ -112,8 +117,12 @@ class OdsAction {
               ?.map((c) => OdsComputedField.fromJson(c as Map<String, dynamic>))
               .toList() ??
           const [],
-      filter: filterRaw?.map((k, v) => MapEntry(k, v.toString())),
+      // Preserve string values directly; coerce non-string values (numbers,
+      // booleans) with toString(). This is intentional: filter values in ODS
+      // specs should be strings, and this ensures consistent comparison.
+      filter: filterRaw?.map((k, v) => MapEntry(k, v is String ? v : v.toString())),
       onEnd: onEndRaw != null ? OdsAction.fromJson(onEndRaw) : null,
+      message: json['message'] as String?,
     );
   }
 
@@ -128,5 +137,6 @@ class OdsAction {
           'computedFields': computedFields.map((c) => c.toJson()).toList(),
         if (filter != null) 'filter': filter,
         if (onEnd != null) 'onEnd': onEnd!.toJson(),
+        if (message != null) 'message': message,
       };
 }
