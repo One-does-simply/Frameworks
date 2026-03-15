@@ -125,6 +125,11 @@ ThemeData _buildTheme(ColorScheme colorScheme) {
     chipTheme: ChipThemeData(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     ),
+    snackBarTheme: const SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      width: 450,
+      dismissDirection: DismissDirection.horizontal,
+    ),
   );
 }
 
@@ -388,7 +393,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('"${app.name}" archived'),
-          behavior: SnackBarBehavior.floating,
+
           action: SnackBarAction(
             label: 'Undo',
             onPressed: () async {
@@ -1759,7 +1764,7 @@ class _CreateNewScreenState extends State<_CreateNewScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Build Helper prompt copied to clipboard!'),
-          behavior: SnackBarBehavior.floating,
+
           duration: Duration(seconds: 3),
         ),
       );
@@ -1998,7 +2003,7 @@ class _EditWithAiScreenState extends State<_EditWithAiScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('App spec JSON copied to clipboard!'),
-          behavior: SnackBarBehavior.floating,
+
           duration: Duration(seconds: 2),
         ),
       );
@@ -2014,7 +2019,7 @@ class _EditWithAiScreenState extends State<_EditWithAiScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Build Helper prompt copied to clipboard!'),
-          behavior: SnackBarBehavior.floating,
+
           duration: Duration(seconds: 2),
         ),
       );
@@ -2040,7 +2045,7 @@ class _EditWithAiScreenState extends State<_EditWithAiScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('"${widget.app.name}" updated successfully!'),
-          behavior: SnackBarBehavior.floating,
+
         ),
       );
       Navigator.pop(context);

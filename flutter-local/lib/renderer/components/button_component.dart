@@ -80,7 +80,7 @@ class OdsButtonWidget extends StatelessWidget {
               SnackBar(
                 content: Text(engine.lastActionError!),
                 backgroundColor: Colors.red.shade700,
-                behavior: SnackBarBehavior.floating,
+
               ),
             );
           }
@@ -90,7 +90,7 @@ class OdsButtonWidget extends StatelessWidget {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(engine.lastMessage!),
-                behavior: SnackBarBehavior.floating,
+
               ),
             );
           }
