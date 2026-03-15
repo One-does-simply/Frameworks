@@ -172,20 +172,25 @@ class OdsListColumn {
 /// Condition to hide a row action based on the row's field values.
 class OdsRowActionHideWhen {
   final String field;
-  final String equals;
+  final String? equals;
+  final String? notEquals;
 
-  const OdsRowActionHideWhen({required this.field, required this.equals});
+  const OdsRowActionHideWhen({required this.field, this.equals, this.notEquals});
 
   factory OdsRowActionHideWhen.fromJson(Map<String, dynamic> json) {
     return OdsRowActionHideWhen(
       field: json['field'] as String,
-      equals: json['equals'] as String,
+      equals: json['equals'] as String?,
+      notEquals: json['notEquals'] as String?,
     );
   }
 
   /// Returns true if the action should be hidden for this row.
   bool matches(Map<String, dynamic> row) {
-    return (row[field]?.toString() ?? '') == equals;
+    final rowValue = row[field]?.toString() ?? '';
+    if (equals != null && rowValue == equals) return true;
+    if (notEquals != null && rowValue != notEquals) return true;
+    return false;
   }
 }
 
@@ -258,6 +263,26 @@ class OdsSummaryRule {
   }
 }
 
+/// Defines the initial sort order for a list component.
+class OdsDefaultSort {
+  /// The field name to sort by.
+  final String field;
+
+  /// Sort direction: 'asc' (default) or 'desc'.
+  final String direction;
+
+  const OdsDefaultSort({required this.field, this.direction = 'asc'});
+
+  factory OdsDefaultSort.fromJson(Map<String, dynamic> json) {
+    return OdsDefaultSort(
+      field: json['field'] as String,
+      direction: json['direction'] as String? ?? 'asc',
+    );
+  }
+
+  bool get isDescending => direction == 'desc';
+}
+
 /// Describes what happens when a list row is tapped.
 class OdsRowTap {
   /// The page to navigate to.
@@ -309,6 +334,9 @@ class OdsListComponent extends OdsComponent {
   /// Maps field values to color names for entire rows. Requires [rowColorField].
   final Map<String, String>? rowColorMap;
 
+  /// Optional initial sort order applied when the list first renders.
+  final OdsDefaultSort? defaultSort;
+
   const OdsListComponent({
     required this.dataSource,
     required this.columns,
@@ -319,6 +347,7 @@ class OdsListComponent extends OdsComponent {
     this.displayAs = 'table',
     this.rowColorField,
     this.rowColorMap,
+    this.defaultSort,
     required super.styleHint,
     super.visibleWhen,
     super.visible,
@@ -346,6 +375,9 @@ class OdsListComponent extends OdsComponent {
       rowColorField: json['rowColorField'] as String?,
       rowColorMap: (json['rowColorMap'] as Map<String, dynamic>?)
           ?.map((k, v) => MapEntry(k, v as String)),
+      defaultSort: json['defaultSort'] != null
+          ? OdsDefaultSort.fromJson(json['defaultSort'] as Map<String, dynamic>)
+          : null,
       styleHint: _parseStyleHint(json),
       visibleWhen: _parseVisibleWhen(json),
       visible: _parseVisible(json),

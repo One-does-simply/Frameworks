@@ -43,6 +43,9 @@ class _OdsListWidgetState extends State<OdsListWidget> {
   /// True for ascending, false for descending.
   bool _sortAscending = true;
 
+  /// Whether the defaultSort has been applied as initial state.
+  bool _defaultSortApplied = false;
+
   /// Active filter values keyed by field name. Null or "All" means no filter.
   final Map<String, String?> _filters = {};
 
@@ -440,6 +443,13 @@ class _OdsListWidgetState extends State<OdsListWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // Apply defaultSort as initial sort state on first build.
+    if (!_defaultSortApplied && widget.model.defaultSort != null) {
+      _sortField = widget.model.defaultSort!.field;
+      _sortAscending = !widget.model.defaultSort!.isDescending;
+      _defaultSortApplied = true;
+    }
+
     final engine = context.watch<AppEngine>();
     final hasRowActions = widget.model.rowActions.isNotEmpty;
     final computedFields = _getComputedFields(engine);
