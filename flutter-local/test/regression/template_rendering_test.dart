@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ods_flutter_local/engine/template_engine.dart';
+import 'package:ods_flutter_local/models/ods_component.dart';
 import 'package:ods_flutter_local/parser/spec_parser.dart';
 
 /// Regression test: every template in the Specification repo must render
@@ -238,4 +239,204 @@ void main() {
       });
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // Structural validation: forms have fields, lists have columns, etc.
+  // These tests would have caught the "empty addForm fields" bug.
+  // ---------------------------------------------------------------------------
+
+  group('Rendered templates have valid component structure', () {
+    for (final entry in testContexts.entries) {
+      final fileName = entry.key.split('+').first;
+      final variantName = entry.key;
+      final context = entry.value;
+
+      final file = templateFiles
+          .where((f) => f.uri.pathSegments.last == fileName)
+          .firstOrNull;
+      if (file == null) continue;
+
+      test('$variantName: every form has non-empty fields', () {
+        final templateJson =
+            jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+        final rendered = TemplateEngine.render(templateJson['template'], context)
+            as Map<String, dynamic>;
+        final result = parser.parse(jsonEncode(rendered));
+        final app = result.app!;
+
+        for (final pageEntry in app.pages.entries) {
+          for (final comp in pageEntry.value.content) {
+            if (comp is OdsFormComponent) {
+              expect(comp.fields, isNotEmpty,
+                  reason:
+                      '$variantName: form "${comp.id}" on page "${pageEntry.key}" has empty fields');
+            }
+          }
+        }
+      });
+
+      test('$variantName: every list has non-empty columns', () {
+        final templateJson =
+            jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+        final rendered = TemplateEngine.render(templateJson['template'], context)
+            as Map<String, dynamic>;
+        final result = parser.parse(jsonEncode(rendered));
+        final app = result.app!;
+
+        for (final pageEntry in app.pages.entries) {
+          _checkListColumns(pageEntry.value.content, variantName, pageEntry.key);
+        }
+      });
+
+      test('$variantName: every dataSource reference resolves', () {
+        final templateJson =
+            jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+        final rendered = TemplateEngine.render(templateJson['template'], context)
+            as Map<String, dynamic>;
+        final result = parser.parse(jsonEncode(rendered));
+        final app = result.app!;
+        final dsKeys = app.dataSources.keys.toSet();
+
+        for (final pageEntry in app.pages.entries) {
+          _checkDataSourceRefs(
+              pageEntry.value.content, dsKeys, variantName, pageEntry.key);
+        }
+      });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Template engine unit tests for $map with index and && conditions
+  // ---------------------------------------------------------------------------
+
+  group('TemplateEngine \$map with index variable', () {
+    test('each(item, index) exposes named index variable', () {
+      final template = {
+        '\$map': 'items',
+        'each(item, idx)': {
+          'name': '\${item.name}',
+          'position': '\${idx}',
+        },
+      };
+      final context = {
+        'items': [
+          {'name': 'A'},
+          {'name': 'B'},
+        ],
+      };
+      final result = TemplateEngine.render(template, context) as List;
+      expect(result.length, 2);
+      expect(result[0]['position'], 0);
+      expect(result[1]['position'], 1);
+    });
+
+    test('each(item, index) works in \$if conditions', () {
+      final template = {
+        '\$map': 'items',
+        'each(item, index)': {
+          '\$if': 'index == 0',
+          'then': {'name': '\${item.name}', 'first': true},
+          'else': {'name': '\${item.name}', 'first': false},
+        },
+      };
+      final context = {
+        'items': [
+          {'name': 'A'},
+          {'name': 'B'},
+        ],
+      };
+      final result = TemplateEngine.render(template, context) as List;
+      expect(result[0]['first'], true);
+      expect(result[1]['first'], false);
+    });
+  });
+
+  group('TemplateEngine && and || conditions', () {
+    test('&& evaluates both sides', () {
+      final template = {
+        '\$if': "a == 'x' && b == 'y'",
+        'then': 'yes',
+        'else': 'no',
+      };
+      expect(TemplateEngine.render(template, {'a': 'x', 'b': 'y'}), 'yes');
+      expect(TemplateEngine.render(template, {'a': 'x', 'b': 'z'}), 'no');
+      expect(TemplateEngine.render(template, {'a': 'z', 'b': 'y'}), 'no');
+    });
+
+    test('|| evaluates either side', () {
+      final template = {
+        '\$if': "a == 'x' || b == 'y'",
+        'then': 'yes',
+        'else': 'no',
+      };
+      expect(TemplateEngine.render(template, {'a': 'x', 'b': 'z'}), 'yes');
+      expect(TemplateEngine.render(template, {'a': 'z', 'b': 'y'}), 'yes');
+      expect(TemplateEngine.render(template, {'a': 'z', 'b': 'z'}), 'no');
+    });
+
+    test('&& with type check and index (real template pattern)', () {
+      final template = {
+        '\$map': 'fields',
+        'each(field, index)': {
+          '\$if': "field.type == 'select' && index == 0",
+          'then': {
+            'header': '\${field.label}',
+            'field': '\${field.name}',
+            'filterable': true,
+          },
+          'else': {
+            'header': '\${field.label}',
+            'field': '\${field.name}',
+          },
+        },
+      };
+      final context = {
+        'fields': [
+          {'name': 'status', 'label': 'Status', 'type': 'select', 'options': ['A', 'B']},
+          {'name': 'notes', 'label': 'Notes', 'type': 'text'},
+        ],
+      };
+      final result = TemplateEngine.render(template, context) as List;
+      expect(result[0]['filterable'], true,
+          reason: 'First select field should be filterable');
+      expect(result[1].containsKey('filterable'), false,
+          reason: 'Second field should not be filterable');
+    });
+  });
+}
+
+/// Recursively checks that every OdsListComponent has non-empty columns.
+void _checkListColumns(
+    List<OdsComponent> components, String variant, String pageId) {
+  for (final comp in components) {
+    if (comp is OdsListComponent) {
+      expect(comp.columns, isNotEmpty,
+          reason: '$variant: list on page "$pageId" has empty columns');
+    }
+    if (comp is OdsTabsComponent) {
+      for (final tab in comp.tabs) {
+        _checkListColumns(tab.content, variant, '$pageId/${tab.label}');
+      }
+    }
+  }
+}
+
+/// Recursively checks that every component referencing a dataSource uses a
+/// valid key.
+void _checkDataSourceRefs(List<OdsComponent> components, Set<String> dsKeys,
+    String variant, String pageId) {
+  for (final comp in components) {
+    if (comp is OdsListComponent) {
+      expect(dsKeys, contains(comp.dataSource),
+          reason:
+              '$variant: list on page "$pageId" references unknown dataSource "${comp.dataSource}"');
+    }
+    // Summary components reference dataSources indirectly via aggregate
+    // expressions in the value string — no direct field to check here.
+    if (comp is OdsTabsComponent) {
+      for (final tab in comp.tabs) {
+        _checkDataSourceRefs(tab.content, dsKeys, variant, '$pageId/${tab.label}');
+      }
+    }
+  }
 }

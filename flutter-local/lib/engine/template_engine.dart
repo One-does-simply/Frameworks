@@ -99,13 +99,15 @@ class TemplateEngine {
     final source = _evaluateExpression(sourceExpr, context);
     if (source is! List) return [];
 
-    // Find the each(varName) key.
+    // Find the each(varName) or each(varName, indexName) key.
     String? varName;
+    String? indexName;
     dynamic itemTemplate;
     for (final key in obj.keys) {
       final match = _eachPattern.firstMatch(key);
       if (match != null) {
         varName = match.group(1)!;
+        indexName = match.group(2); // optional second capture group
         itemTemplate = obj[key];
         break;
       }
@@ -116,7 +118,12 @@ class TemplateEngine {
     for (int i = 0; i < source.length; i++) {
       final itemContext = Map<String, dynamic>.from(context);
       itemContext[varName] = source[i];
+      // Expose the index under both the explicit name (if given) and the
+      // legacy implicit name so templates using either convention work.
       itemContext['${varName}Index'] = i;
+      if (indexName != null) {
+        itemContext[indexName] = i;
+      }
       final rendered = render(itemTemplate, itemContext);
       if (rendered != _removed) {
         results.add(rendered);
@@ -125,7 +132,7 @@ class TemplateEngine {
     return results;
   }
 
-  static final _eachPattern = RegExp(r'^each\((\w+)\)$');
+  static final _eachPattern = RegExp(r'^each\((\w+)(?:,\s*(\w+))?\)$');
 
   /// Interpolates `${expr}` references in a string.
   /// If the entire string is a single `${expr}`, returns the raw value
@@ -237,12 +244,32 @@ class TemplateEngine {
   }
 
   /// Evaluates a boolean condition string.
-  /// Supports: `varName`, `!varName`, `a == b`, `a != b`, `a == 'literal'`.
+  /// Supports: `varName`, `!varName`, `a == b`, `a != b`, `a == 'literal'`,
+  /// `a && b`, `a || b`.
   static bool _evaluateCondition(
     String condition,
     Map<String, dynamic> context,
   ) {
     condition = condition.trim();
+
+    // Logical AND: split on && first (lowest precedence after ||).
+    // Use indexOf to avoid splitting string literals containing &&.
+    final andIndex = _findLogicalOp(condition, '&&');
+    if (andIndex >= 0) {
+      final left = condition.substring(0, andIndex).trim();
+      final right = condition.substring(andIndex + 2).trim();
+      return _evaluateCondition(left, context) &&
+          _evaluateCondition(right, context);
+    }
+
+    // Logical OR.
+    final orIndex = _findLogicalOp(condition, '||');
+    if (orIndex >= 0) {
+      final left = condition.substring(0, orIndex).trim();
+      final right = condition.substring(orIndex + 2).trim();
+      return _evaluateCondition(left, context) ||
+          _evaluateCondition(right, context);
+    }
 
     // Negation: !expr
     if (condition.startsWith('!')) {
@@ -277,6 +304,26 @@ class TemplateEngine {
     if (value is num) return value != 0;
     if (value is List) return value.isNotEmpty;
     return true;
+  }
+
+  /// Finds the index of a logical operator (`&&` or `||`) outside of string
+  /// literals. Returns -1 if not found.
+  static int _findLogicalOp(String condition, String op) {
+    var inSingle = false;
+    var inDouble = false;
+    for (var i = 0; i < condition.length - 1; i++) {
+      final ch = condition[i];
+      if (ch == "'" && !inDouble) {
+        inSingle = !inSingle;
+      } else if (ch == '"' && !inSingle) {
+        inDouble = !inDouble;
+      } else if (!inSingle && !inDouble) {
+        if (condition.substring(i, i + 2) == op) {
+          return i;
+        }
+      }
+    }
+    return -1;
   }
 
   /// Sentinel value indicating a conditionally removed element.
