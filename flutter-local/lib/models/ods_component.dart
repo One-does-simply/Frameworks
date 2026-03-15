@@ -81,6 +81,22 @@ String? _parseVisible(Map<String, dynamic> json) {
   return json['visible'] as String?;
 }
 
+/// Normalizes aggregate strings: "Count"→"count", "Average"→"avg", "Sum"→"sum".
+String? _normalizeAggregate(String? raw) {
+  if (raw == null) return null;
+  switch (raw.toLowerCase()) {
+    case 'count':
+      return 'count';
+    case 'average':
+    case 'avg':
+      return 'avg';
+    case 'sum':
+      return 'sum';
+    default:
+      return raw.toLowerCase();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Text Component
 // ---------------------------------------------------------------------------
@@ -467,24 +483,35 @@ class OdsChartComponent extends OdsComponent {
   final String valueField;
   final String? title;
 
+  /// How to aggregate values: "count", "sum", or "avg".
+  /// Defaults to "count" when labelField == valueField, otherwise "sum".
+  final String aggregate;
+
   const OdsChartComponent({
     required this.dataSource,
     required this.chartType,
     required this.labelField,
     required this.valueField,
     this.title,
+    this.aggregate = 'sum',
     required super.styleHint,
     super.visibleWhen,
     super.visible,
   }) : super(component: 'chart');
 
   factory OdsChartComponent.fromJson(Map<String, dynamic> json) {
+    final labelField = json['labelField'] as String;
+    final valueField = json['valueField'] as String;
+    // Default to "count" when label and value fields are the same,
+    // since summing non-numeric category values produces zeros.
+    final defaultAggregate = labelField == valueField ? 'count' : 'sum';
     return OdsChartComponent(
       dataSource: json['dataSource'] as String,
       chartType: json['chartType'] as String? ?? 'bar',
-      labelField: json['labelField'] as String,
-      valueField: json['valueField'] as String,
+      labelField: labelField,
+      valueField: valueField,
       title: json['title'] as String?,
+      aggregate: _normalizeAggregate(json['aggregate'] as String?) ?? defaultAggregate,
       styleHint: _parseStyleHint(json),
       visibleWhen: _parseVisibleWhen(json),
       visible: _parseVisible(json),

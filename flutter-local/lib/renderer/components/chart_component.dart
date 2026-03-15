@@ -47,18 +47,29 @@ class OdsChartWidget extends StatelessWidget {
             );
           }
 
-          // Aggregate data: group by labelField, sum valueField.
+          // Aggregate data: group by labelField using the chosen aggregate mode.
           // Cap rows to prevent excessive memory use with large datasets.
           final cappedRows = rows.length > 10000 ? rows.sublist(0, 10000) : rows;
-          final aggregated = <String, double>{};
+          final sums = <String, double>{};
+          final counts = <String, int>{};
           for (final row in cappedRows) {
             final label = row[model.labelField]?.toString() ?? 'Unknown';
             final value = double.tryParse(row[model.valueField]?.toString() ?? '') ?? 0;
-            aggregated[label] = (aggregated[label] ?? 0) + value;
+            sums[label] = (sums[label] ?? 0) + value;
+            counts[label] = (counts[label] ?? 0) + 1;
           }
 
-          final labels = aggregated.keys.toList();
-          final values = aggregated.values.toList();
+          final labels = sums.keys.toList();
+          final List<double> values;
+          switch (model.aggregate) {
+            case 'count':
+              values = labels.map((l) => counts[l]!.toDouble()).toList();
+            case 'avg':
+              values = labels.map((l) => counts[l]! > 0 ? sums[l]! / counts[l]! : 0.0).toList();
+            case 'sum':
+            default:
+              values = sums.values.toList();
+          }
 
           return Card(
             child: Padding(
