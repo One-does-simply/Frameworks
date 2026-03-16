@@ -13,10 +13,17 @@ class BackupManager {
   static const _backupDir = 'ods_backups';
 
   /// Returns the backup directory for the given app, creating it if needed.
-  static Future<Directory> _getBackupDir(String appName) async {
-    final docs = await getApplicationDocumentsDirectory();
+  /// If [customFolder] is provided, uses that as the root instead of Documents.
+  static Future<Directory> _getBackupDir(String appName, {String? customFolder}) async {
+    final String root;
+    if (customFolder != null && customFolder.isNotEmpty) {
+      root = customFolder;
+    } else {
+      final docs = await getApplicationDocumentsDirectory();
+      root = docs.path;
+    }
     final sanitized = appName.replaceAll(RegExp(r'[^\w\s-]'), '').trim();
-    final dir = Directory(p.join(docs.path, _backupDir, sanitized));
+    final dir = Directory(p.join(root, _backupDir, sanitized));
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
@@ -25,28 +32,32 @@ class BackupManager {
 
   /// Runs an auto-backup for the given engine. Saves a timestamped JSON file
   /// and prunes backups beyond [retention].
-  static Future<void> runAutoBackup(AppEngine engine, {int retention = 5}) async {
+  static Future<void> runAutoBackup(
+    AppEngine engine, {
+    int retention = 5,
+    String? backupFolder,
+  }) async {
     final appName = engine.app?.appName;
     if (appName == null) return;
 
     try {
       final data = await engine.backupData();
-      final dir = await _getBackupDir(appName);
+      final dir = await _getBackupDir(appName, customFolder: backupFolder);
       final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
       final file = File(p.join(dir.path, 'backup_$timestamp.json'));
       await file.writeAsString(jsonEncode(data));
 
       // Prune old backups beyond the retention count.
-      await pruneBackups(appName, retention: retention);
+      await pruneBackups(appName, retention: retention, backupFolder: backupFolder);
     } catch (_) {
       // Auto-backup is best-effort; don't crash the app.
     }
   }
 
   /// Deletes the oldest backups beyond [retention] for the given app.
-  static Future<void> pruneBackups(String appName, {int retention = 5}) async {
+  static Future<void> pruneBackups(String appName, {int retention = 5, String? backupFolder}) async {
     try {
-      final dir = await _getBackupDir(appName);
+      final dir = await _getBackupDir(appName, customFolder: backupFolder);
       final files = await dir
           .list()
           .where((e) => e is File && e.path.endsWith('.json'))

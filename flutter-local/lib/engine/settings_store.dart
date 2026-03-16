@@ -18,11 +18,13 @@ class SettingsStore extends ChangeNotifier {
   bool _initialized = false;
   bool _autoBackup = false;
   int _backupRetention = 5;
+  String? _backupFolder;
 
   ThemeMode get themeMode => _themeMode;
   bool get isInitialized => _initialized;
   bool get autoBackup => _autoBackup;
   int get backupRetention => _backupRetention;
+  String? get backupFolder => _backupFolder;
 
   /// Returns true if the tour has already been shown for this app ID.
   bool hasSeenTour(String appId) => _touredAppIds.contains(appId);
@@ -55,6 +57,13 @@ class SettingsStore extends ChangeNotifier {
     await _save();
   }
 
+  Future<void> setBackupFolder(String? path) async {
+    if (_backupFolder == path) return;
+    _backupFolder = path;
+    notifyListeners();
+    await _save();
+  }
+
   Future<File> _getFile() async {
     final dir = await getApplicationDocumentsDirectory();
     return File(p.join(dir.path, _fileName));
@@ -78,6 +87,7 @@ class SettingsStore extends ChangeNotifier {
         }
         _autoBackup = data['autoBackup'] as bool? ?? false;
         _backupRetention = data['backupRetention'] as int? ?? 5;
+        _backupFolder = data['backupFolder'] as String?;
       } catch (_) {}
     }
     _initialized = true;
@@ -95,6 +105,7 @@ class SettingsStore extends ChangeNotifier {
       'touredAppIds': _touredAppIds.toList(),
       'autoBackup': _autoBackup,
       'backupRetention': _backupRetention,
+      if (_backupFolder != null) 'backupFolder': _backupFolder,
     }));
   }
 }

@@ -227,7 +227,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       // Run auto-backup in the background if enabled.
       final settings = context.read<SettingsStore>();
       if (settings.autoBackup) {
-        BackupManager.runAutoBackup(engine, retention: settings.backupRetention);
+        BackupManager.runAutoBackup(
+          engine,
+          retention: settings.backupRetention,
+          backupFolder: settings.backupFolder,
+        );
       }
     }
 
@@ -2895,7 +2899,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                     onChanged: (v) => settings.setAutoBackup(v),
                   ),
                   // Backup retention
-                  if (settings.autoBackup)
+                  if (settings.autoBackup) ...[
                     ListTile(
                       leading: const Icon(Icons.history),
                       title: const Text('Keep Last N Backups'),
@@ -2911,6 +2915,31 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                         },
                       ),
                     ),
+                    ListTile(
+                      leading: const Icon(Icons.folder_outlined),
+                      title: const Text('Backup Folder'),
+                      subtitle: Text(
+                        settings.backupFolder ?? 'Default (Documents)',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                      trailing: settings.backupFolder != null
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 18),
+                              tooltip: 'Reset to default',
+                              onPressed: () => settings.setBackupFolder(null),
+                            )
+                          : null,
+                      onTap: () async {
+                        final picked = await FilePicker.platform.getDirectoryPath(
+                          dialogTitle: 'Choose Backup Folder',
+                        );
+                        if (picked != null) {
+                          settings.setBackupFolder(picked);
+                        }
+                      },
+                    ),
+                  ],
                   // Debug
                   ListTile(
                     leading: Icon(

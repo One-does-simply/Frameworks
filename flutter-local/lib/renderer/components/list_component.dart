@@ -534,6 +534,25 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                   currencySymbol: currencySymbol,
                   fallbackCurrencyFields: fallbackCurrencyFields,
                 ),
+              // Tap-to-edit hint when rows are tappable.
+              if (widget.model.onRowTap != null && sortedRows.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.touch_app, size: 14, color: Theme.of(context).colorScheme.outline),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Tap a row to edit',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.outline,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               // Summary/aggregation row below the table.
               _buildSummaryRow(searchedRows, computedFields,
                   currencySymbol: currencySymbol,
