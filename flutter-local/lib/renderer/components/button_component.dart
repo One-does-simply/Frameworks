@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../engine/app_engine.dart';
 import '../../models/ods_component.dart';
+import '../snackbar_helper.dart';
 import '../style_resolver.dart';
 
 /// Renders an [OdsButtonComponent] as a Material ElevatedButton.
@@ -76,23 +77,12 @@ class OdsButtonWidget extends StatelessWidget {
 
           // Show a SnackBar if an action failed (e.g., required validation).
           if (engine.lastActionError != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(engine.lastActionError!),
-                backgroundColor: Colors.red.shade700,
-
-              ),
-            );
+            showOdsSnackBar(context, message: engine.lastActionError!, isError: true);
           }
 
           // Show an info SnackBar from showMessage actions.
           if (engine.lastMessage != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(engine.lastMessage!),
-
-              ),
-            );
+            showOdsSnackBar(context, message: engine.lastMessage!);
           }
         },
         child: Text(model.label),

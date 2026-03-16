@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'debug/debug_panel.dart';
 import 'engine/app_engine.dart';
+import 'engine/backup_manager.dart';
 import 'engine/code_generator.dart';
 import 'engine/data_exporter.dart';
 import 'engine/data_store.dart';
@@ -18,6 +19,7 @@ import 'loader/spec_loader.dart';
 import 'models/ods_app.dart';
 import 'models/ods_app_setting.dart';
 import 'renderer/page_renderer.dart';
+import 'renderer/snackbar_helper.dart';
 import 'screens/app_help_screen.dart';
 import 'screens/app_tour_dialog.dart';
 import 'screens/ods_about_screen.dart';
@@ -221,6 +223,14 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     final engine = context.read<AppEngine>();
     final success = await engine.loadSpec(jsonString);
 
+    if (success) {
+      // Run auto-backup in the background if enabled.
+      final settings = context.read<SettingsStore>();
+      if (settings.autoBackup) {
+        BackupManager.runAutoBackup(engine, retention: settings.backupRetention);
+      }
+    }
+
     if (!success && mounted) {
       setState(() {
         _isLoading = false;
@@ -390,17 +400,15 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     await _loadedAppsStore.archiveApp(app.id);
     if (mounted) {
       setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('"${app.name}" archived'),
-
-          action: SnackBarAction(
-            label: 'Undo',
-            onPressed: () async {
-              await _loadedAppsStore.unarchiveApp(app.id);
-              if (mounted) setState(() {});
-            },
-          ),
+      showOdsSnackBar(
+        context,
+        message: '"${app.name}" archived',
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () async {
+            await _loadedAppsStore.unarchiveApp(app.id);
+            if (mounted) setState(() {});
+          },
         ),
       );
     }
@@ -452,15 +460,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       );
 
       if (outputPath != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Data exported to $outputPath')),
-        );
+        showOdsSnackBar(context, message: 'Data exported to $outputPath');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e')),
-        );
+        showOdsSnackBar(context, message: 'Export failed: $e');
       }
     }
   }
@@ -471,9 +475,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     final result = parser.parse(app.specJson);
     if (result.app == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not parse spec: ${result.parseError ?? "unknown error"}')),
-        );
+        showOdsSnackBar(context, message: 'Could not parse spec: ${result.parseError ?? "unknown error"}');
       }
       return;
     }
@@ -598,12 +600,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Code generation failed: $e'),
-            backgroundColor: Colors.red.shade700,
-          ),
-        );
+        showOdsSnackBar(context, message: 'Code generation failed: $e', isError: true);
       }
     }
   }
@@ -1761,13 +1758,7 @@ class _CreateNewScreenState extends State<_CreateNewScreen> {
     await Clipboard.setData(ClipboardData(text: _prompt!));
     if (mounted) {
       setState(() => _copied = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Build Helper prompt copied to clipboard!'),
-
-          duration: Duration(seconds: 3),
-        ),
-      );
+      showOdsSnackBar(context, message: 'Build Helper prompt copied to clipboard!', duration: const Duration(seconds: 3));
     }
   }
 
@@ -2000,13 +1991,7 @@ class _EditWithAiScreenState extends State<_EditWithAiScreen> {
     await Clipboard.setData(ClipboardData(text: widget.app.specJson));
     if (mounted) {
       setState(() => _specCopied = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('App spec JSON copied to clipboard!'),
-
-          duration: Duration(seconds: 2),
-        ),
-      );
+      showOdsSnackBar(context, message: 'App spec JSON copied to clipboard!', duration: const Duration(seconds: 3));
     }
   }
 
@@ -2016,13 +2001,7 @@ class _EditWithAiScreenState extends State<_EditWithAiScreen> {
     await Clipboard.setData(ClipboardData(text: prompt));
     if (mounted) {
       setState(() => _promptCopied = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Build Helper prompt copied to clipboard!'),
-
-          duration: Duration(seconds: 2),
-        ),
-      );
+      showOdsSnackBar(context, message: 'Build Helper prompt copied to clipboard!', duration: const Duration(seconds: 3));
     }
   }
 
@@ -2042,12 +2021,7 @@ class _EditWithAiScreenState extends State<_EditWithAiScreen> {
 
     await widget.onSpecUpdated(text);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('"${widget.app.name}" updated successfully!'),
-
-        ),
-      );
+      showOdsSnackBar(context, message: '"${widget.app.name}" updated successfully!');
       Navigator.pop(context);
     }
   }
@@ -2537,16 +2511,12 @@ class _SettingsDialogState extends State<_SettingsDialog> {
         await File(outputPath).writeAsString(jsonStr);
         if (mounted) {
           Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Backup saved to $outputPath')),
-          );
+          showOdsSnackBar(context, message: 'Backup saved to $outputPath');
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Backup failed: $e')),
-        );
+        showOdsSnackBar(context, message: 'Backup failed: $e');
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -2605,15 +2575,11 @@ class _SettingsDialogState extends State<_SettingsDialog> {
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Data restored from backup')),
-        );
+        showOdsSnackBar(context, message: 'Data restored from backup');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Restore failed: $e')),
-        );
+        showOdsSnackBar(context, message: 'Restore failed: $e');
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -2653,18 +2619,14 @@ class _SettingsDialogState extends State<_SettingsDialog> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not parse file: $e')),
-        );
+        showOdsSnackBar(context, message: 'Could not parse file: $e');
       }
       return;
     }
 
     if (rows.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('File contains no data rows')),
-        );
+        showOdsSnackBar(context, message: 'File contains no data rows');
       }
       return;
     }
@@ -2692,15 +2654,11 @@ class _SettingsDialogState extends State<_SettingsDialog> {
       final count = await widget.engine.importTableRows(targetTable, rows);
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Imported $count rows into "$targetTable"')),
-        );
+        showOdsSnackBar(context, message: 'Imported $count rows into "$targetTable"');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Import failed: $e')),
-        );
+        showOdsSnackBar(context, message: 'Import failed: $e');
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -2926,6 +2884,32 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                           onNavigateToPage: (pageId) => engine.navigateTo(pageId),
                         );
                       },
+                    ),
+                  // Auto-backup
+                  SwitchListTile(
+                    secondary: const Icon(Icons.backup_outlined),
+                    title: const Text('Auto-Backup on Launch'),
+                    subtitle: const Text('Back up data each time this app opens'),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                    value: settings.autoBackup,
+                    onChanged: (v) => settings.setAutoBackup(v),
+                  ),
+                  // Backup retention
+                  if (settings.autoBackup)
+                    ListTile(
+                      leading: const Icon(Icons.history),
+                      title: const Text('Keep Last N Backups'),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                      trailing: DropdownButton<int>(
+                        value: settings.backupRetention,
+                        underline: const SizedBox.shrink(),
+                        items: [1, 3, 5, 10, 20, 50].map((n) {
+                          return DropdownMenuItem(value: n, child: Text('$n'));
+                        }).toList(),
+                        onChanged: (v) {
+                          if (v != null) settings.setBackupRetention(v);
+                        },
+                      ),
                     ),
                   // Debug
                   ListTile(

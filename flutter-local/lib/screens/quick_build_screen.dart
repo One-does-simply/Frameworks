@@ -526,34 +526,59 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
           ),
           const SizedBox(height: 12),
         ],
-        // Current fields list
-        ...fields.asMap().entries.map((entry) {
-          final idx = entry.key;
-          final field = entry.value;
-          return Card(
-            child: ListTile(
-              dense: true,
-              leading: _fieldTypeIcon(field['type'] as String),
-              title: Text(field['label'] as String? ?? field['name'] as String),
-              subtitle: Text(field['type'] as String),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit, size: 18),
-                    tooltip: 'Rename field',
-                    onPressed: () => _editField(id, idx),
+        // Current fields list (drag to reorder)
+        if (fields.isNotEmpty)
+          ReorderableListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            buildDefaultDragHandles: false,
+            itemCount: fields.length,
+            onReorder: (oldIndex, newIndex) {
+              setState(() {
+                if (newIndex > oldIndex) newIndex -= 1;
+                final item = fields.removeAt(oldIndex);
+                fields.insert(newIndex, item);
+              });
+            },
+            itemBuilder: (context, idx) {
+              final field = fields[idx];
+              return Card(
+                key: ValueKey('${id}_field_$idx'),
+                child: ListTile(
+                  dense: true,
+                  leading: ReorderableDragStartListener(
+                    index: idx,
+                    child: const Icon(Icons.drag_handle, size: 20),
                   ),
-                  IconButton(
-                    icon: Icon(Icons.close, size: 18, color: theme.colorScheme.error),
-                    tooltip: 'Remove',
-                    onPressed: () => setState(() => fields.removeAt(idx)),
+                  title: Row(
+                    children: [
+                      _fieldTypeIcon(field['type'] as String),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(field['label'] as String? ?? field['name'] as String),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-          );
-        }),
+                  subtitle: Text(field['type'] as String),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit, size: 18),
+                        tooltip: 'Rename field',
+                        onPressed: () => _editField(id, idx),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.close, size: 18, color: theme.colorScheme.error),
+                        tooltip: 'Remove',
+                        onPressed: () => setState(() => fields.removeAt(idx)),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
         const SizedBox(height: 8),
         // Add custom field button
         OutlinedButton.icon(

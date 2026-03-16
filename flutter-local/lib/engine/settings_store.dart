@@ -16,9 +16,13 @@ class SettingsStore extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system;
   final Set<String> _touredAppIds = {};
   bool _initialized = false;
+  bool _autoBackup = false;
+  int _backupRetention = 5;
 
   ThemeMode get themeMode => _themeMode;
   bool get isInitialized => _initialized;
+  bool get autoBackup => _autoBackup;
+  int get backupRetention => _backupRetention;
 
   /// Returns true if the tour has already been shown for this app ID.
   bool hasSeenTour(String appId) => _touredAppIds.contains(appId);
@@ -33,6 +37,20 @@ class SettingsStore extends ChangeNotifier {
   Future<void> setThemeMode(ThemeMode mode) async {
     if (_themeMode == mode) return;
     _themeMode = mode;
+    notifyListeners();
+    await _save();
+  }
+
+  Future<void> setAutoBackup(bool enabled) async {
+    if (_autoBackup == enabled) return;
+    _autoBackup = enabled;
+    notifyListeners();
+    await _save();
+  }
+
+  Future<void> setBackupRetention(int count) async {
+    if (_backupRetention == count) return;
+    _backupRetention = count.clamp(1, 100);
     notifyListeners();
     await _save();
   }
@@ -58,6 +76,8 @@ class SettingsStore extends ChangeNotifier {
         if (toured != null) {
           _touredAppIds.addAll(toured.cast<String>());
         }
+        _autoBackup = data['autoBackup'] as bool? ?? false;
+        _backupRetention = data['backupRetention'] as int? ?? 5;
       } catch (_) {}
     }
     _initialized = true;
@@ -73,6 +93,8 @@ class SettingsStore extends ChangeNotifier {
         _ => 'system',
       },
       'touredAppIds': _touredAppIds.toList(),
+      'autoBackup': _autoBackup,
+      'backupRetention': _backupRetention,
     }));
   }
 }
