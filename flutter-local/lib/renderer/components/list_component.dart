@@ -52,6 +52,11 @@ class _OdsListWidgetState extends State<OdsListWidget> {
   /// Current search query for searchable lists (F2).
   String _searchQuery = '';
 
+  /// Cached query results so the FutureBuilder doesn't flash a loading spinner
+  /// on every rebuild (search, filter, sort are all local operations on the
+  /// already-loaded data).
+  List<Map<String, dynamic>>? _cachedRows;
+
   /// Sorts rows in-memory by the current sort field and direction.
   List<Map<String, dynamic>> _sortRows(List<Map<String, dynamic>> rows) {
     if (_sortField == null) return rows;
@@ -467,11 +472,16 @@ class _OdsListWidgetState extends State<OdsListWidget> {
       child: FutureBuilder<List<Map<String, dynamic>>>(
         future: engine.queryDataSource(widget.model.dataSource),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          // Use cached data while a new query is in flight so that
+          // local operations (search, filter, sort) don't flash a spinner.
+          if (snapshot.connectionState == ConnectionState.waiting && _cachedRows == null) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final allRows = snapshot.data ?? [];
+          if (snapshot.hasData) {
+            _cachedRows = snapshot.data;
+          }
+          final allRows = _cachedRows ?? [];
 
           if (allRows.isEmpty) {
             return const Card(

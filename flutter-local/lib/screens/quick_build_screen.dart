@@ -527,6 +527,22 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
           const SizedBox(height: 12),
         ],
         // Current fields list (drag to reorder)
+        if (fields.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              children: [
+                Icon(Icons.swap_vert, size: 14, color: theme.colorScheme.onSurfaceVariant),
+                const SizedBox(width: 4),
+                Text(
+                  'Drag to reorder fields',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
         if (fields.isNotEmpty)
           ReorderableListView.builder(
             shrinkWrap: true,
@@ -548,7 +564,7 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
                   dense: true,
                   leading: ReorderableDragStartListener(
                     index: idx,
-                    child: const Icon(Icons.drag_handle, size: 20),
+                    child: Icon(Icons.drag_handle, size: 20, color: theme.colorScheme.onSurfaceVariant),
                   ),
                   title: Row(
                     children: [
