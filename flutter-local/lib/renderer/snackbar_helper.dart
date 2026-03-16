@@ -30,7 +30,7 @@ void showOdsSnackBar(
       duration: duration,
       action: action,
       showCloseIcon: true,
-      closeIconColor: Colors.white70,
+      closeIconColor: Colors.white,
     ),
   );
 }
