@@ -182,7 +182,8 @@ void main() {
       'chartField': 'name',
     },
     'simple-checklist.json': {
-      'appName': 'Grocery List',
+      'appName': 'Grocery Lists',
+      'listName': 'List',
       'itemName': 'Item',
       'fields': [
         {'name': 'category', 'label': 'Category', 'type': 'select', 'options': ['Produce', 'Dairy']},

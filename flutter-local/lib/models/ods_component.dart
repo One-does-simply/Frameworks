@@ -251,6 +251,26 @@ class OdsRowAction {
   /// e.g., hide "Mark Done" when done=true.
   final OdsRowActionHideWhen? hideWhen;
 
+  // -- copyRows fields --
+
+  /// For copyRows: GET data source to read child rows from.
+  final String? sourceDataSource;
+
+  /// For copyRows: POST data source to write copied child rows to.
+  final String? targetDataSource;
+
+  /// For copyRows: POST data source to create the parent copy.
+  final String? parentDataSource;
+
+  /// For copyRows: field on children that links to the parent name.
+  final String? linkField;
+
+  /// For copyRows: parent field used as the name (gets " (copy)" suffix).
+  final String? nameField;
+
+  /// For copyRows: fields to reset on copied children (e.g., done→false).
+  final Map<String, String> resetValues;
+
   const OdsRowAction({
     required this.label,
     required this.action,
@@ -259,17 +279,24 @@ class OdsRowAction {
     this.values = const {},
     this.confirm,
     this.hideWhen,
+    this.sourceDataSource,
+    this.targetDataSource,
+    this.parentDataSource,
+    this.linkField,
+    this.nameField,
+    this.resetValues = const {},
   });
 
   bool get isDelete => action == 'delete';
   bool get isUpdate => action == 'update';
+  bool get isCopyRows => action == 'copyRows';
 
   factory OdsRowAction.fromJson(Map<String, dynamic> json) {
     return OdsRowAction(
       label: json['label'] as String,
       action: json['action'] as String,
-      dataSource: json['dataSource'] as String,
-      matchField: json['matchField'] as String,
+      dataSource: json['dataSource'] as String? ?? '',
+      matchField: json['matchField'] as String? ?? '_id',
       values: (json['values'] as Map<String, dynamic>?)
               ?.map((k, v) => MapEntry(k, v.toString())) ??
           const {},
@@ -277,6 +304,14 @@ class OdsRowAction {
       hideWhen: json['hideWhen'] != null
           ? OdsRowActionHideWhen.fromJson(json['hideWhen'] as Map<String, dynamic>)
           : null,
+      sourceDataSource: json['sourceDataSource'] as String?,
+      targetDataSource: json['targetDataSource'] as String?,
+      parentDataSource: json['parentDataSource'] as String?,
+      linkField: json['linkField'] as String?,
+      nameField: json['nameField'] as String?,
+      resetValues: (json['resetValues'] as Map<String, dynamic>?)
+              ?.map((k, v) => MapEntry(k, v.toString())) ??
+          const {},
     );
   }
 }

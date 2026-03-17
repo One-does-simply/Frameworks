@@ -143,21 +143,37 @@ class _OdsListWidgetState extends State<OdsListWidget> {
     );
 
     if (confirmed == true) {
+      _executeRowAction(engine, action, row);
+    }
+  }
+
+  /// Dispatches a row action to the appropriate engine method.
+  void _executeRowAction(AppEngine engine, OdsRowAction action, Map<String, dynamic> row) {
+    if (action.isDelete) {
       final matchValue = row[action.matchField]?.toString() ?? '';
-      if (action.isDelete) {
-        engine.executeDeleteRowAction(
-          dataSourceId: action.dataSource,
-          matchField: action.matchField,
-          matchValue: matchValue,
-        );
-      } else {
-        engine.executeRowAction(
-          dataSourceId: action.dataSource,
-          matchField: action.matchField,
-          matchValue: matchValue,
-          values: action.values,
-        );
-      }
+      engine.executeDeleteRowAction(
+        dataSourceId: action.dataSource,
+        matchField: action.matchField,
+        matchValue: matchValue,
+      );
+    } else if (action.isCopyRows) {
+      engine.executeCopyRowsAction(
+        row: row,
+        sourceDataSourceId: action.sourceDataSource ?? '',
+        targetDataSourceId: action.targetDataSource ?? '',
+        parentDataSourceId: action.parentDataSource ?? '',
+        linkField: action.linkField ?? '',
+        nameField: action.nameField ?? 'name',
+        resetValues: action.resetValues,
+      );
+    } else {
+      final matchValue = row[action.matchField]?.toString() ?? '';
+      engine.executeRowAction(
+        dataSourceId: action.dataSource,
+        matchField: action.matchField,
+        matchValue: matchValue,
+        values: action.values,
+      );
     }
   }
 
@@ -724,14 +740,7 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                             if (needsConfirm) {
                               _confirmRowAction(context, engine, action, row);
                             } else {
-                              final matchValue =
-                                  row[action.matchField]?.toString() ?? '';
-                              engine.executeRowAction(
-                                dataSourceId: action.dataSource,
-                                matchField: action.matchField,
-                                matchValue: matchValue,
-                                values: action.values,
-                              );
+                              _executeRowAction(engine, action, row);
                             }
                           },
                           child: Text(action.label),
@@ -896,14 +905,7 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                               if (needsConfirm) {
                                 _confirmRowAction(context, engine, action, row);
                               } else {
-                                final matchValue =
-                                    row[action.matchField]?.toString() ?? '';
-                                engine.executeRowAction(
-                                  dataSourceId: action.dataSource,
-                                  matchField: action.matchField,
-                                  matchValue: matchValue,
-                                  values: action.values,
-                                );
+                                _executeRowAction(engine, action, row);
                               }
                             },
                             child: Text(action.label),

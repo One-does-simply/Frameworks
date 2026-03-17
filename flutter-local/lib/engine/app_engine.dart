@@ -547,6 +547,70 @@ class AppEngine extends ChangeNotifier {
     }
   }
 
+  /// Executes a copyRows row action: copies the parent row and all linked
+  /// child rows, resetting specified fields on the copies.
+  Future<void> executeCopyRowsAction({
+    required Map<String, dynamic> row,
+    required String sourceDataSourceId,
+    required String targetDataSourceId,
+    required String parentDataSourceId,
+    required String linkField,
+    required String nameField,
+    required Map<String, String> resetValues,
+  }) async {
+    final sourceDsConfig = _app?.dataSources[sourceDataSourceId];
+    final targetDsConfig = _app?.dataSources[targetDataSourceId];
+    final parentDsConfig = _app?.dataSources[parentDataSourceId];
+    if (sourceDsConfig == null || targetDsConfig == null || parentDsConfig == null) return;
+
+    try {
+      // 1. Generate a copy name from the parent row.
+      final originalName = row[nameField]?.toString() ?? 'Untitled';
+      final copyName = '$originalName (copy)';
+
+      // 2. Create the parent copy: duplicate key fields, override values.
+      final parentRow = Map<String, dynamic>.from(row);
+      parentRow.remove('_id'); // Don't copy the primary key.
+      parentRow[nameField] = copyName;
+      // Apply any reset values to the parent (e.g., status → Active).
+      for (final entry in resetValues.entries) {
+        if (parentRow.containsKey(entry.key)) {
+          parentRow[entry.key] = entry.value;
+        }
+      }
+      // Auto-set date fields to now.
+      for (final key in parentRow.keys.toList()) {
+        if (key.toLowerCase().contains('date') && parentRow[key] != null) {
+          parentRow[key] = DateTime.now().toIso8601String().split('T').first;
+        }
+      }
+      await _dataStore.insert(parentDsConfig.tableName, parentRow);
+
+      // 3. Query children linked to the original parent.
+      final originalLinkValue = row[nameField]?.toString() ?? '';
+      final children = await _dataStore.query(sourceDsConfig.tableName);
+      final matchingChildren = children
+          .where((child) => child[linkField]?.toString() == originalLinkValue)
+          .toList();
+
+      // 4. Copy each child with the new link value and reset fields.
+      for (final child in matchingChildren) {
+        final childCopy = Map<String, dynamic>.from(child);
+        childCopy.remove('_id');
+        childCopy[linkField] = copyName;
+        for (final entry in resetValues.entries) {
+          childCopy[entry.key] = entry.value;
+        }
+        await _dataStore.insert(targetDsConfig.tableName, childCopy);
+      }
+
+      _lastMessage = 'Copied "$originalName" → "$copyName" with ${matchingChildren.length} items';
+      notifyListeners();
+    } catch (e) {
+      debugPrint('ODS CopyRows Error: $e');
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // App settings — user-configurable settings defined in the spec.
   // ---------------------------------------------------------------------------
