@@ -181,6 +181,14 @@ void main() {
       'wantChart': false,
       'chartField': 'name',
     },
+    'simple-checklist.json': {
+      'appName': 'Grocery List',
+      'itemName': 'Item',
+      'fields': [
+        {'name': 'category', 'label': 'Category', 'type': 'select', 'options': ['Produce', 'Dairy']},
+        {'name': 'quantity', 'label': 'Quantity', 'type': 'number'},
+      ],
+    },
   };
 
   group('Template rendering produces valid ODS specs', () {

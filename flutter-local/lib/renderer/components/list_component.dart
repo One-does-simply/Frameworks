@@ -210,6 +210,20 @@ class _OdsListWidgetState extends State<OdsListWidget> {
     }
   }
 
+  /// Returns true if any toggle column in this list is checked for this row.
+  bool _isRowChecked(
+    Map<String, dynamic> row,
+    Map<String, OdsFieldDefinition> computedFields,
+  ) {
+    for (final col in widget.model.columns) {
+      if (col.toggle != null) {
+        final val = _getCellValue(row, col.field, computedFields);
+        if (val == 'true') return true;
+      }
+    }
+    return false;
+  }
+
   /// Gets the display value for a cell, evaluating formulas for computed columns.
   String _getCellValue(
     Map<String, dynamic> row,
@@ -633,6 +647,25 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                 : null,
             cells: [
               ...widget.model.columns.map((col) {
+                // Toggle column: render as checkbox.
+                if (col.toggle != null) {
+                  final checked = _getCellValue(row, col.field, computedFields) == 'true';
+                  return DataCell(
+                    Checkbox(
+                      value: checked,
+                      onChanged: (_) {
+                        final matchValue = row[col.toggle!.matchField]?.toString() ?? '';
+                        engine.executeRowAction(
+                          dataSourceId: col.toggle!.dataSource,
+                          matchField: col.toggle!.matchField,
+                          matchValue: matchValue,
+                          values: {col.field: checked ? 'false' : 'true'},
+                        );
+                      },
+                    ),
+                  );
+                }
+
                 final value = _getCellValue(row, col.field, computedFields);
                 final useCurrency = col.currency ||
                     fallbackCurrencyFields.contains(col.field);
@@ -650,14 +683,22 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                     textColor = _resolveColor(colorName);
                   }
                 }
+
+                // Strikethrough text when a sibling toggle column is checked.
+                final isStruck = _isRowChecked(row, computedFields);
+
+                final cellColor = isStruck && textColor == null
+                    ? Theme.of(context).colorScheme.outline
+                    : textColor;
+
                 return DataCell(Text(
                   display,
-                  style: textColor != null
-                      ? TextStyle(
-                          color: textColor,
-                          fontWeight: FontWeight.w600,
-                        )
-                      : null,
+                  style: TextStyle(
+                    color: cellColor,
+                    fontWeight: textColor != null ? FontWeight.w600 : null,
+                    decoration: isStruck ? TextDecoration.lineThrough : null,
+                    decorationColor: Theme.of(context).colorScheme.outline,
+                  ),
                 ));
               }),
               if (hasRowActions)
@@ -762,6 +803,26 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     ...widget.model.columns.map((col) {
+                      // Toggle column in card view: render as checkbox row.
+                      if (col.toggle != null) {
+                        final checked = _getCellValue(row, col.field, computedFields) == 'true';
+                        return CheckboxListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(col.header),
+                          value: checked,
+                          onChanged: (_) {
+                            final matchValue = row[col.toggle!.matchField]?.toString() ?? '';
+                            engine.executeRowAction(
+                              dataSourceId: col.toggle!.dataSource,
+                              matchField: col.toggle!.matchField,
+                              matchValue: matchValue,
+                              values: {col.field: checked ? 'false' : 'true'},
+                            );
+                          },
+                        );
+                      }
+
                       final value = _getCellValue(row, col.field, computedFields);
                       final useCurrency = col.currency ||
                           fallbackCurrencyFields.contains(col.field);
@@ -779,6 +840,12 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                           textColor = _resolveColor(colorName);
                         }
                       }
+
+                      final isStruck = _isRowChecked(row, computedFields);
+                      final cellColor = isStruck && textColor == null
+                          ? theme.colorScheme.outline
+                          : textColor;
+
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 6),
                         child: Row(
@@ -797,12 +864,12 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                             Expanded(
                               child: Text(
                                 display,
-                                style: textColor != null
-                                    ? TextStyle(
-                                        color: textColor,
-                                        fontWeight: FontWeight.w600,
-                                      )
-                                    : null,
+                                style: TextStyle(
+                                  color: cellColor,
+                                  fontWeight: textColor != null ? FontWeight.w600 : null,
+                                  decoration: isStruck ? TextDecoration.lineThrough : null,
+                                  decorationColor: theme.colorScheme.outline,
+                                ),
                               ),
                             ),
                           ],

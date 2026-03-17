@@ -158,6 +158,10 @@ class OdsListColumn {
   /// e.g., `{"1": "Correct", "0": "Wrong"}` transforms raw values for display.
   final Map<String, String>? displayMap;
 
+  /// When set, the column renders as an inline checkbox toggle.
+  /// Contains `dataSource` (PUT data source ID) and `matchField` (row key).
+  final OdsToggle? toggle;
+
   const OdsListColumn({
     required this.header,
     required this.field,
@@ -166,6 +170,7 @@ class OdsListColumn {
     this.currency = false,
     this.colorMap,
     this.displayMap,
+    this.toggle,
   });
 
   factory OdsListColumn.fromJson(Map<String, dynamic> json) {
@@ -179,6 +184,24 @@ class OdsListColumn {
           ?.map((k, v) => MapEntry(k, v as String)),
       displayMap: (json['displayMap'] as Map<String, dynamic>?)
           ?.map((k, v) => MapEntry(k, v as String)),
+      toggle: json['toggle'] != null
+          ? OdsToggle.fromJson(json['toggle'] as Map<String, dynamic>)
+          : null,
+    );
+  }
+}
+
+/// Configuration for an inline toggle checkbox on a list column.
+class OdsToggle {
+  final String dataSource;
+  final String matchField;
+
+  const OdsToggle({required this.dataSource, required this.matchField});
+
+  factory OdsToggle.fromJson(Map<String, dynamic> json) {
+    return OdsToggle(
+      dataSource: json['dataSource'] as String,
+      matchField: json['matchField'] as String? ?? '_id',
     );
   }
 }
