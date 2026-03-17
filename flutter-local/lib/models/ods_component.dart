@@ -196,12 +196,51 @@ class OdsToggle {
   final String dataSource;
   final String matchField;
 
-  const OdsToggle({required this.dataSource, required this.matchField});
+  /// Optional: auto-update a parent record when all items in a group are checked.
+  final OdsAutoComplete? autoComplete;
+
+  const OdsToggle({required this.dataSource, required this.matchField, this.autoComplete});
 
   factory OdsToggle.fromJson(Map<String, dynamic> json) {
     return OdsToggle(
       dataSource: json['dataSource'] as String,
       matchField: json['matchField'] as String? ?? '_id',
+      autoComplete: json['autoComplete'] != null
+          ? OdsAutoComplete.fromJson(json['autoComplete'] as Map<String, dynamic>)
+          : null,
+    );
+  }
+}
+
+/// Config for auto-completing a parent when all children in a group are toggled on.
+class OdsAutoComplete {
+  /// Field on children that groups them (e.g., "listName").
+  final String groupField;
+
+  /// PUT data source for updating the parent.
+  final String parentDataSource;
+
+  /// Field on the parent to match by (e.g., "name").
+  final String parentMatchField;
+
+  /// Values to set on the parent when all children are complete.
+  final Map<String, String> parentValues;
+
+  const OdsAutoComplete({
+    required this.groupField,
+    required this.parentDataSource,
+    required this.parentMatchField,
+    required this.parentValues,
+  });
+
+  factory OdsAutoComplete.fromJson(Map<String, dynamic> json) {
+    return OdsAutoComplete(
+      groupField: json['groupField'] as String,
+      parentDataSource: json['parentDataSource'] as String,
+      parentMatchField: json['parentMatchField'] as String? ?? 'name',
+      parentValues: (json['parentValues'] as Map<String, dynamic>?)
+              ?.map((k, v) => MapEntry(k, v.toString())) ??
+          const {},
     );
   }
 }

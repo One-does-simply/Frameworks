@@ -34,7 +34,11 @@ class ActionHandler {
   }) async {
     switch (action.action) {
       case 'navigate':
-        return ActionResult(navigateTo: action.target);
+        return ActionResult(
+          navigateTo: action.target,
+          populateForm: action.populateForm,
+          populateData: action.withData,
+        );
 
       case 'submit':
         return await _handleSubmit(action, app, formStates);
@@ -179,7 +183,12 @@ class ActionHandler {
       return ActionResult(error: 'No matching record found for $matchField = "$matchValue"');
     }
 
-    return const ActionResult(submitted: true);
+    return ActionResult(
+      submitted: true,
+      cascade: action.cascade,
+      cascadeMatchField: matchField,
+      cascadeOldValue: matchValue,
+    );
   }
 
   /// Evaluates computed fields from an action and merges them into the data
@@ -303,10 +312,28 @@ class ActionResult {
   /// Informational message to display as a snackbar (from "showMessage" action).
   final String? message;
 
+  /// Form ID to populate after navigation.
+  final String? populateForm;
+
+  /// Data to populate in the form (values may contain {formField} references).
+  final Map<String, dynamic>? populateData;
+
+  /// Cascade rename config from an update action.
+  final Map<String, String>? cascade;
+
+  /// The match field and old value for cascade rename resolution.
+  final String? cascadeMatchField;
+  final String? cascadeOldValue;
+
   const ActionResult({
     this.navigateTo,
     this.submitted = false,
     this.error,
     this.message,
+    this.populateForm,
+    this.populateData,
+    this.cascade,
+    this.cascadeMatchField,
+    this.cascadeOldValue,
   });
 }

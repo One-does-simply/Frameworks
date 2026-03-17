@@ -58,7 +58,12 @@ class OdsAction {
   /// For "update" only: the field name used to match the row to update.
   final String? matchField;
 
-  /// Reserved for future use: data to pass to the target page on navigation.
+  /// For "navigate": form ID to pre-populate with [withData] values.
+  final String? populateForm;
+
+  /// For "navigate": key-value pairs to pre-fill in [populateForm].
+  /// Values starting with "{" and ending with "}" are resolved from
+  /// the current form state (e.g., "{listName}" reads from active forms).
   final Map<String, dynamic>? withData;
 
   /// Optional confirmation text. When set, a dialog is shown before the
@@ -79,17 +84,23 @@ class OdsAction {
   /// For "showMessage": the text to display in a snackbar notification.
   final String? message;
 
+  /// For "update": cascade changes to a child data source when a linked
+  /// field is renamed. Contains childDataSource and childLinkField.
+  final Map<String, String>? cascade;
+
   const OdsAction({
     required this.action,
     this.target,
     this.dataSource,
     this.matchField,
+    this.populateForm,
     this.withData,
     this.confirm,
     this.computedFields = const [],
     this.filter,
     this.onEnd,
     this.message,
+    this.cascade,
   });
 
   bool get isNavigate => action == 'navigate';
@@ -111,6 +122,7 @@ class OdsAction {
       target: json['target'] as String?,
       dataSource: json['dataSource'] as String?,
       matchField: json['matchField'] as String?,
+      populateForm: json['populateForm'] as String?,
       withData: json['withData'] as Map<String, dynamic>?,
       confirm: json['confirm'] as String?,
       computedFields: (json['computedFields'] as List<dynamic>?)
@@ -123,6 +135,8 @@ class OdsAction {
       filter: filterRaw?.map((k, v) => MapEntry(k, v is String ? v : v.toString())),
       onEnd: onEndRaw != null ? OdsAction.fromJson(onEndRaw) : null,
       message: json['message'] as String?,
+      cascade: (json['cascade'] as Map<String, dynamic>?)
+          ?.map((k, v) => MapEntry(k, v.toString())),
     );
   }
 

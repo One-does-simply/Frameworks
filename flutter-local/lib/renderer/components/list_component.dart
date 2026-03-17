@@ -226,6 +226,39 @@ class _OdsListWidgetState extends State<OdsListWidget> {
     }
   }
 
+  /// Handles a toggle checkbox tap: updates the value, then checks auto-complete.
+  Future<void> _handleToggle(
+    AppEngine engine,
+    OdsListColumn col,
+    Map<String, dynamic> row,
+    bool currentlyChecked,
+  ) async {
+    final newValue = currentlyChecked ? 'false' : 'true';
+    final matchValue = row[col.toggle!.matchField]?.toString() ?? '';
+    await engine.executeRowAction(
+      dataSourceId: col.toggle!.dataSource,
+      matchField: col.toggle!.matchField,
+      matchValue: matchValue,
+      values: {col.field: newValue},
+    );
+
+    // Auto-complete parent: if we just checked an item ON, see if all
+    // sibling items in the same group are now done.
+    final ac = col.toggle!.autoComplete;
+    if (ac != null && newValue == 'true') {
+      final groupValue = row[ac.groupField]?.toString() ?? '';
+      await engine.checkAutoComplete(
+        listDataSourceId: widget.model.dataSource,
+        toggleField: col.field,
+        groupField: ac.groupField,
+        groupValue: groupValue,
+        parentDataSourceId: ac.parentDataSource,
+        parentMatchField: ac.parentMatchField,
+        parentValues: ac.parentValues,
+      );
+    }
+  }
+
   /// Returns true if any toggle column in this list is checked for this row.
   bool _isRowChecked(
     Map<String, dynamic> row,
@@ -669,15 +702,7 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                   return DataCell(
                     Checkbox(
                       value: checked,
-                      onChanged: (_) {
-                        final matchValue = row[col.toggle!.matchField]?.toString() ?? '';
-                        engine.executeRowAction(
-                          dataSourceId: col.toggle!.dataSource,
-                          matchField: col.toggle!.matchField,
-                          matchValue: matchValue,
-                          values: {col.field: checked ? 'false' : 'true'},
-                        );
-                      },
+                      onChanged: (_) => _handleToggle(engine, col, row, checked),
                     ),
                   );
                 }
@@ -820,15 +845,7 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                           contentPadding: EdgeInsets.zero,
                           title: Text(col.header),
                           value: checked,
-                          onChanged: (_) {
-                            final matchValue = row[col.toggle!.matchField]?.toString() ?? '';
-                            engine.executeRowAction(
-                              dataSourceId: col.toggle!.dataSource,
-                              matchField: col.toggle!.matchField,
-                              matchValue: matchValue,
-                              values: {col.field: checked ? 'false' : 'true'},
-                            );
-                          },
+                          onChanged: (_) => _handleToggle(engine, col, row, checked),
                         );
                       }
 

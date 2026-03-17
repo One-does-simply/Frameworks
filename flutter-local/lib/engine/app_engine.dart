@@ -333,8 +333,60 @@ class AppEngine extends ChangeNotifier {
         clearForm(action.target!);
       }
 
+      // Handle cascade rename: update linked children when a parent field changes.
+      if (result.cascade != null) {
+        final childDsId = result.cascade!['childDataSource'];
+        final childField = result.cascade!['childLinkField'];
+        final parentField = result.cascade!['parentField'];
+        final newValue = formSnapshot[action.target]?[parentField];
+        if (childDsId != null && childField != null &&
+            parentField != null && newValue != null) {
+          // Find the old value from other form states (e.g., listContextForm
+          // still holds the pre-rename name from when the user navigated).
+          String? oldValue;
+          for (final entry in formSnapshot.entries) {
+            if (entry.key == action.target) continue;
+            final v = entry.value[parentField];
+            if (v != null && v != newValue) {
+              oldValue = v;
+              break;
+            }
+          }
+          if (oldValue != null && oldValue != newValue) {
+            await cascadeRename(
+              parentDataSourceId: action.dataSource!,
+              parentMatchField: parentField,
+              oldValue: oldValue,
+              newValue: newValue,
+              childDataSourceId: childDsId,
+              childLinkField: childField,
+            );
+          }
+        }
+      }
+
       if (result.navigateTo != null) {
         navigateTo(result.navigateTo!);
+      }
+
+      // Pre-fill a form with data after navigation.
+      if (result.populateForm != null && result.populateData != null) {
+        final state = getFormState(result.populateForm!);
+        for (final entry in result.populateData!.entries) {
+          var value = entry.value?.toString() ?? '';
+          // Resolve {fieldName} references from form state snapshot.
+          value = value.replaceAllMapped(
+            RegExp(r'\{(\w+)\}'),
+            (m) {
+              final ref = m.group(1)!;
+              for (final fs in formSnapshot.values) {
+                if (fs.containsKey(ref)) return fs[ref]!;
+              }
+              return m.group(0)!; // Leave unreplaced if not found.
+            },
+          );
+          state[entry.key] = value;
+        }
       }
     }
   }
@@ -544,6 +596,86 @@ class AppEngine extends ChangeNotifier {
       notifyListeners(); // Trigger list rebuild to reflect the deletion.
     } catch (e) {
       debugPrint('ODS Delete Row Action Error: $e');
+    }
+  }
+
+  /// Renames a value across a parent record and all linked child records.
+  /// Used when a parent's name field is used as a foreign key in children.
+  Future<void> cascadeRename({
+    required String parentDataSourceId,
+    required String parentMatchField,
+    required String oldValue,
+    required String newValue,
+    required String childDataSourceId,
+    required String childLinkField,
+  }) async {
+    final parentDs = _app?.dataSources[parentDataSourceId];
+    final childDs = _app?.dataSources[childDataSourceId];
+    if (parentDs == null || childDs == null) return;
+    if (oldValue == newValue) return;
+
+    try {
+      // Update parent.
+      await _dataStore.update(
+        parentDs.tableName,
+        {parentMatchField: newValue},
+        parentMatchField,
+        oldValue,
+      );
+      // Update all children.
+      final children = await _dataStore.query(childDs.tableName);
+      for (final child in children) {
+        if (child[childLinkField]?.toString() == oldValue) {
+          final id = child['_id']?.toString() ?? '';
+          await _dataStore.update(
+            childDs.tableName,
+            {childLinkField: newValue},
+            '_id',
+            id,
+          );
+        }
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('ODS Cascade Rename Error: $e');
+    }
+  }
+
+  /// Checks if all items in a group are complete, and if so, updates the parent.
+  Future<void> checkAutoComplete({
+    required String listDataSourceId,
+    required String toggleField,
+    required String groupField,
+    required String groupValue,
+    required String parentDataSourceId,
+    required String parentMatchField,
+    required Map<String, String> parentValues,
+  }) async {
+    final listDs = _app?.dataSources[listDataSourceId];
+    final parentDs = _app?.dataSources[parentDataSourceId];
+    if (listDs == null || parentDs == null) return;
+
+    try {
+      final allRows = await _dataStore.query(listDs.tableName);
+      final groupRows = allRows
+          .where((r) => r[groupField]?.toString() == groupValue)
+          .toList();
+
+      if (groupRows.isEmpty) return;
+
+      final allDone = groupRows.every((r) => r[toggleField]?.toString() == 'true');
+      if (allDone) {
+        await _dataStore.update(
+          parentDs.tableName,
+          parentValues,
+          parentMatchField,
+          groupValue,
+        );
+        _lastMessage = 'All items complete — list marked as done!';
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('ODS AutoComplete Error: $e');
     }
   }
 
