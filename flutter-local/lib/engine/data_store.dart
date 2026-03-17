@@ -55,6 +55,9 @@ class DataStore {
     final safeAppName = appName.replaceAll(RegExp(r'[^\w]'), '_').toLowerCase();
     final dbPath = p.join(dir.path, 'ods_$safeAppName.db');
 
+    // Clear stale table cache from any previously loaded app.
+    _knownTables.clear();
+
     _db = await databaseFactory.openDatabase(dbPath);
     _log('Database opened at $dbPath');
   }

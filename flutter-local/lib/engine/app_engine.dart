@@ -173,24 +173,24 @@ class AppEngine extends ChangeNotifier {
 
     _app = result.app!;
 
-    // Initialize local storage: create tables, run seed data.
+    // Initialize local storage: create tables, run seed data, load settings.
     try {
       await _dataStore.initialize(_app!.appName);
       await _dataStore.setupDataSources(_app!.dataSources);
+
+      // Load app settings from the database, falling back to spec defaults.
+      _appSettings.clear();
+      for (final entry in _app!.settings.entries) {
+        _appSettings[entry.key] = entry.value.defaultValue;
+      }
+      final savedSettings = await _dataStore.getAllAppSettings();
+      _appSettings.addAll(savedSettings);
     } catch (e) {
       _loadError = 'Database initialization failed: $e';
       _isLoading = false;
       notifyListeners();
       return false;
     }
-
-    // Load app settings from the database, falling back to spec defaults.
-    _appSettings.clear();
-    for (final entry in _app!.settings.entries) {
-      _appSettings[entry.key] = entry.value.defaultValue;
-    }
-    final savedSettings = await _dataStore.getAllAppSettings();
-    _appSettings.addAll(savedSettings);
 
     // Ready — navigate to the start page.
     _currentPageId = _app!.startPage;
