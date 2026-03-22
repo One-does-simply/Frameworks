@@ -6,20 +6,20 @@ import '../../models/ods_component.dart';
 import '../snackbar_helper.dart';
 import '../style_resolver.dart';
 
-/// Renders an [OdsButtonComponent] as a Material ElevatedButton.
+/// Renders an [OdsButtonComponent] as a Material button.
 ///
 /// ODS Spec: Buttons have a label, an onClick action array, and an optional
-/// styleHint with an `emphasis` key (primary, secondary, danger). Tapping
-/// the button executes all actions in sequence.
+/// styleHint with:
+///   - `emphasis`: "primary", "secondary", "danger" → color
+///   - `variant`: "filled" (default), "outlined", "text", "tonal" → shape
+///   - `icon`: Material icon name → leading icon
+///   - `size`: "compact", "default", "large" → size scaling
+///   - `color`: named/semantic color → custom accent override
 ///
 /// ODS Ethos: Buttons are the only interactive element besides forms. They
 /// do exactly two things: navigate somewhere or submit a form. This
 /// constraint makes ODS apps predictable — every button tap either shows
 /// you something new or saves what you entered.
-///
-/// When an action fails (e.g., required fields are missing), the engine
-/// sets [AppEngine.lastActionError] and this widget shows it as a SnackBar
-/// so the user gets immediate, clear feedback.
 class OdsButtonWidget extends StatelessWidget {
   final OdsButtonComponent model;
   final StyleResolver styleResolver;
@@ -55,38 +55,78 @@ class OdsButtonWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = styleResolver.resolveButtonStyle(model.styleHint, context);
+    final iconData = StyleResolver.resolveIcon(model.styleHint.icon);
+
+    // Build the button content — icon + label or just label.
+    Widget child;
+    if (iconData != null) {
+      child = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(iconData, size: model.styleHint.size == 'compact' ? 16 : 18),
+          const SizedBox(width: 8),
+          Text(model.label),
+        ],
+      );
+    } else {
+      child = Text(model.label);
+    }
+
+    final onPressed = () async {
+      final engine = context.read<AppEngine>();
+
+      await engine.executeActions(
+        model.onClick,
+        confirmFn: (message) async {
+          if (!context.mounted) return false;
+          return await _showConfirmation(context, message);
+        },
+      );
+
+      if (!context.mounted) return;
+
+      if (engine.lastActionError != null) {
+        showOdsSnackBar(context, message: engine.lastActionError!, isError: true);
+      }
+
+      if (engine.lastMessage != null) {
+        showOdsSnackBar(context, message: engine.lastMessage!);
+      }
+    };
+
+    // Pick the right widget type based on variant.
+    Widget button;
+    if (styleResolver.isOutlinedVariant(model.styleHint)) {
+      button = OutlinedButton(
+        style: style,
+        onPressed: onPressed,
+        child: child,
+      );
+    } else if (styleResolver.isTextVariant(model.styleHint)) {
+      button = TextButton(
+        style: style,
+        onPressed: onPressed,
+        child: child,
+      );
+    } else {
+      button = ElevatedButton(
+        style: style,
+        onPressed: onPressed,
+        child: child,
+      );
+    }
+
+    // Apply alignment from style hint.
+    final align = model.styleHint.align;
+    if (align == 'center') {
+      button = Center(child: button);
+    } else if (align == 'right') {
+      button = Align(alignment: Alignment.centerRight, child: button);
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: ElevatedButton(
-        style: style,
-        onPressed: () async {
-          final engine = context.read<AppEngine>();
-
-          // Pass the full action chain to the engine so it can handle
-          // chain termination (e.g., record cursor onEnd stops remaining
-          // actions) and share the form state snapshot across all actions.
-          await engine.executeActions(
-            model.onClick,
-            confirmFn: (message) async {
-              if (!context.mounted) return false;
-              return await _showConfirmation(context, message);
-            },
-          );
-
-          if (!context.mounted) return;
-
-          // Show a SnackBar if an action failed (e.g., required validation).
-          if (engine.lastActionError != null) {
-            showOdsSnackBar(context, message: engine.lastActionError!, isError: true);
-          }
-
-          // Show an info SnackBar from showMessage actions.
-          if (engine.lastMessage != null) {
-            showOdsSnackBar(context, message: engine.lastMessage!);
-          }
-        },
-        child: Text(model.label),
-      ),
+      child: button,
     );
   }
 }

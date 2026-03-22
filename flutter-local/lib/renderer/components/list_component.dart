@@ -649,12 +649,33 @@ class _OdsListWidgetState extends State<OdsListWidget> {
     String? currencySymbol,
     Set<String> fallbackCurrencyFields = const {},
   }) {
+    // Resolve density hint for row spacing.
+    final density = widget.model.styleHint.density;
+    final dataRowMinHeight = switch (density) {
+      'compact' => 36.0,
+      'comfortable' => 56.0,
+      _ => 48.0,
+    };
+    final dataRowMaxHeight = switch (density) {
+      'compact' => 40.0,
+      'comfortable' => 64.0,
+      _ => 52.0,
+    };
+    final headingRowHeight = switch (density) {
+      'compact' => 40.0,
+      'comfortable' => 60.0,
+      _ => 56.0,
+    };
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
         showCheckboxColumn: false,
         sortColumnIndex: sortColumnIndex,
         sortAscending: _sortAscending,
+        dataRowMinHeight: dataRowMinHeight,
+        dataRowMaxHeight: dataRowMaxHeight,
+        headingRowHeight: headingRowHeight,
         columns: [
           ...widget.model.columns.map((col) {
             return DataColumn(

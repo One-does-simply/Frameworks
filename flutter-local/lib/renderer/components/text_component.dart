@@ -25,12 +25,13 @@ class OdsTextWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = styleResolver.resolveTextStyle(model.styleHint, context);
+    final textAlign = styleResolver.resolveTextAlign(model.styleHint);
 
     // Fast path: no aggregates → render directly.
     if (!AggregateEvaluator.hasAggregates(model.content)) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        child: _renderText(model.content, style, context),
+        child: _renderText(model.content, style, textAlign, context),
       );
     }
 
@@ -45,17 +46,21 @@ class OdsTextWidget extends StatelessWidget {
         ),
         builder: (context, snapshot) {
           final text = snapshot.data ?? model.content;
-          return _renderText(text, style, context);
+          return _renderText(text, style, textAlign, context);
         },
       ),
     );
   }
 
-  Widget _renderText(String text, TextStyle? style, BuildContext context) {
+  Widget _renderText(String text, TextStyle? style, TextAlign textAlign, BuildContext context) {
     if (model.format == 'markdown') {
-      return _MarkdownRenderer(text: text, baseStyle: style);
+      return _MarkdownRenderer(
+        text: text,
+        baseStyle: style,
+        crossAxisAlignment: styleResolver.resolveCrossAlignment(model.styleHint),
+      );
     }
-    return Text(text, style: style);
+    return Text(text, style: style, textAlign: textAlign);
   }
 }
 
@@ -63,8 +68,13 @@ class OdsTextWidget extends StatelessWidget {
 class _MarkdownRenderer extends StatelessWidget {
   final String text;
   final TextStyle? baseStyle;
+  final CrossAxisAlignment crossAxisAlignment;
 
-  const _MarkdownRenderer({required this.text, this.baseStyle});
+  const _MarkdownRenderer({
+    required this.text,
+    this.baseStyle,
+    this.crossAxisAlignment = CrossAxisAlignment.start,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -76,7 +86,7 @@ class _MarkdownRenderer extends StatelessWidget {
     final widgets = visitor.render(nodes);
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: crossAxisAlignment,
       children: widgets,
     );
   }

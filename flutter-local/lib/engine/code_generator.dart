@@ -981,6 +981,8 @@ include: package:flutter_lints/flutter.yaml
 
   void _genTextComponent(StringBuffer buf, OdsTextComponent c) {
     final variant = c.styleHint.variant;
+    final color = c.styleHint.color;
+    final align = c.styleHint.align;
     String? style;
     switch (variant) {
       case 'heading':
@@ -991,12 +993,55 @@ include: package:flutter_lints/flutter.yaml
         style = 'Theme.of(context).textTheme.bodySmall';
     }
 
+    // Apply color hint.
+    String? colorExpr;
+    if (color != null) {
+      switch (color) {
+        case 'success' || 'green':
+          colorExpr = 'const Color(0xFF16A34A)';
+        case 'warning' || 'amber' || 'orange':
+          colorExpr = 'const Color(0xFFD97706)';
+        case 'error' || 'red':
+          colorExpr = 'Theme.of(context).colorScheme.error';
+        case 'info' || 'blue':
+          colorExpr = 'const Color(0xFF2563EB)';
+        case 'grey' || 'gray':
+          colorExpr = 'const Color(0xFF6B7280)';
+        case 'purple':
+          colorExpr = 'const Color(0xFF9333EA)';
+        case 'teal':
+          colorExpr = 'const Color(0xFF0D9488)';
+        case 'indigo':
+          colorExpr = 'const Color(0xFF4F46E5)';
+      }
+    }
+
+    String? textAlignExpr;
+    if (align == 'center') {
+      textAlignExpr = 'TextAlign.center';
+    } else if (align == 'right') {
+      textAlignExpr = 'TextAlign.right';
+    }
+
+    // Combine style + color.
+    String? combinedStyle;
+    if (style != null && colorExpr != null) {
+      combinedStyle = '$style?.copyWith(color: $colorExpr)';
+    } else if (style != null) {
+      combinedStyle = style;
+    } else if (colorExpr != null) {
+      combinedStyle = 'TextStyle(color: $colorExpr)';
+    }
+
     buf.writeln('          Padding(');
     buf.writeln('            padding: const EdgeInsets.symmetric(vertical: 8),');
     buf.writeln('            child: Text(');
     buf.writeln('              ${_dartString(c.content)},');
-    if (style != null) {
-      buf.writeln('              style: $style,');
+    if (combinedStyle != null) {
+      buf.writeln('              style: $combinedStyle,');
+    }
+    if (textAlignExpr != null) {
+      buf.writeln('              textAlign: $textAlignExpr,');
     }
     buf.writeln('            ),');
     buf.writeln('          ),');
@@ -1290,9 +1335,15 @@ include: package:flutter_lints/flutter.yaml
     String pageId,
   ) {
     final emphasis = c.styleHint.emphasis;
-    final isSecondary = emphasis == 'secondary';
+    final variant = c.styleHint.get<String>('variant') ?? 'filled';
+    final iconName = c.styleHint.icon;
     final isDanger = emphasis == 'danger';
-    final widgetType = isSecondary ? 'OutlinedButton' : 'ElevatedButton';
+    // Choose widget type based on variant hint.
+    final widgetType = switch (variant) {
+      'outlined' => 'OutlinedButton',
+      'text' => 'TextButton',
+      _ => 'ElevatedButton',
+    };
 
     buf.writeln('          Padding(');
     buf.writeln('            padding: const EdgeInsets.symmetric(vertical: 8),');
@@ -1357,7 +1408,23 @@ include: package:flutter_lints/flutter.yaml
     }
 
     buf.writeln('              },');
-    buf.writeln("              child: Text(${_dartString(c.label)}),");
+    // Add icon if specified in styleHint.
+    if (iconName != null) {
+      final iconMap = const {
+        'add': 'Icons.add', 'add_circle': 'Icons.add_circle_outline',
+        'save': 'Icons.save_outlined', 'check': 'Icons.check',
+        'check_circle': 'Icons.check_circle_outline', 'delete': 'Icons.delete_outline',
+        'edit': 'Icons.edit_outlined', 'arrow_back': 'Icons.arrow_back',
+        'close': 'Icons.close', 'search': 'Icons.search',
+        'send': 'Icons.send_outlined', 'visibility': 'Icons.visibility_outlined',
+        'rocket': 'Icons.rocket_launch_outlined', 'event': 'Icons.event_outlined',
+        'cancel': 'Icons.cancel_outlined', 'star': 'Icons.star_outline',
+      };
+      final iconExpr = iconMap[iconName] ?? 'Icons.circle_outlined';
+      buf.writeln("              child: Row(mainAxisSize: MainAxisSize.min, children: [Icon($iconExpr, size: 18), const SizedBox(width: 8), Text(${_dartString(c.label)})]),");
+    } else {
+      buf.writeln("              child: Text(${_dartString(c.label)}),");
+    }
     buf.writeln('            ),');
     buf.writeln('          ),');
   }

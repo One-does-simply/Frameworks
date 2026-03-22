@@ -329,8 +329,25 @@ class AppEngine extends ChangeNotifier {
       }
 
       // Clear the form after a successful submit so fields reset.
+      // If preserveFields is set, restore those values after clearing
+      // (enables "Add & Add Another" flows where context is kept).
       if (result.submitted && action.target != null) {
+        Map<String, String>? preserved;
+        if (action.preserveFields.isNotEmpty) {
+          final oldState = _formStates[action.target!];
+          if (oldState != null) {
+            preserved = {
+              for (final field in action.preserveFields)
+                if (oldState.containsKey(field)) field: oldState[field]!,
+            };
+          }
+        }
         clearForm(action.target!);
+        if (preserved != null && preserved.isNotEmpty) {
+          final state = getFormState(action.target!);
+          state.addAll(preserved);
+          notifyListeners();
+        }
       }
 
       // Handle cascade rename: update linked children when a parent field changes.

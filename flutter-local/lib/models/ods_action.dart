@@ -88,6 +88,11 @@ class OdsAction {
   /// field is renamed. Contains childDataSource and childLinkField.
   final Map<String, String>? cascade;
 
+  /// For "submit": field names to preserve after the form is cleared.
+  /// Enables "Add & Add Another" flows where the user submits, the form
+  /// resets, but contextual fields (e.g., the selected list) are kept.
+  final List<String> preserveFields;
+
   const OdsAction({
     required this.action,
     this.target,
@@ -101,6 +106,7 @@ class OdsAction {
     this.onEnd,
     this.message,
     this.cascade,
+    this.preserveFields = const [],
   });
 
   bool get isNavigate => action == 'navigate';
@@ -137,6 +143,9 @@ class OdsAction {
       message: json['message'] as String?,
       cascade: (json['cascade'] as Map<String, dynamic>?)
           ?.map((k, v) => MapEntry(k, v.toString())),
+      preserveFields: (json['preserveFields'] as List<dynamic>?)
+              ?.cast<String>() ??
+          const [],
     );
   }
 
@@ -152,5 +161,6 @@ class OdsAction {
         if (filter != null) 'filter': filter,
         if (onEnd != null) 'onEnd': onEnd!.toJson(),
         if (message != null) 'message': message,
+        if (preserveFields.isNotEmpty) 'preserveFields': preserveFields,
       };
 }
