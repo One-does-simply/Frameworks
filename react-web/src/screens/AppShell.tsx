@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate, useParams } from 'react-router'
 import { useAppStore } from '@/engine/app-store.ts'
 import { PageRenderer } from '@/renderer/PageRenderer.tsx'
 import { Button } from '@/components/ui/button'
@@ -34,17 +35,28 @@ import { DebugPanel } from './DebugPanel.tsx'
 // ---------------------------------------------------------------------------
 
 export function AppShell() {
+  const routerNavigate = useNavigate()
+  const { slug } = useParams<{ slug: string }>()
+
   const app = useAppStore((s) => s.app)!
   const currentPageId = useAppStore((s) => s.currentPageId)
   const canGoBack = useAppStore((s) => s.canGoBack)
   const goBack = useAppStore((s) => s.goBack)
-  const navigateTo = useAppStore((s) => s.navigateTo)
+  const storeNavigateTo = useAppStore((s) => s.navigateTo)
   const reset = useAppStore((s) => s.reset)
   const lastMessage = useAppStore((s) => s.lastMessage)
   const lastActionError = useAppStore((s) => s.lastActionError)
   const isMultiUser = useAppStore((s) => s.isMultiUser)
   const authService = useAppStore((s) => s.authService)
   const debugMode = useAppStore((s) => s.debugMode)
+
+  // Wrap navigateTo to also update the URL
+  const navigateTo = (pageId: string) => {
+    storeNavigateTo(pageId)
+    if (slug) {
+      routerNavigate(`/${slug}/${pageId}`, { replace: true })
+    }
+  }
 
   const [menuOpen, setMenuOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -111,6 +123,7 @@ export function AppShell() {
   function handleCloseApp() {
     setMenuOpen(false)
     reset()
+    routerNavigate('/admin')
   }
 
   // -------------------------------------------------------------------------

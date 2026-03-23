@@ -1,34 +1,27 @@
-import { useAppStore } from '@/engine/app-store.ts'
-import { WelcomeScreen } from '@/screens/WelcomeScreen.tsx'
-import { AdminSetupScreen } from '@/screens/AdminSetupScreen.tsx'
-import { LoginScreen } from '@/screens/LoginScreen.tsx'
-import { AppShell } from '@/screens/AppShell.tsx'
+import { Routes, Route, Navigate } from 'react-router'
+import { AdminGuard } from '@/screens/AdminGuard.tsx'
+import { AdminDashboard } from '@/screens/AdminDashboard.tsx'
+import { UserManagementPage } from '@/screens/UserManagementPage.tsx'
+import { AppEditor } from '@/screens/AppEditor.tsx'
+import { AppLoader } from '@/screens/AppLoader.tsx'
 import { Toaster } from '@/components/ui/sonner'
 
 // ---------------------------------------------------------------------------
-// App — root component with auth gate routing
+// App — root component with React Router multi-app routing
 // ---------------------------------------------------------------------------
 
 export default function App() {
-  const app = useAppStore((s) => s.app)
-  const needsAdminSetup = useAppStore((s) => s.needsAdminSetup)
-  const needsLogin = useAppStore((s) => s.needsLogin)
-
-  let content: React.ReactNode
-
-  if (!app) {
-    content = <WelcomeScreen />
-  } else if (needsAdminSetup) {
-    content = <AdminSetupScreen />
-  } else if (needsLogin) {
-    content = <LoginScreen />
-  } else {
-    content = <AppShell />
-  }
-
   return (
     <>
-      {content}
+      <Routes>
+        <Route path="/admin" element={<AdminGuard />}>
+          <Route index element={<AdminDashboard />} />
+          <Route path="users" element={<UserManagementPage />} />
+          <Route path="apps/:appId/edit" element={<AppEditor />} />
+        </Route>
+        <Route path="/:slug/*" element={<AppLoader />} />
+        <Route path="/" element={<Navigate to="/admin" replace />} />
+      </Routes>
       <Toaster position="bottom-right" richColors closeButton />
     </>
   )

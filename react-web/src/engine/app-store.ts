@@ -62,6 +62,9 @@ export interface AppState {
   dataService: DataService | null
   authService: AuthService | null
 
+  // Multi-app routing
+  currentSlug: string | null
+
   // Computed getters
   isMultiUser: boolean
   needsAdminSetup: boolean
@@ -69,7 +72,7 @@ export interface AppState {
   isMultiUserOnly: boolean
 
   // Actions
-  loadSpec: (jsonString: string, dataService: DataService, authService: AuthService) => Promise<boolean>
+  loadSpec: (jsonString: string, dataService: DataService, authService: AuthService, slug?: string) => Promise<boolean>
   navigateTo: (pageId: string) => void
   goBack: () => void
   canGoBack: () => boolean
@@ -135,6 +138,7 @@ const initialState = {
   appSettings: {} as Record<string, string>,
   dataService: null,
   authService: null,
+  currentSlug: null as string | null,
   isMultiUser: false,
   needsAdminSetup: false,
   needsLogin: false,
@@ -152,7 +156,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   // Spec loading
   // -------------------------------------------------------------------------
 
-  loadSpec: async (jsonString: string, dataService: DataService, authService: AuthService): Promise<boolean> => {
+  loadSpec: async (jsonString: string, dataService: DataService, authService: AuthService, slug?: string): Promise<boolean> => {
     set({ isLoading: true, loadError: null })
 
     // Parse and validate.
@@ -204,6 +208,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
         formStates: {},
         recordCursors: {},
         isLoading: false,
+        currentSlug: slug ?? null,
         isMultiUser: app.auth.multiUser,
         isMultiUserOnly: app.auth.multiUserOnly ?? false,
         needsAdminSetup: app.auth.multiUser && !authService.isAdminSetUp,
