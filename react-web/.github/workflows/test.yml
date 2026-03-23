@@ -1,0 +1,63 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit:
+    name: Unit & Component Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: Frameworks/react-web
+
+      - uses: actions/checkout@v4
+        with:
+          repository: One-does-simply/Specification
+          path: Specification
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Frameworks/react-web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: Frameworks/react-web
+        run: npm ci
+
+      - name: TypeScript check
+        working-directory: Frameworks/react-web
+        run: npx tsc -b
+
+      - name: Run tests
+        working-directory: Frameworks/react-web
+        run: npm test
+
+  # E2E tests (requires PocketBase) — uncomment when ready
+  # e2e:
+  #   name: E2E Tests
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: 22
+  #         cache: npm
+  #     - run: npm ci
+  #     - name: Download PocketBase
+  #       run: |
+  #         curl -fsSL https://github.com/pocketbase/pocketbase/releases/download/v0.25.9/pocketbase_0.25.9_linux_amd64.zip -o pb.zip
+  #         unzip pb.zip -d pb
+  #     - name: Start PocketBase
+  #       run: ./pb/pocketbase serve &
+  #     - name: Install Playwright
+  #       run: npx playwright install --with-deps chromium
+  #     - name: Build
+  #       run: npm run build
+  #     - name: Run E2E tests
+  #       run: npx playwright test --project=chromium
