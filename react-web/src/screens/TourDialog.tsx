@@ -1,28 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAppStore } from '@/engine/app-store.ts'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 
 // ---------------------------------------------------------------------------
 // TourDialog — step-through guided tour, shown on first app launch
 // ---------------------------------------------------------------------------
 //
-// ODS Spec: The `tour` array defines an ordered list of steps, each with a
-// `title`, `content`, and optional `page` reference. The framework presents
-// them sequentially and navigates to the referenced page when a step has one.
-//
-// ODS Ethos: Every app should be self-explanatory. The tour walks new users
-// through the experience — no external docs needed. It runs automatically
-// on first launch and can be replayed from settings.
-// ---------------------------------------------------------------------------
+// Renders as a floating card at the bottom-right of the screen with NO
+// backdrop overlay, so the user can see the app page behind it. This matches
+// the Flutter framework's tour which navigates between pages as the tour
+// progresses.
 
 const TOUR_SEEN_PREFIX = 'ods_tour_seen_'
 
@@ -47,7 +35,6 @@ function markTourSeen(appName: string): void {
 }
 
 interface TourDialogProps {
-  /** Externally controlled open state. When undefined, the dialog manages its own visibility. */
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }
@@ -62,7 +49,6 @@ export function TourDialog({ open: controlledOpen, onOpenChange }: TourDialogPro
   const tour = app?.tour ?? []
   const appName = app?.appName ?? ''
 
-  // Determine whether we're controlled or uncontrolled.
   const isControlled = controlledOpen !== undefined
   const isOpen = isControlled ? controlledOpen : internalOpen
 
@@ -74,7 +60,6 @@ export function TourDialog({ open: controlledOpen, onOpenChange }: TourDialogPro
     }
   }, [isControlled, tour.length, appName])
 
-  // Navigate to the step's page if it has one.
   const navigateIfNeeded = useCallback(
     (stepIndex: number) => {
       const step = tour[stepIndex]
@@ -90,27 +75,22 @@ export function TourDialog({ open: controlledOpen, onOpenChange }: TourDialogPro
     if (isOpen && tour.length > 0) {
       navigateIfNeeded(0)
     }
-    // Only run when the dialog opens, not on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
 
-  function handleOpenChange(value: boolean) {
-    if (!value) {
-      // Closing — mark as seen.
-      if (appName) markTourSeen(appName)
-      setCurrentStep(0)
-    }
+  function close() {
+    if (appName) markTourSeen(appName)
+    setCurrentStep(0)
     if (isControlled) {
-      onOpenChange?.(value)
+      onOpenChange?.(false)
     } else {
-      setInternalOpen(value)
+      setInternalOpen(false)
     }
   }
 
   function handleNext() {
     if (currentStep >= tour.length - 1) {
-      // Last step — close the dialog.
-      handleOpenChange(false)
+      close()
       return
     }
     const nextStep = currentStep + 1
@@ -125,12 +105,7 @@ export function TourDialog({ open: controlledOpen, onOpenChange }: TourDialogPro
     navigateIfNeeded(prevStep)
   }
 
-  function handleSkip() {
-    handleOpenChange(false)
-  }
-
-  // Nothing to render if there's no tour.
-  if (tour.length === 0) return null
+  if (!isOpen || tour.length === 0) return null
 
   const step = tour[currentStep]
   const isFirst = currentStep === 0
@@ -138,42 +113,40 @@ export function TourDialog({ open: controlledOpen, onOpenChange }: TourDialogPro
   const progress = ((currentStep + 1) / tour.length) * 100
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent showCloseButton={false} className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{step.title}</DialogTitle>
-          <DialogDescription>{step.content}</DialogDescription>
-        </DialogHeader>
-
-        {/* Progress indicator */}
-        <div className="space-y-1">
-          <p className="text-xs text-muted-foreground">
-            Step {currentStep + 1} of {tour.length}
-          </p>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+    <div className="fixed bottom-4 right-4 z-50 w-96 animate-in slide-in-from-bottom-4 fade-in duration-300">
+      <Card className="shadow-lg border-primary/20">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">{step.title}</CardTitle>
+            <span className="text-xs text-muted-foreground">
+              {currentStep + 1} / {tour.length}
+            </span>
+          </div>
+          {/* Progress bar */}
+          <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-primary transition-all duration-300"
               style={{ width: `${progress}%` }}
             />
           </div>
-        </div>
-
-        <Separator />
-
-        <DialogFooter>
+        </CardHeader>
+        <CardContent className="pb-3">
+          <p className="text-sm text-muted-foreground">{step.content}</p>
+        </CardContent>
+        <CardFooter className="flex justify-end gap-2 pt-0">
           {!isFirst && (
-            <Button variant="outline" onClick={handlePrevious}>
+            <Button variant="ghost" size="sm" onClick={handlePrevious}>
               Back
             </Button>
           )}
-          <Button variant="ghost" onClick={handleSkip}>
-            Skip Tour
+          <Button variant="ghost" size="sm" onClick={close}>
+            Skip
           </Button>
-          <Button onClick={handleNext}>
+          <Button size="sm" onClick={handleNext}>
             {isLast ? 'Get Started' : 'Next'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </CardFooter>
+      </Card>
+    </div>
   )
 }
