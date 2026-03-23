@@ -37,6 +37,23 @@ class OdsListWidget extends StatefulWidget {
 class _OdsListWidgetState extends State<OdsListWidget> {
   /// Width of each card in card layout mode.
   static const double _cardWidth = 280;
+
+  /// Returns columns filtered by the current user's roles.
+  List<OdsListColumn> _visibleColumns(AppEngine engine) {
+    if (!engine.isMultiUser) return widget.model.columns;
+    return widget.model.columns
+        .where((col) => engine.authService.hasAccess(col.roles))
+        .toList();
+  }
+
+  /// Returns row actions filtered by the current user's roles.
+  List<OdsRowAction> _visibleRowActions(AppEngine engine) {
+    if (!engine.isMultiUser) return widget.model.rowActions;
+    return widget.model.rowActions
+        .where((action) => engine.authService.hasAccess(action.roles))
+        .toList();
+  }
+
   /// The field currently used for sorting, or null if unsorted.
   String? _sortField;
 
@@ -519,13 +536,15 @@ class _OdsListWidgetState extends State<OdsListWidget> {
     }
 
     final engine = context.watch<AppEngine>();
-    final hasRowActions = widget.model.rowActions.isNotEmpty;
+    final visibleCols = _visibleColumns(engine);
+    final visibleActions = _visibleRowActions(engine);
+    final hasRowActions = visibleActions.isNotEmpty;
     final computedFields = _getComputedFields(engine);
     final currencySymbol = engine.getAppSetting('currency');
     // If no columns explicitly opt in to currency, fall back to applying
     // the currency symbol to all number-type columns (backwards compat).
     final anyColumnHasCurrency =
-        widget.model.columns.any((col) => col.currency);
+        visibleCols.any((col) => col.currency);
     final fallbackCurrencyFields = !anyColumnHasCurrency && currencySymbol != null
         ? _getNumericFields(engine)
         : <String>{};
@@ -586,6 +605,8 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                   engine,
                   currencySymbol: currencySymbol,
                   fallbackCurrencyFields: fallbackCurrencyFields,
+                  visibleCols: visibleCols,
+                  visibleActions: visibleActions,
                 )
               else
                 _buildTable(
@@ -596,6 +617,8 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                   hasRowActions: hasRowActions,
                   currencySymbol: currencySymbol,
                   fallbackCurrencyFields: fallbackCurrencyFields,
+                  visibleCols: visibleCols,
+                  visibleActions: visibleActions,
                 ),
               // Tap-to-edit hint when rows are tappable.
               if (widget.model.onRowTap != null && sortedRows.isNotEmpty)
@@ -648,6 +671,8 @@ class _OdsListWidgetState extends State<OdsListWidget> {
     required bool hasRowActions,
     String? currencySymbol,
     Set<String> fallbackCurrencyFields = const {},
+    required List<OdsListColumn> visibleCols,
+    required List<OdsRowAction> visibleActions,
   }) {
     // Resolve density hint for row spacing.
     final density = widget.model.styleHint.density;
@@ -677,7 +702,7 @@ class _OdsListWidgetState extends State<OdsListWidget> {
         dataRowMaxHeight: dataRowMaxHeight,
         headingRowHeight: headingRowHeight,
         columns: [
-          ...widget.model.columns.map((col) {
+          ...visibleCols.map((col) {
             return DataColumn(
               label: Text(col.header),
               onSort: col.sortable
@@ -716,7 +741,7 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                   }
                 : null,
             cells: [
-              ...widget.model.columns.map((col) {
+              ...visibleCols.map((col) {
                 // Toggle column: render as checkbox.
                 if (col.toggle != null) {
                   final checked = _getCellValue(row, col.field, computedFields) == 'true';
@@ -767,7 +792,7 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                 DataCell(
                   Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: widget.model.rowActions
+                    children: visibleActions
                         .where((action) =>
                             action.hideWhen == null ||
                             !action.hideWhen!.matches(row))
@@ -809,8 +834,10 @@ class _OdsListWidgetState extends State<OdsListWidget> {
     AppEngine engine, {
     String? currencySymbol,
     Set<String> fallbackCurrencyFields = const {},
+    required List<OdsListColumn> visibleCols,
+    required List<OdsRowAction> visibleActions,
   }) {
-    final hasRowActions = widget.model.rowActions.isNotEmpty;
+    final hasRowActions = visibleActions.isNotEmpty;
     final theme = Theme.of(context);
 
     return Wrap(
@@ -857,7 +884,7 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ...widget.model.columns.map((col) {
+                    ...visibleCols.map((col) {
                       // Toggle column in card view: render as checkbox row.
                       if (col.toggle != null) {
                         final checked = _getCellValue(row, col.field, computedFields) == 'true';
@@ -927,7 +954,7 @@ class _OdsListWidgetState extends State<OdsListWidget> {
                       const Divider(),
                       Wrap(
                         spacing: 4,
-                        children: widget.model.rowActions
+                        children: visibleActions
                             .where((action) =>
                                 action.hideWhen == null ||
                                 !action.hideWhen!.matches(row))

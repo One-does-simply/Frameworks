@@ -232,6 +232,10 @@ class OdsFieldDefinition {
   /// still storing the raw option value ("A", "B").
   final List<String>? optionLabels;
 
+  /// Optional role restriction. When set, only users with a matching role
+  /// can see this field. When null/empty, visible to everyone.
+  final List<String>? roles;
+
   /// Whether this field is computed (has a formula).
   bool get isComputed => formula != null;
 
@@ -251,6 +255,7 @@ class OdsFieldDefinition {
     this.readOnly = false,
     this.displayVariant,
     this.optionLabels,
+    this.roles,
   });
 
   factory OdsFieldDefinition.fromJson(Map<String, dynamic> json) {
@@ -276,6 +281,7 @@ class OdsFieldDefinition {
       readOnly: json['readOnly'] as bool? ?? false,
       displayVariant: json['displayVariant'] as String?,
       optionLabels: (json['optionLabels'] as List<dynamic>?)?.cast<String>(),
+      roles: (json['roles'] as List<dynamic>?)?.cast<String>(),
     );
   }
 
@@ -294,5 +300,6 @@ class OdsFieldDefinition {
         if (displayVariant != null) 'displayVariant': displayVariant,
         if (visibleWhen != null) 'visibleWhen': visibleWhen!.toJson(),
         if (validation != null) 'validation': validation!.toJson(),
+        if (roles != null) 'roles': roles,
       };
 }

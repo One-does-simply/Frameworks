@@ -6,6 +6,7 @@ import '../models/ods_component.dart';
 import '../parser/spec_parser.dart';
 import '../parser/spec_validator.dart';
 import 'action_handler.dart';
+import 'auth_service.dart';
 import 'data_store.dart';
 
 /// Holds a filtered dataset and a cursor position for record-source forms.
@@ -57,6 +58,7 @@ class AppEngine extends ChangeNotifier {
   final List<String> _navigationStack = [];
   final Map<String, Map<String, String>> _formStates = {};
   final DataStore _dataStore = DataStore();
+  late final AuthService _authService;
   late final ActionHandler _actionHandler;
   ValidationResult? _validation;
 
@@ -83,6 +85,7 @@ class AppEngine extends ChangeNotifier {
   String? _lastMessage;
 
   AppEngine() {
+    _authService = AuthService(_dataStore);
     _actionHandler = ActionHandler(dataStore: _dataStore);
   }
 
@@ -113,6 +116,23 @@ class AppEngine extends ChangeNotifier {
 
   /// Direct access to the data store for the debug panel's data explorer.
   DataStore get dataStore => _dataStore;
+
+  /// The auth service for login, user management, and role checks.
+  AuthService get authService => _authService;
+
+  /// Whether the loaded app uses multi-user mode.
+  bool get isMultiUser => _app?.auth.multiUser ?? false;
+
+  /// Whether the admin setup wizard needs to be shown.
+  /// True when multi-user is enabled but no admin account exists yet.
+  bool get needsAdminSetup => isMultiUser && !_authService.isAdminSetUp;
+
+  /// Whether the login screen needs to be shown.
+  /// True when multi-user is enabled, admin is set up, but no user is logged in.
+  bool get needsLogin => isMultiUser && _authService.isAdminSetUp && !_authService.isLoggedIn;
+
+  /// Whether the app requires multi-user and cannot run without it.
+  bool get isMultiUserOnly => _app?.auth.multiUserOnly ?? false;
 
   /// The most recent action error, if any. Used by the UI to show feedback
   /// (e.g., SnackBar) when required fields are missing on submit.
@@ -185,6 +205,11 @@ class AppEngine extends ChangeNotifier {
       }
       final savedSettings = await _dataStore.getAllAppSettings();
       _appSettings.addAll(savedSettings);
+
+      // Initialize auth if multi-user mode is enabled.
+      if (_app!.auth.multiUser) {
+        await _authService.initialize();
+      }
     } catch (e) {
       _loadError = 'Database initialization failed: $e';
       _isLoading = false;
@@ -208,8 +233,17 @@ class AppEngine extends ChangeNotifier {
 
   /// Navigates to a page, pushing the current page onto the back stack.
   /// Silently ignores requests to navigate to unknown page IDs.
+  /// Blocks navigation to role-restricted pages the user can't access.
   void navigateTo(String pageId) {
     if (_app == null || !_app!.pages.containsKey(pageId)) return;
+
+    // Role-based navigation guard.
+    final targetPage = _app!.pages[pageId]!;
+    if (isMultiUser && !_authService.hasAccess(targetPage.roles)) {
+      debugPrint('ODS: Navigation blocked — user lacks role for page "$pageId"');
+      return;
+    }
+
     if (_currentPageId != null) {
       _navigationStack.add(_currentPageId!);
     }
@@ -314,6 +348,7 @@ class AppEngine extends ChangeNotifier {
         action: action,
         app: _app!,
         formStates: formSnapshot,
+        ownerId: isMultiUser ? _authService.currentUserId?.toString() : null,
       );
 
       if (result.error != null) {
@@ -884,6 +919,16 @@ class AppEngine extends ChangeNotifier {
     final ds = _app?.dataSources[dataSourceId];
     if (ds == null || !ds.isLocal) return [];
     try {
+      // Apply ownership filtering when enabled.
+      if (isMultiUser && ds.ownership.enabled) {
+        return await _dataStore.queryWithOwnership(
+          ds.tableName,
+          ownerField: ds.ownership.ownerField,
+          ownerId: _authService.currentUserId?.toString(),
+          isAdmin: _authService.isAdmin,
+          adminOverride: ds.ownership.adminOverride,
+        );
+      }
       return await _dataStore.query(ds.tableName);
     } catch (_) {
       return [];
@@ -898,6 +943,7 @@ class AppEngine extends ChangeNotifier {
   /// to the welcome screen ready to load a new spec.
   Future<void> reset() async {
     await _dataStore.close();
+    _authService.reset();
     _app = null;
     _currentPageId = null;
     _navigationStack.clear();

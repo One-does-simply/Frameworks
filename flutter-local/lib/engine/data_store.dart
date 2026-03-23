@@ -236,6 +236,35 @@ class DataStore {
     return rows;
   }
 
+  /// Queries a table with ownership filtering applied.
+  /// When [ownerField] is set and [ownerId] is provided, adds a WHERE clause.
+  /// When [isAdmin] is true and admin override is allowed, skips the filter.
+  Future<List<Map<String, dynamic>>> queryWithOwnership(
+    String tableName, {
+    String? ownerField,
+    String? ownerId,
+    bool isAdmin = false,
+    bool adminOverride = true,
+  }) async {
+    final db = _db!;
+    String? where;
+    List<String>? whereArgs;
+
+    if (ownerField != null && ownerId != null && !(isAdmin && adminOverride)) {
+      where = '"$ownerField" = ?';
+      whereArgs = [ownerId];
+    }
+
+    final rows = await db.query(
+      tableName,
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: '_id DESC',
+    );
+    _log('SELECT from "$tableName"${where != null ? ' WHERE $ownerField=$ownerId' : ''}: ${rows.length} rows');
+    return rows;
+  }
+
   /// Returns the number of rows in a table, or 0 if the table doesn't exist.
   Future<int> getRowCount(String tableName) async {
     final db = _db!;
@@ -399,6 +428,176 @@ class DataStore {
 
     _log('Imported $count rows into "$tableName"');
     return count;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Auth tables — framework-managed user/role storage for multi-user mode
+  // ---------------------------------------------------------------------------
+
+  /// Creates the internal auth tables if they don't exist.
+  /// Called during engine init when auth.multiUser is true.
+  Future<void> ensureAuthTables() async {
+    final db = _db!;
+
+    if (!_knownTables.contains('_ods_users')) {
+      final existing = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='_ods_users'",
+      );
+      if (existing.isEmpty) {
+        await db.execute('''
+          CREATE TABLE "_ods_users" (
+            _id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            salt TEXT NOT NULL,
+            display_name TEXT,
+            _createdAt TEXT
+          )
+        ''');
+        _log('Created auth table "_ods_users"');
+      }
+      _knownTables.add('_ods_users');
+    }
+
+    if (!_knownTables.contains('_ods_user_roles')) {
+      final existing = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='_ods_user_roles'",
+      );
+      if (existing.isEmpty) {
+        await db.execute('''
+          CREATE TABLE "_ods_user_roles" (
+            _id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            role TEXT NOT NULL,
+            _createdAt TEXT,
+            UNIQUE(user_id, role)
+          )
+        ''');
+        _log('Created auth table "_ods_user_roles"');
+      }
+      _knownTables.add('_ods_user_roles');
+    }
+  }
+
+  /// Creates a new user and returns their ID.
+  Future<int> createUser({
+    required String username,
+    required String passwordHash,
+    required String salt,
+    String? displayName,
+  }) async {
+    final db = _db!;
+    final id = await db.insert('_ods_users', {
+      'username': username,
+      'password_hash': passwordHash,
+      'salt': salt,
+      'display_name': displayName ?? username,
+      '_createdAt': DateTime.now().toIso8601String(),
+    });
+    _log('Created user "$username" (id=$id)');
+    return id;
+  }
+
+  /// Looks up a user by username. Returns null if not found.
+  Future<Map<String, dynamic>?> getUserByUsername(String username) async {
+    final db = _db!;
+    final rows = await db.query(
+      '_ods_users',
+      where: 'username = ?',
+      whereArgs: [username],
+    );
+    return rows.isNotEmpty ? rows.first : null;
+  }
+
+  /// Returns all roles for a given user ID.
+  Future<List<String>> getUserRoles(int userId) async {
+    final db = _db!;
+    final rows = await db.query(
+      '_ods_user_roles',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+    );
+    return rows.map((r) => r['role'] as String).toList();
+  }
+
+  /// Assigns a role to a user. Silently ignores duplicates.
+  Future<void> assignRole(int userId, String role) async {
+    final db = _db!;
+    try {
+      await db.insert('_ods_user_roles', {
+        'user_id': userId,
+        'role': role,
+        '_createdAt': DateTime.now().toIso8601String(),
+      });
+      _log('Assigned role "$role" to user $userId');
+    } catch (_) {
+      // UNIQUE constraint — role already assigned, ignore.
+    }
+  }
+
+  /// Removes a role from a user.
+  Future<void> removeRole(int userId, String role) async {
+    final db = _db!;
+    await db.delete(
+      '_ods_user_roles',
+      where: 'user_id = ? AND role = ?',
+      whereArgs: [userId, role],
+    );
+    _log('Removed role "$role" from user $userId');
+  }
+
+  /// Returns all users with their roles.
+  Future<List<Map<String, dynamic>>> listUsers() async {
+    final db = _db!;
+    final users = await db.query('_ods_users', orderBy: '_id ASC');
+    final result = <Map<String, dynamic>>[];
+    for (final user in users) {
+      final userId = user['_id'] as int;
+      final roles = await getUserRoles(userId);
+      result.add({...user, 'roles': roles});
+    }
+    return result;
+  }
+
+  /// Deletes a user and all their role assignments.
+  Future<void> deleteUser(int userId) async {
+    final db = _db!;
+    await db.delete('_ods_user_roles', where: 'user_id = ?', whereArgs: [userId]);
+    await db.delete('_ods_users', where: '_id = ?', whereArgs: [userId]);
+    _log('Deleted user $userId');
+  }
+
+  /// Updates a user's password hash and salt.
+  Future<void> updateUserPassword(int userId, String passwordHash, String salt) async {
+    final db = _db!;
+    await db.update(
+      '_ods_users',
+      {'password_hash': passwordHash, 'salt': salt},
+      where: '_id = ?',
+      whereArgs: [userId],
+    );
+    _log('Updated password for user $userId');
+  }
+
+  /// Updates a user's display name.
+  Future<void> updateUserDisplayName(int userId, String displayName) async {
+    final db = _db!;
+    await db.update(
+      '_ods_users',
+      {'display_name': displayName},
+      where: '_id = ?',
+      whereArgs: [userId],
+    );
+    _log('Updated display name for user $userId');
+  }
+
+  /// Checks whether any user with the 'admin' role exists.
+  Future<bool> hasAdminUser() async {
+    final db = _db!;
+    final rows = await db.rawQuery(
+      "SELECT COUNT(*) as cnt FROM _ods_user_roles WHERE role = 'admin'",
+    );
+    return (rows.first['cnt'] as int) > 0;
   }
 
   /// Closes the database connection. Called on app reset and dispose.

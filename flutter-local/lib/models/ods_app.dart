@@ -1,4 +1,5 @@
 import 'ods_app_setting.dart';
+import 'ods_auth.dart';
 import 'ods_data_source.dart';
 import 'ods_help.dart';
 import 'ods_menu_item.dart';
@@ -43,6 +44,10 @@ class OdsApp {
   /// Optional user-configurable settings with default values.
   final Map<String, OdsAppSetting> settings;
 
+  /// Authentication and role-based access control configuration.
+  /// When absent or `multiUser: false`, the app runs in single-user mode.
+  final OdsAuth auth;
+
   const OdsApp({
     required this.appName,
     required this.startPage,
@@ -52,6 +57,7 @@ class OdsApp {
     this.help,
     this.tour = const [],
     this.settings = const {},
+    this.auth = const OdsAuth(),
   });
 
   factory OdsApp.fromJson(Map<String, dynamic> json) {
@@ -84,6 +90,7 @@ class OdsApp {
                 MapEntry(key, OdsAppSetting.fromJson(value as Map<String, dynamic>)),
           ) ??
           {},
+      auth: OdsAuth.fromJson(json['auth'] as Map<String, dynamic>?),
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'ods_field_definition.dart';
+import 'ods_ownership.dart';
 
 /// Defines a data endpoint — either local SQLite storage or an external API.
 ///
@@ -29,11 +30,16 @@ class OdsDataSource {
   /// Only inserted when the table is empty, so user data is never overwritten.
   final List<Map<String, dynamic>>? seedData;
 
+  /// Optional row-level security configuration. When enabled, the framework
+  /// auto-injects the current user's ID on insert and filters queries.
+  final OdsOwnership ownership;
+
   const OdsDataSource({
     required this.url,
     required this.method,
     this.fields,
     this.seedData,
+    this.ownership = const OdsOwnership(),
   });
 
   /// Whether this source uses framework-managed local storage.
@@ -55,6 +61,7 @@ class OdsDataSource {
       seedData: (json['seedData'] as List<dynamic>?)
           ?.map((d) => Map<String, dynamic>.from(d as Map))
           .toList(),
+      ownership: OdsOwnership.fromJson(json['ownership'] as Map<String, dynamic>?),
     );
   }
 
@@ -63,5 +70,6 @@ class OdsDataSource {
         'method': method,
         if (fields != null) 'fields': fields!.map((f) => f.toJson()).toList(),
         if (seedData != null) 'seedData': seedData,
+        if (ownership.enabled) 'ownership': ownership.toJson(),
       };
 }

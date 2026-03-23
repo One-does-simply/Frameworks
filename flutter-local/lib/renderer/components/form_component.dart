@@ -44,10 +44,17 @@ class _OdsFormWidgetState extends State<OdsFormWidget> {
     super.dispose();
   }
 
-  /// Checks whether a field should be visible based on its `visibleWhen` condition.
-  bool _isFieldVisible(OdsFieldDefinition field, Map<String, String> formState) {
+  /// Checks whether a field should be visible based on its `visibleWhen` condition
+  /// and role-based access control.
+  bool _isFieldVisible(OdsFieldDefinition field, Map<String, String> formState, [AppEngine? engine]) {
     // Hidden fields carry data (e.g., correct answers in quizzes) but never render.
     if (field.type == 'hidden') return false;
+    // Role-based visibility: hide fields the user can't access.
+    if (field.roles != null && field.roles!.isNotEmpty && engine != null) {
+      if (engine.isMultiUser && !engine.authService.hasAccess(field.roles)) {
+        return false;
+      }
+    }
     final condition = field.visibleWhen;
     if (condition == null) return true;
     final watchedValue = formState[condition.field] ?? '';
@@ -100,7 +107,7 @@ class _OdsFormWidgetState extends State<OdsFormWidget> {
                   ),
                 ),
               ...widget.model.fields.where((field) {
-              return _isFieldVisible(field, formState);
+              return _isFieldVisible(field, formState, engine);
             }).map((field) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),

@@ -20,10 +20,13 @@ import 'models/ods_app.dart';
 import 'models/ods_app_setting.dart';
 import 'renderer/page_renderer.dart';
 import 'renderer/snackbar_helper.dart';
+import 'screens/admin_setup_screen.dart';
 import 'screens/app_help_screen.dart';
 import 'screens/app_tour_dialog.dart';
+import 'screens/login_screen.dart';
 import 'screens/ods_about_screen.dart';
 import 'screens/quick_build_screen.dart';
+import 'screens/user_management_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Entry point
@@ -2294,6 +2297,32 @@ class _AppShellState extends State<AppShell> {
     final engine = context.watch<AppEngine>();
     final settings = context.watch<SettingsStore>();
     final app = engine.app!;
+
+    // Auth gate: show admin setup or login screen when multi-user is enabled.
+    if (engine.needsAdminSetup) {
+      return Scaffold(
+        appBar: AppBar(title: Text(app.appName)),
+        body: AdminSetupScreen(
+          authService: engine.authService,
+          onSetupComplete: () => engine.notifyListeners(),
+          onSkip: app.auth.multiUserOnly
+              ? null
+              : () => engine.notifyListeners(),
+        ),
+      );
+    }
+
+    if (engine.needsLogin) {
+      return Scaffold(
+        appBar: AppBar(title: Text(app.appName)),
+        body: LoginScreen(
+          authService: engine.authService,
+          onLoginSuccess: () => engine.notifyListeners(),
+          onContinueAsGuest: null, // TODO: implement guest access per startPage roles
+        ),
+      );
+    }
+
     final currentPageId = engine.currentPageId;
     final currentPage = currentPageId != null ? app.pages[currentPageId] : null;
     final theme = Theme.of(context);
@@ -2405,7 +2434,9 @@ class _AppShellState extends State<AppShell> {
                   ),
                 ),
               ),
-            ...app.menu.map((item) {
+            ...app.menu
+                .where((item) => !engine.isMultiUser || engine.authService.hasAccess(item.roles))
+                .map((item) {
               final isSelected = item.mapsTo == currentPageId;
               return ListTile(
                 title: Text(item.label),
@@ -2436,6 +2467,50 @@ class _AppShellState extends State<AppShell> {
                 );
               },
             ),
+            // Multi-user section: user info, manage users, logout.
+            if (engine.isMultiUser && engine.authService.isLoggedIn) ...[
+              const Divider(),
+              Padding(
+                padding: const EdgeInsets.only(left: 24, top: 4, bottom: 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.person, size: 16, color: colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Signed in as ${engine.authService.currentUsername}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (engine.authService.isAdmin)
+                ListTile(
+                  leading: const Icon(Icons.people_outline),
+                  title: const Text('Manage Users'),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => UserManagementScreen(
+                        authService: engine.authService,
+                        availableRoles: app.auth.allRoles,
+                      ),
+                    ));
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text('Sign Out'),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                onTap: () {
+                  Navigator.pop(context);
+                  engine.authService.logout();
+                  engine.notifyListeners();
+                },
+              ),
+            ],
             const Divider(),
             ListTile(
               leading: const Icon(Icons.close),

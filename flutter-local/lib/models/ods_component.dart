@@ -25,11 +25,16 @@ sealed class OdsComponent {
   /// e.g., `"{status} == 'Open'"`. Component is shown when truthy.
   final String? visible;
 
+  /// Optional role restriction. When set, only users with a matching role
+  /// can see this component. When null/empty, visible to everyone.
+  final List<String>? roles;
+
   const OdsComponent({
     required this.component,
     required this.styleHint,
     this.visibleWhen,
     this.visible,
+    this.roles,
   });
 
   /// Factory that dispatches to the correct subclass based on the
@@ -81,6 +86,10 @@ String? _parseVisible(Map<String, dynamic> json) {
   return json['visible'] as String?;
 }
 
+List<String>? _parseRoles(Map<String, dynamic> json) {
+  return (json['roles'] as List<dynamic>?)?.cast<String>();
+}
+
 /// Normalizes aggregate strings: "Count"→"count", "Average"→"avg", "Sum"→"sum".
 String? _normalizeAggregate(String? raw) {
   if (raw == null) return null;
@@ -118,6 +127,7 @@ class OdsTextComponent extends OdsComponent {
     required super.styleHint,
     super.visibleWhen,
     super.visible,
+    super.roles,
   }) : super(component: 'text');
 
   factory OdsTextComponent.fromJson(Map<String, dynamic> json) {
@@ -127,6 +137,7 @@ class OdsTextComponent extends OdsComponent {
       styleHint: _parseStyleHint(json),
       visibleWhen: _parseVisibleWhen(json),
       visible: _parseVisible(json),
+      roles: _parseRoles(json),
     );
   }
 }
@@ -162,6 +173,10 @@ class OdsListColumn {
   /// Contains `dataSource` (PUT data source ID) and `matchField` (row key).
   final OdsToggle? toggle;
 
+  /// Optional role restriction. When set, only users with a matching role
+  /// can see this column. When null/empty, visible to everyone.
+  final List<String>? roles;
+
   const OdsListColumn({
     required this.header,
     required this.field,
@@ -171,6 +186,7 @@ class OdsListColumn {
     this.colorMap,
     this.displayMap,
     this.toggle,
+    this.roles,
   });
 
   factory OdsListColumn.fromJson(Map<String, dynamic> json) {
@@ -187,6 +203,7 @@ class OdsListColumn {
       toggle: json['toggle'] != null
           ? OdsToggle.fromJson(json['toggle'] as Map<String, dynamic>)
           : null,
+      roles: (json['roles'] as List<dynamic>?)?.cast<String>(),
     );
   }
 }
@@ -310,6 +327,10 @@ class OdsRowAction {
   /// For copyRows: fields to reset on copied children (e.g., done→false).
   final Map<String, String> resetValues;
 
+  /// Optional role restriction. When set, only users with a matching role
+  /// can see/use this row action. When null/empty, available to everyone.
+  final List<String>? roles;
+
   const OdsRowAction({
     required this.label,
     required this.action,
@@ -324,6 +345,7 @@ class OdsRowAction {
     this.linkField,
     this.nameField,
     this.resetValues = const {},
+    this.roles,
   });
 
   bool get isDelete => action == 'delete';
@@ -351,6 +373,7 @@ class OdsRowAction {
       resetValues: (json['resetValues'] as Map<String, dynamic>?)
               ?.map((k, v) => MapEntry(k, v.toString())) ??
           const {},
+      roles: (json['roles'] as List<dynamic>?)?.cast<String>(),
     );
   }
 }
@@ -464,6 +487,7 @@ class OdsListComponent extends OdsComponent {
     required super.styleHint,
     super.visibleWhen,
     super.visible,
+    super.roles,
   }) : super(component: 'list');
 
   factory OdsListComponent.fromJson(Map<String, dynamic> json) {
@@ -494,6 +518,7 @@ class OdsListComponent extends OdsComponent {
       styleHint: _parseStyleHint(json),
       visibleWhen: _parseVisibleWhen(json),
       visible: _parseVisible(json),
+      roles: _parseRoles(json),
     );
   }
 }
@@ -520,6 +545,7 @@ class OdsFormComponent extends OdsComponent {
     required super.styleHint,
     super.visibleWhen,
     super.visible,
+    super.roles,
   }) : super(component: 'form');
 
   factory OdsFormComponent.fromJson(Map<String, dynamic> json) {
@@ -532,6 +558,7 @@ class OdsFormComponent extends OdsComponent {
       styleHint: _parseStyleHint(json),
       visibleWhen: _parseVisibleWhen(json),
       visible: _parseVisible(json),
+      roles: _parseRoles(json),
     );
   }
 }
@@ -553,6 +580,7 @@ class OdsButtonComponent extends OdsComponent {
     required super.styleHint,
     super.visibleWhen,
     super.visible,
+    super.roles,
   }) : super(component: 'button');
 
   factory OdsButtonComponent.fromJson(Map<String, dynamic> json) {
@@ -564,6 +592,7 @@ class OdsButtonComponent extends OdsComponent {
       styleHint: _parseStyleHint(json),
       visibleWhen: _parseVisibleWhen(json),
       visible: _parseVisible(json),
+      roles: _parseRoles(json),
     );
   }
 }
@@ -594,6 +623,7 @@ class OdsChartComponent extends OdsComponent {
     required super.styleHint,
     super.visibleWhen,
     super.visible,
+    super.roles,
   }) : super(component: 'chart');
 
   factory OdsChartComponent.fromJson(Map<String, dynamic> json) {
@@ -612,6 +642,7 @@ class OdsChartComponent extends OdsComponent {
       styleHint: _parseStyleHint(json),
       visibleWhen: _parseVisibleWhen(json),
       visible: _parseVisible(json),
+      roles: _parseRoles(json),
     );
   }
 }
@@ -640,6 +671,7 @@ class OdsSummaryComponent extends OdsComponent {
     required super.styleHint,
     super.visibleWhen,
     super.visible,
+    super.roles,
   }) : super(component: 'summary');
 
   factory OdsSummaryComponent.fromJson(Map<String, dynamic> json) {
@@ -650,6 +682,7 @@ class OdsSummaryComponent extends OdsComponent {
       styleHint: _parseStyleHint(json),
       visibleWhen: _parseVisibleWhen(json),
       visible: _parseVisible(json),
+      roles: _parseRoles(json),
     );
   }
 }
@@ -684,6 +717,7 @@ class OdsTabsComponent extends OdsComponent {
     required super.styleHint,
     super.visibleWhen,
     super.visible,
+    super.roles,
   }) : super(component: 'tabs');
 
   factory OdsTabsComponent.fromJson(Map<String, dynamic> json) {
@@ -694,6 +728,7 @@ class OdsTabsComponent extends OdsComponent {
       styleHint: _parseStyleHint(json),
       visibleWhen: _parseVisibleWhen(json),
       visible: _parseVisible(json),
+      roles: _parseRoles(json),
     );
   }
 }
@@ -727,6 +762,7 @@ class OdsDetailComponent extends OdsComponent {
     required super.styleHint,
     super.visibleWhen,
     super.visible,
+    super.roles,
   }) : super(component: 'detail');
 
   factory OdsDetailComponent.fromJson(Map<String, dynamic> json) {
@@ -739,6 +775,7 @@ class OdsDetailComponent extends OdsComponent {
       styleHint: _parseStyleHint(json),
       visibleWhen: _parseVisibleWhen(json),
       visible: _parseVisible(json),
+      roles: _parseRoles(json),
     );
   }
 }
@@ -758,6 +795,7 @@ class OdsUnknownComponent extends OdsComponent {
     required super.styleHint,
     super.visibleWhen,
     super.visible,
+    super.roles,
   }) : super(component: type);
 
   factory OdsUnknownComponent.fromJson(Map<String, dynamic> json) {
@@ -767,6 +805,7 @@ class OdsUnknownComponent extends OdsComponent {
       styleHint: _parseStyleHint(json),
       visibleWhen: _parseVisibleWhen(json),
       visible: _parseVisible(json),
+      roles: _parseRoles(json),
     );
   }
 }

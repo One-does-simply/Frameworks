@@ -4,8 +4,7 @@
 /// has a display label and a target page ID.
 ///
 /// ODS Ethos: Navigation is flat — every menu item maps directly to a page.
-/// No nested menus, no dropdowns, no role-based visibility. If the user can
-/// see it, they can tap it. Simple.
+/// When multi-user is enabled, menu items can be restricted to specific roles.
 class OdsMenuItem {
   /// The text displayed in the navigation drawer.
   final String label;
@@ -13,12 +12,17 @@ class OdsMenuItem {
   /// The page ID this menu item navigates to.
   final String mapsTo;
 
-  const OdsMenuItem({required this.label, required this.mapsTo});
+  /// Optional role restriction. When set, only users with a matching role
+  /// can see this menu item. When null/empty, visible to everyone.
+  final List<String>? roles;
+
+  const OdsMenuItem({required this.label, required this.mapsTo, this.roles});
 
   factory OdsMenuItem.fromJson(Map<String, dynamic> json) {
     return OdsMenuItem(
       label: json['label'] as String,
       mapsTo: json['mapsTo'] as String,
+      roles: (json['roles'] as List<dynamic>?)?.cast<String>(),
     );
   }
 }

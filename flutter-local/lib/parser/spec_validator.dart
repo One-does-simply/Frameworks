@@ -81,6 +81,9 @@ class SpecValidator {
       }
     }
 
+    // Validate auth configuration.
+    _validateAuth(app, result);
+
     // Validate each page's component references.
     for (final pageEntry in app.pages.entries) {
       _validatePage(pageEntry.key, pageEntry.value, app, result);
@@ -341,6 +344,76 @@ class SpecValidator {
         result.warning(
           'Unknown component type "${component.component}" will be skipped',
           context: 'page: $pageId',
+        );
+      }
+    }
+  }
+
+  /// Validates auth configuration and role references.
+  void _validateAuth(OdsApp app, ValidationResult result) {
+    final auth = app.auth;
+    final builtInRoles = {'guest', 'user', 'admin'};
+    final allRoles = {...builtInRoles, ...auth.customRoles};
+
+    // Warn if multiUserOnly without multiUser.
+    if (auth.multiUserOnly && !auth.multiUser) {
+      result.warning('auth.multiUserOnly is true but auth.multiUser is false');
+    }
+
+    // Warn if custom roles duplicate built-in names.
+    for (final role in auth.customRoles) {
+      if (builtInRoles.contains(role)) {
+        result.warning('auth.roles contains built-in role "$role" — it is always present implicitly');
+      }
+    }
+
+    // Warn if defaultRole is not in allRoles.
+    if (!allRoles.contains(auth.defaultRole)) {
+      result.warning('auth.defaultRole "${auth.defaultRole}" is not a recognized role');
+    }
+
+    // Check role references across the spec (only warn, don't error).
+    void checkRoles(List<String>? roles, String context) {
+      if (roles == null) return;
+      for (final role in roles) {
+        if (!allRoles.contains(role)) {
+          result.warning('Role "$role" is not defined in auth.roles or built-in defaults', context: context);
+        }
+      }
+    }
+
+    // Menu items.
+    for (final item in app.menu) {
+      checkRoles(item.roles, 'menu: ${item.label}');
+    }
+
+    // Pages and their components.
+    for (final entry in app.pages.entries) {
+      checkRoles(entry.value.roles, 'page: ${entry.key}');
+      for (final component in entry.value.content) {
+        checkRoles(component.roles, 'page: ${entry.key}');
+        if (component is OdsListComponent) {
+          for (final col in component.columns) {
+            checkRoles(col.roles, 'page: ${entry.key}, column: ${col.field}');
+          }
+          for (final action in component.rowActions) {
+            checkRoles(action.roles, 'page: ${entry.key}, rowAction: ${action.label}');
+          }
+        }
+        if (component is OdsFormComponent) {
+          for (final field in component.fields) {
+            checkRoles(field.roles, 'page: ${entry.key}, field: ${field.name}');
+          }
+        }
+      }
+    }
+
+    // DataSources: warn if ownership without multiUser.
+    for (final entry in app.dataSources.entries) {
+      if (entry.value.ownership.enabled && !auth.multiUser) {
+        result.warning(
+          'DataSource "${entry.key}" has ownership enabled but auth.multiUser is false',
+          context: 'dataSource: ${entry.key}',
         );
       }
     }

@@ -14,6 +14,7 @@ Describe your app idea to the AI Build Helper, and it produces a valid ODS spec.
 - **Local SQLite storage** — all data stays on-device via `local://` data sources
 - **AI Build Helper** — create apps through conversation, not code
 - **Example catalog** — browse and pick from curated examples on first launch
+- **Multi-user RBAC** — optional login, roles (guest/user/admin + custom), per-page/field/column visibility, row-level ownership
 - **Off-ramp** — export your data (JSON/CSV/SQL) or generate a standalone Flutter project
 - **Cross-platform** — runs on Windows, macOS, Linux, iOS, and Android
 
@@ -34,7 +35,7 @@ lib/
   renderer/    Flutter widgets, StyleResolver, components
   loader/      File picker + URL loading
   debug/       Debug panel overlay
-  screens/     About, tour dialog, help screen
+  screens/     About, tour, help, login, admin setup, user management
 assets/        Build helper prompt
 ```
 

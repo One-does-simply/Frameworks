@@ -73,6 +73,14 @@ class PageRenderer extends StatelessWidget {
       );
     }
 
+    // Wrap with role-based visibility if roles are set.
+    if (component.roles != null && component.roles!.isNotEmpty) {
+      widget = _RoleVisibilityWrapper(
+        requiredRoles: component.roles!,
+        child: widget,
+      );
+    }
+
     return widget;
   }
 }
@@ -174,6 +182,24 @@ class _ExpressionVisibilityWrapper extends StatelessWidget {
 
 /// Renders unknown component types — invisible in normal mode, shown as a
 /// warning card in debug mode.
+/// Hides a component when the current user lacks the required roles.
+/// In single-user mode (no auth), this always shows the child.
+class _RoleVisibilityWrapper extends StatelessWidget {
+  final List<String> requiredRoles;
+  final Widget child;
+
+  const _RoleVisibilityWrapper({required this.requiredRoles, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final engine = context.watch<AppEngine>();
+    if (!engine.isMultiUser || engine.authService.hasAccess(requiredRoles)) {
+      return child;
+    }
+    return const SizedBox.shrink();
+  }
+}
+
 class _UnknownComponentWidget extends StatelessWidget {
   final OdsUnknownComponent model;
 

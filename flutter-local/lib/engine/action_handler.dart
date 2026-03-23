@@ -27,10 +27,15 @@ class ActionHandler {
   ActionHandler({required this.dataStore});
 
   /// Executes a single action and returns the result.
+  ///
+  /// [ownerId] is the current user's ID string (null in single-user mode).
+  /// When non-null and the target dataSource has ownership enabled, the owner
+  /// field is auto-injected on submit.
   Future<ActionResult> execute({
     required OdsAction action,
     required OdsApp app,
     required Map<String, Map<String, String>> formStates,
+    String? ownerId,
   }) async {
     switch (action.action) {
       case 'navigate':
@@ -41,7 +46,7 @@ class ActionHandler {
         );
 
       case 'submit':
-        return await _handleSubmit(action, app, formStates);
+        return await _handleSubmit(action, app, formStates, ownerId: ownerId);
 
       case 'update':
         return await _handleUpdate(action, app, formStates);
@@ -61,8 +66,9 @@ class ActionHandler {
   Future<ActionResult> _handleSubmit(
     OdsAction action,
     OdsApp app,
-    Map<String, Map<String, String>> formStates,
-  ) async {
+    Map<String, Map<String, String>> formStates, {
+    String? ownerId,
+  }) async {
     final formId = action.target;
     final dataSourceId = action.dataSource;
 
@@ -107,6 +113,11 @@ class ActionHandler {
     // "Form is the schema": use the field definitions to create or update the table.
     if (storedFields.isNotEmpty) {
       await dataStore.ensureTable(ds.tableName, storedFields);
+    }
+
+    // Auto-inject ownership field when row-level security is enabled.
+    if (ds.ownership.enabled && ownerId != null) {
+      storedData[ds.ownership.ownerField] = ownerId;
     }
 
     await dataStore.insert(ds.tableName, storedData);

@@ -15,7 +15,11 @@ class OdsPage {
   /// Ordered list of components rendered top-to-bottom on this page.
   final List<OdsComponent> content;
 
-  const OdsPage({required this.title, required this.content});
+  /// Optional role restriction. When set, only users with a matching role
+  /// can access this page. When null/empty, accessible to everyone.
+  final List<String>? roles;
+
+  const OdsPage({required this.title, required this.content, this.roles});
 
   factory OdsPage.fromJson(Map<String, dynamic> json) {
     return OdsPage(
@@ -23,6 +27,7 @@ class OdsPage {
       content: (json['content'] as List<dynamic>)
           .map((c) => OdsComponent.fromJson(c as Map<String, dynamic>))
           .toList(),
+      roles: (json['roles'] as List<dynamic>?)?.cast<String>(),
     );
   }
 }
