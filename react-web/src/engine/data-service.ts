@@ -220,12 +220,17 @@ export class DataService {
   async query(table: string): Promise<Record<string, unknown>[]> {
     const name = this.collectionName(table)
     try {
+      // Use unique requestKey to prevent PocketBase SDK auto-cancellation
+      // when multiple components query the same collection simultaneously.
       const records = await this.pb.collection(name).getFullList({
         sort: '-created',
+        requestKey: `query_${name}_${Date.now()}_${Math.random()}`,
       })
       this.log(`SELECT from "${name}": ${records.length} rows`)
       return records.map(r => this.normalizeRecord(r))
-    } catch {
+    } catch (e) {
+      this.log(`SELECT FAILED from "${name}": ${e}`)
+      console.error(`ODS DataService: query failed for "${name}"`, e)
       return []
     }
   }
@@ -244,6 +249,7 @@ export class DataService {
       const records = await this.pb.collection(name).getFullList({
         filter: filterStr,
         sort: 'created',
+        requestKey: `filter_${name}_${Date.now()}_${Math.random()}`,
       })
       this.log(`SELECT FILTERED from "${name}" WHERE ${filterStr}: ${records.length} rows`)
       return records.map(r => this.normalizeRecord(r))
@@ -269,6 +275,7 @@ export class DataService {
       const records = await this.pb.collection(name).getFullList({
         filter: `${ownerField} = "${this.escapeFilter(ownerId)}"`,
         sort: '-created',
+        requestKey: `owned_${name}_${Date.now()}_${Math.random()}`,
       })
       this.log(`SELECT OWNED from "${name}" WHERE ${ownerField}="${ownerId}": ${records.length} rows`)
       return records.map(r => this.normalizeRecord(r))
@@ -281,7 +288,9 @@ export class DataService {
   async getRowCount(table: string): Promise<number> {
     const name = this.collectionName(table)
     try {
-      const result = await this.pb.collection(name).getList(1, 1)
+      const result = await this.pb.collection(name).getList(1, 1, {
+        requestKey: `count_${name}_${Date.now()}`,
+      })
       return result.totalItems
     } catch {
       return 0
@@ -323,7 +332,7 @@ export class DataService {
   async getAllAppSettings(): Promise<Record<string, string>> {
     const name = this.collectionName('_ods_settings')
     try {
-      const records = await this.pb.collection(name).getFullList()
+      const records = await this.pb.collection(name).getFullList({ requestKey: null })
       const settings: Record<string, string> = {}
       for (const r of records) {
         settings[r['key'] as string] = r['value'] as string
