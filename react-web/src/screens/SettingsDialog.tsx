@@ -11,7 +11,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Checkbox } from '@/components/ui/checkbox'
+// Using native checkbox input styled with Tailwind — the base-ui Checkbox
+// has rendering issues in some dialog contexts.
 import { Separator } from '@/components/ui/separator'
 import {
   Select,
@@ -96,12 +97,14 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   return (
                     <div key={key} className="flex items-center justify-between">
                       <Label htmlFor={`setting-${key}`}>{setting.label}</Label>
-                      <Checkbox
+                      <input
+                        type="checkbox"
                         id={`setting-${key}`}
                         checked={currentValue === 'true'}
-                        onCheckedChange={(checked: boolean) =>
-                          handleSetSetting(key, checked ? 'true' : 'false')
+                        onChange={(e) =>
+                          handleSetSetting(key, e.target.checked ? 'true' : 'false')
                         }
+                        className="h-4 w-4 rounded border-input accent-primary"
                       />
                     </div>
                   )
@@ -182,10 +185,12 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           {/* Debug mode */}
           <div className="flex items-center justify-between">
             <Label htmlFor="debug-mode">Debug Panel</Label>
-            <Checkbox
+            <input
+              type="checkbox"
               id="debug-mode"
               checked={debugMode}
-              onCheckedChange={() => toggleDebugMode()}
+              onChange={() => toggleDebugMode()}
+              className="h-4 w-4 rounded border-input accent-primary"
             />
           </div>
         </div>
