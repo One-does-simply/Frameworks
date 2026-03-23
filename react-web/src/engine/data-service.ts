@@ -87,14 +87,16 @@ export class DataService {
     if (this.knownCollections.has(name)) return
 
     try {
-      // Check if collection exists
-      await this.pb.collections.getOne(name)
+      // Check if collection exists AND is usable (try a simple query).
+      await this.pb.collection(name).getList(1, 1, { requestKey: null })
       this.knownCollections.add(name)
-      this.log(`Collection "${name}" already exists`)
+      this.log(`Collection "${name}" already exists and is usable`)
     } catch {
-      // Collection doesn't exist — create it.
-      // PocketBase v0.23+ uses 'fields' (not 'schema') with explicit type objects.
+      // Collection doesn't exist or is broken — (re)create it.
       try {
+        // Try to delete a broken collection first (silently ignore if not found).
+        try { await this.pb.collections.delete(name) } catch { /* ignore */ }
+
         const pbFields = fields.map(f => ({
           name: f.name,
           type: 'text',
@@ -220,11 +222,8 @@ export class DataService {
   async query(table: string): Promise<Record<string, unknown>[]> {
     const name = this.collectionName(table)
     try {
-      // Use unique requestKey to prevent PocketBase SDK auto-cancellation
-      // when multiple components query the same collection simultaneously.
       const records = await this.pb.collection(name).getFullList({
-        sort: '-created',
-        requestKey: `query_${name}_${Date.now()}_${Math.random()}`,
+        requestKey: null,
       })
       this.log(`SELECT from "${name}": ${records.length} rows`)
       return records.map(r => this.normalizeRecord(r))
@@ -248,8 +247,7 @@ export class DataService {
     try {
       const records = await this.pb.collection(name).getFullList({
         filter: filterStr,
-        sort: 'created',
-        requestKey: `filter_${name}_${Date.now()}_${Math.random()}`,
+        requestKey: null,
       })
       this.log(`SELECT FILTERED from "${name}" WHERE ${filterStr}: ${records.length} rows`)
       return records.map(r => this.normalizeRecord(r))
@@ -274,8 +272,7 @@ export class DataService {
     try {
       const records = await this.pb.collection(name).getFullList({
         filter: `${ownerField} = "${this.escapeFilter(ownerId)}"`,
-        sort: '-created',
-        requestKey: `owned_${name}_${Date.now()}_${Math.random()}`,
+        requestKey: null,
       })
       this.log(`SELECT OWNED from "${name}" WHERE ${ownerField}="${ownerId}": ${records.length} rows`)
       return records.map(r => this.normalizeRecord(r))
