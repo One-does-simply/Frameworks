@@ -92,18 +92,26 @@ export class DataService {
       this.knownCollections.add(name)
       this.log(`Collection "${name}" already exists`)
     } catch {
-      // Collection doesn't exist — create it
+      // Collection doesn't exist — create it.
+      // PocketBase v0.23+ uses 'fields' (not 'schema') with explicit type objects.
       try {
-        const schema = fields.map(f => ({
+        const pbFields = fields.map(f => ({
           name: f.name,
-          type: 'text', // All fields stored as text (matching Flutter approach)
+          type: 'text',
           required: false,
         }))
 
         await this.pb.collections.create({
           name,
           type: 'base',
-          schema,
+          fields: pbFields,
+          // Set permissive API rules so any authenticated or anonymous user
+          // can CRUD. ODS handles its own RBAC at the application layer.
+          listRule: '',
+          viewRule: '',
+          createRule: '',
+          updateRule: '',
+          deleteRule: '',
         })
         this.knownCollections.add(name)
         this.log(`Created collection "${name}" with ${fields.length} fields`)
@@ -146,9 +154,15 @@ export class DataService {
   /** Insert a new record. Returns the created record's ID. */
   async insert(table: string, data: Record<string, unknown>): Promise<string> {
     const name = this.collectionName(table)
-    const record = await this.pb.collection(name).create(data)
-    this.log(`INSERT into "${name}": id=${record.id}`)
-    return record.id
+    try {
+      const record = await this.pb.collection(name).create(data)
+      this.log(`INSERT into "${name}": id=${record.id}`)
+      return record.id
+    } catch (e) {
+      this.log(`INSERT FAILED into "${name}": ${e}`)
+      console.error(`ODS DataService: INSERT failed for "${name}"`, e, data)
+      throw e
+    }
   }
 
   /** Update a record matched by field value. Returns count of affected rows. */

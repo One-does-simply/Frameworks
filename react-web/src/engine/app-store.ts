@@ -368,13 +368,20 @@ export const useAppStore = create<AppState>()((set, get) => ({
         ? authService.currentUserId
         : undefined
 
-      const result = await executeAction({
-        action,
-        app,
-        formStates: formSnapshot,
-        dataService,
-        ownerId,
-      })
+      let result: ActionResult
+      try {
+        result = await executeAction({
+          action,
+          app,
+          formStates: formSnapshot,
+          dataService,
+          ownerId,
+        })
+      } catch (e) {
+        console.error('ODS Action Exception:', e)
+        set({ lastActionError: `Action failed: ${e instanceof Error ? e.message : String(e)}` })
+        return
+      }
 
       if (result.error) {
         console.warn('ODS Action Error:', result.error)
