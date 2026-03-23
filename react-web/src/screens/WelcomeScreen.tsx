@@ -34,15 +34,53 @@ export function WelcomeScreen() {
   const [localError, setLocalError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // PocketBase admin auth state
+  const [showPbSetup, setShowPbSetup] = useState(false)
+  const [pbEmail, setPbEmail] = useState('')
+  const [pbPassword, setPbPassword] = useState('')
+  const [pbAuthError, setPbAuthError] = useState<string | null>(null)
+  const [pendingJson, setPendingJson] = useState<string | null>(null)
+
   const error = localError ?? loadError
 
   // -------------------------------------------------------------------------
-  // Load handler — takes raw JSON string and feeds it to the store
+  // Load handler — authenticates with PocketBase if needed, then loads spec
   // -------------------------------------------------------------------------
 
   async function handleLoad(jsonString: string) {
     setLocalError(null)
     const dataService = new DataService(pb)
+
+    // Try to restore saved PocketBase admin auth first
+    if (!dataService.isAdminAuthenticated) {
+      const restored = await dataService.tryRestoreAdminAuth()
+      if (!restored) {
+        // Need admin credentials — show the setup dialog
+        setPendingJson(jsonString)
+        setShowPbSetup(true)
+        return
+      }
+    }
+
+    await doLoadSpec(jsonString, dataService)
+  }
+
+  async function handlePbAuth() {
+    setPbAuthError(null)
+    const dataService = new DataService(pb)
+    const success = await dataService.authenticateAdmin(pbEmail, pbPassword)
+    if (!success) {
+      setPbAuthError('Invalid PocketBase admin credentials. Check the email and password you used when setting up PocketBase.')
+      return
+    }
+    setShowPbSetup(false)
+    if (pendingJson) {
+      await doLoadSpec(pendingJson, dataService)
+      setPendingJson(null)
+    }
+  }
+
+  async function doLoadSpec(jsonString: string, dataService: DataService) {
     const authService = new AuthService(pb)
     const success = await loadSpec(jsonString, dataService, authService)
     if (!success) {
@@ -235,6 +273,47 @@ export function WelcomeScreen() {
           ODS React Web Framework
         </p>
       </div>
+
+      {/* PocketBase Admin Setup Dialog */}
+      <Dialog open={showPbSetup} onOpenChange={setShowPbSetup}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>PocketBase Setup</DialogTitle>
+            <DialogDescription>
+              Enter the admin credentials you created when setting up PocketBase.
+              These are saved locally so you only need to enter them once.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Admin Email</label>
+              <Input
+                type="email"
+                value={pbEmail}
+                onChange={(e) => setPbEmail(e.target.value)}
+                placeholder="admin@example.com"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Admin Password</label>
+              <Input
+                type="password"
+                value={pbPassword}
+                onChange={(e) => setPbPassword(e.target.value)}
+                placeholder="Password"
+                onKeyDown={(e) => { if (e.key === 'Enter') handlePbAuth() }}
+              />
+            </div>
+            {pbAuthError && (
+              <p className="text-sm text-destructive">{pbAuthError}</p>
+            )}
+            <Button onClick={handlePbAuth} className="w-full">
+              Connect to PocketBase
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -19,9 +19,15 @@ export class DataService {
   private debugLog: string[] = []
   /** App name prefix for collection isolation between apps. */
   private appPrefix = ''
+  /** Whether we've authenticated as PocketBase superadmin for schema management. */
+  private _isAdminAuthenticated = false
 
   constructor(pb: PocketBase) {
     this.pb = pb
+  }
+
+  get isAdminAuthenticated(): boolean {
+    return this._isAdminAuthenticated
   }
 
   /** Initialize for a specific app. Sets the collection name prefix. */
@@ -30,6 +36,36 @@ export class DataService {
     this.knownCollections.clear()
     this.debugLog = []
     this.log(`DataService initialized for app "${appName}" (prefix: ${this.appPrefix})`)
+  }
+
+  /**
+   * Authenticate as PocketBase superadmin. Required before creating collections.
+   * Credentials are stored in localStorage so the user only enters them once.
+   */
+  async authenticateAdmin(email: string, password: string): Promise<boolean> {
+    try {
+      await this.pb.collection('_superusers').authWithPassword(email, password)
+      this._isAdminAuthenticated = true
+      // Save credentials for next session
+      localStorage.setItem('ods_pb_admin_email', email)
+      localStorage.setItem('ods_pb_admin_password', password)
+      this.log('PocketBase admin authenticated')
+      return true
+    } catch (e) {
+      this.log(`PocketBase admin auth failed: ${e}`)
+      return false
+    }
+  }
+
+  /**
+   * Try to restore admin authentication from saved credentials.
+   * Returns true if successfully authenticated.
+   */
+  async tryRestoreAdminAuth(): Promise<boolean> {
+    const email = localStorage.getItem('ods_pb_admin_email')
+    const password = localStorage.getItem('ods_pb_admin_password')
+    if (!email || !password) return false
+    return this.authenticateAdmin(email, password)
   }
 
   /** Returns the prefixed collection name for isolation between apps. */
