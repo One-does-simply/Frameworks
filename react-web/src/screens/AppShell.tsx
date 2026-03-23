@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '@/engine/app-store.ts'
 import { PageRenderer } from '@/renderer/PageRenderer.tsx'
 import { Button } from '@/components/ui/button'
@@ -20,8 +20,14 @@ import {
   Users,
   LogOut,
   X,
+  Download,
 } from 'lucide-react'
-import { useState } from 'react'
+import { SettingsDialog } from './SettingsDialog.tsx'
+import { HelpScreen } from './HelpScreen.tsx'
+import { UserManagementScreen } from './UserManagementScreen.tsx'
+import { DataExportDialog } from './DataExportDialog.tsx'
+import { TourDialog } from './TourDialog.tsx'
+import { DebugPanel } from './DebugPanel.tsx'
 
 // ---------------------------------------------------------------------------
 // AppShell — the running-app layout with top bar, sidebar nav, and content
@@ -38,8 +44,13 @@ export function AppShell() {
   const lastActionError = useAppStore((s) => s.lastActionError)
   const isMultiUser = useAppStore((s) => s.isMultiUser)
   const authService = useAppStore((s) => s.authService)
+  const debugMode = useAppStore((s) => s.debugMode)
 
   const [menuOpen, setMenuOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
+  const [usersOpen, setUsersOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
 
   const currentPage = currentPageId ? app.pages[currentPageId] : null
   const pageTitle = currentPage?.title ?? app.appName
@@ -141,10 +152,7 @@ export function AppShell() {
             variant="ghost"
             size="icon-sm"
             aria-label="Help"
-            onClick={() => {
-              const overview = app.help?.overview ?? ''
-              toast.info(overview || 'No help available.')
-            }}
+            onClick={() => setHelpOpen(true)}
           >
             <HelpCircle className="size-5" />
           </Button>
@@ -168,6 +176,9 @@ export function AppShell() {
           </div>
         )}
       </main>
+
+      {/* Debug panel (shown when debug mode is on) */}
+      {debugMode && <DebugPanel />}
 
       {/* Navigation drawer (Sheet from left) */}
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
@@ -209,16 +220,28 @@ export function AppShell() {
 
             <Separator className="my-2" />
 
-            {/* Settings (placeholder for now) */}
+            {/* Settings */}
             <button
               onClick={() => {
                 setMenuOpen(false)
-                toast.info('Settings coming soon.')
+                setSettingsOpen(true)
               }}
               className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
             >
               <Settings className="size-4" />
               Settings
+            </button>
+
+            {/* Export Data */}
+            <button
+              onClick={() => {
+                setMenuOpen(false)
+                setExportOpen(true)
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
+            >
+              <Download className="size-4" />
+              Export Data
             </button>
 
             {/* Multi-user section */}
@@ -236,7 +259,7 @@ export function AppShell() {
                   <button
                     onClick={() => {
                       setMenuOpen(false)
-                      toast.info('User management coming soon.')
+                      setUsersOpen(true)
                     }}
                     className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
                   >
@@ -273,6 +296,15 @@ export function AppShell() {
           </nav>
         </SheetContent>
       </Sheet>
+
+      {/* Dialogs */}
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      {app.help && <HelpScreen open={helpOpen} onOpenChange={setHelpOpen} />}
+      <UserManagementScreen open={usersOpen} onOpenChange={setUsersOpen} />
+      <DataExportDialog open={exportOpen} onOpenChange={setExportOpen} />
+
+      {/* Tour dialog — auto-shows on first launch if tour is defined */}
+      <TourDialog />
     </div>
   )
 }

@@ -223,11 +223,18 @@ interface ListComponentProps {
 export function ListComponent({ model }: ListComponentProps) {
   const queryDataSource = useAppStore((s) => s.queryDataSource)
   const executeActions = useAppStore((s) => s.executeActions)
+  const executeDeleteRowAction = useAppStore((s) => s.executeDeleteRowAction)
+  const executeCopyRowsAction = useAppStore((s) => s.executeCopyRowsAction)
+  const executeToggle = useAppStore((s) => s.executeToggle)
   const populateFormAndNavigate = useAppStore((s) => s.populateFormAndNavigate)
   const navigateTo = useAppStore((s) => s.navigateTo)
   const authService = useAppStore((s) => s.authService)
   const isMultiUser = useAppStore((s) => s.isMultiUser)
   const lastMessage = useAppStore((s) => s.lastMessage)
+  const recordGeneration = useAppStore((s) => s.recordGeneration)
+  const appSettings = useAppStore((s) => s.appSettings)
+
+  const currencySymbol = appSettings['currency'] ?? ''
 
   // Data
   const [rows, setRows] = useState<Row[]>([])
@@ -281,7 +288,7 @@ export function ListComponent({ model }: ListComponentProps) {
     }
     load()
     return () => { cancelled = true }
-  }, [model.dataSource, queryDataSource, lastMessage])
+  }, [model.dataSource, queryDataSource, lastMessage, recordGeneration])
 
   // Process rows: filter -> search -> sort.
   const processedRows = useMemo(() => {
@@ -340,17 +347,7 @@ export function ListComponent({ model }: ListComponentProps) {
       if (!rowId) return
 
       if (action.action === 'delete') {
-        // Build a delete action.
-        await executeActions([
-          {
-            action: 'delete',
-            dataSource: action.dataSource,
-            matchField: action.matchField,
-            target: rowId,
-            computedFields: [],
-            preserveFields: [],
-          },
-        ])
+        await executeDeleteRowAction(action.dataSource, action.matchField, rowId)
       } else if (action.action === 'update') {
         await executeActions([
           {
@@ -364,20 +361,18 @@ export function ListComponent({ model }: ListComponentProps) {
           },
         ])
       } else if (action.action === 'copyRows') {
-        await executeActions([
-          {
-            action: 'copyRows',
-            dataSource: action.sourceDataSource ?? action.dataSource,
-            target: action.targetDataSource ?? action.dataSource,
-            matchField: action.matchField,
-            withData: { [action.matchField]: rowId },
-            computedFields: [],
-            preserveFields: [],
-          },
-        ])
+        await executeCopyRowsAction({
+          row,
+          sourceDataSourceId: action.sourceDataSource ?? action.dataSource,
+          targetDataSourceId: action.targetDataSource ?? action.dataSource,
+          parentDataSourceId: action.parentDataSource ?? action.dataSource,
+          linkField: action.linkField ?? action.matchField,
+          nameField: action.nameField ?? action.matchField,
+          resetValues: action.resetValues,
+        })
       }
     },
-    [executeActions],
+    [executeActions, executeDeleteRowAction, executeCopyRowsAction],
   )
 
   const handleRowAction = useCallback(
@@ -409,19 +404,26 @@ export function ListComponent({ model }: ListComponentProps) {
       const rowId = String(row[col.toggle.matchField] ?? row['_id'] ?? '')
       if (!rowId) return
 
-      await executeActions([
-        {
-          action: 'update',
-          dataSource: col.toggle.dataSource,
-          matchField: col.toggle.matchField,
-          target: rowId,
-          withData: { [col.field]: currentChecked ? 'false' : 'true' },
-          computedFields: [],
-          preserveFields: [],
-        },
-      ])
+      const autoComplete = col.toggle.autoComplete
+        ? {
+            groupField: col.toggle.autoComplete.groupField,
+            groupValue: String(row[col.toggle.autoComplete.groupField] ?? ''),
+            parentDataSource: col.toggle.autoComplete.parentDataSource,
+            parentMatchField: col.toggle.autoComplete.parentMatchField,
+            parentValues: col.toggle.autoComplete.parentValues,
+          }
+        : undefined
+
+      await executeToggle({
+        dataSourceId: col.toggle.dataSource,
+        matchField: col.toggle.matchField,
+        matchValue: rowId,
+        toggleField: col.field,
+        currentValue: currentChecked ? 'true' : 'false',
+        autoComplete,
+      })
     },
-    [executeActions],
+    [executeToggle],
   )
 
   // ---------------------------------------------------------------------------
@@ -549,6 +551,7 @@ export function ListComponent({ model }: ListComponentProps) {
           onRowTap={model.onRowTap ? handleRowTap : undefined}
           onRowAction={handleRowAction}
           resolveRowColor={resolveRowColor}
+          currencySymbol={currencySymbol}
         />
       ) : (
         <TableDisplay
@@ -564,6 +567,7 @@ export function ListComponent({ model }: ListComponentProps) {
           onRowAction={handleRowAction}
           onToggle={handleToggle}
           resolveRowColor={resolveRowColor}
+          currencySymbol={currencySymbol}
         />
       )}
 
@@ -637,6 +641,7 @@ interface TableDisplayProps {
   onRowAction: (action: OdsRowAction, row: Row) => void
   onToggle: (col: OdsListColumn, row: Row, checked: boolean) => void
   resolveRowColor: (row: Row) => string
+  currencySymbol: string
 }
 
 function TableDisplay({
@@ -652,7 +657,11 @@ function TableDisplay({
   onRowAction,
   onToggle,
   resolveRowColor,
+  currencySymbol,
 }: TableDisplayProps) {
+  // Identify toggle columns for strikethrough detection.
+  const toggleColumns = columns.filter((col) => col.toggle)
+
   return (
     <div className="overflow-x-auto rounded-md border">
       <Table>
@@ -681,6 +690,10 @@ function TableDisplay({
           {rows.map((row, idx) => {
             const rowKey = String(row['_id'] ?? idx)
             const colorCls = resolveRowColor(row)
+            // Strikethrough: if any toggle column in this row is checked.
+            const strikethrough = toggleColumns.some(
+              (col) => getCellValue(row, col.field, computedFields) === 'true',
+            )
             return (
               <TableRow
                 key={rowKey}
@@ -694,6 +707,8 @@ function TableDisplay({
                       row={row}
                       computedFields={computedFields}
                       onToggle={onToggle}
+                      strikethrough={strikethrough}
+                      currencySymbol={currencySymbol}
                     />
                   </TableCell>
                 ))}
@@ -744,9 +759,11 @@ interface CellContentProps {
   row: Row
   computedFields: Map<string, OdsFieldDefinition>
   onToggle: (col: OdsListColumn, row: Row, checked: boolean) => void
+  strikethrough: boolean
+  currencySymbol: string
 }
 
-function CellContent({ col, row, computedFields, onToggle }: CellContentProps) {
+function CellContent({ col, row, computedFields, onToggle, strikethrough, currencySymbol }: CellContentProps) {
   // Toggle column: render as checkbox.
   if (col.toggle) {
     const checked = getCellValue(row, col.field, computedFields) === 'true'
@@ -761,8 +778,13 @@ function CellContent({ col, row, computedFields, onToggle }: CellContentProps) {
 
   const value = getCellValue(row, col.field, computedFields)
 
-  // Apply displayMap.
+  // Apply currency formatting.
   let display = value
+  if (col.currency && currencySymbol && value && !isNaN(Number(value))) {
+    display = `${currencySymbol}${value}`
+  }
+
+  // Apply displayMap.
   if (col.displayMap && col.displayMap[value]) {
     display = col.displayMap[value]
   }
@@ -774,6 +796,11 @@ function CellContent({ col, row, computedFields, onToggle }: CellContentProps) {
     if (colorName) {
       colorCls = textColorClass(colorName)
     }
+  }
+
+  // Apply strikethrough when any toggle column in the row is checked.
+  if (strikethrough && !col.toggle) {
+    colorCls = `${colorCls} line-through text-muted-foreground`.trim()
   }
 
   return <span className={colorCls}>{display}</span>
@@ -791,6 +818,7 @@ interface CardDisplayProps {
   onRowTap?: (row: Row) => void
   onRowAction: (action: OdsRowAction, row: Row) => void
   resolveRowColor: (row: Row) => string
+  currencySymbol: string
 }
 
 function CardDisplay({
@@ -801,12 +829,19 @@ function CardDisplay({
   onRowTap,
   onRowAction,
   resolveRowColor,
+  currencySymbol,
 }: CardDisplayProps) {
+  // Identify toggle columns for strikethrough detection.
+  const toggleColumns = columns.filter((col) => col.toggle)
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {rows.map((row, idx) => {
         const rowKey = String(row['_id'] ?? idx)
         const colorCls = resolveRowColor(row)
+        const strikethrough = toggleColumns.some(
+          (col) => getCellValue(row, col.field, computedFields) === 'true',
+        )
         return (
           <Card
             key={rowKey}
@@ -814,7 +849,7 @@ function CardDisplay({
             onClick={onRowTap ? () => onRowTap(row) : undefined}
           >
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">
+              <CardTitle className={`text-base ${strikethrough ? 'line-through text-muted-foreground' : ''}`}>
                 {getCellValue(row, columns[0]?.field ?? '', computedFields)}
               </CardTitle>
             </CardHeader>
@@ -822,13 +857,19 @@ function CardDisplay({
               {columns.slice(1).map((col) => {
                 const value = getCellValue(row, col.field, computedFields)
                 let display = value
+                if (col.currency && currencySymbol && value && !isNaN(Number(value))) {
+                  display = `${currencySymbol}${value}`
+                }
                 if (col.displayMap && col.displayMap[value]) {
                   display = col.displayMap[value]
                 }
+                const textCls = strikethrough && !col.toggle
+                  ? 'line-through text-muted-foreground'
+                  : ''
                 return (
                   <div key={col.field} className="flex justify-between text-sm">
                     <span className="text-muted-foreground">{col.header}</span>
-                    <span>{display}</span>
+                    <span className={textCls}>{display}</span>
                   </div>
                 )
               })}

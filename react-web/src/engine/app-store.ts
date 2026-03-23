@@ -78,7 +78,39 @@ export interface AppState {
   getFormState: (formId: string) => Record<string, string>
   populateFormAndNavigate: (formId: string, pageId: string, rowData: Record<string, unknown>) => void
   executeActions: (actions: OdsAction[], confirmFn?: (message: string) => Promise<boolean>) => Promise<void>
+  executeDeleteRowAction: (dataSourceId: string, matchField: string, matchValue: string) => Promise<void>
+  executeCopyRowsAction: (params: {
+    row: Record<string, unknown>
+    sourceDataSourceId: string
+    targetDataSourceId: string
+    parentDataSourceId: string
+    linkField: string
+    nameField: string
+    resetValues: Record<string, string>
+  }) => Promise<void>
+  executeToggle: (params: {
+    dataSourceId: string
+    matchField: string
+    matchValue: string
+    toggleField: string
+    currentValue: string
+    autoComplete?: {
+      groupField: string
+      groupValue: string
+      parentDataSource: string
+      parentMatchField: string
+      parentValues: Record<string, string>
+    }
+  }) => Promise<void>
   queryDataSource: (dataSourceId: string) => Promise<Record<string, unknown>[]>
+  cascadeRename: (params: {
+    parentDataSourceId: string
+    parentMatchField: string
+    oldValue: string
+    newValue: string
+    childDataSourceId: string
+    childLinkField: string
+  }) => Promise<void>
   reset: () => void
   toggleDebugMode: () => void
 }
@@ -395,6 +427,163 @@ export const useAppStore = create<AppState>()((set, get) => ({
   },
 
   // -------------------------------------------------------------------------
+  // Delete row action
+  // -------------------------------------------------------------------------
+
+  executeDeleteRowAction: async (dataSourceId: string, matchField: string, matchValue: string) => {
+    const { app, dataService } = get()
+    if (!app || !dataService) return
+
+    const ds = app.dataSources[dataSourceId]
+    if (!ds || !isLocal(ds)) return
+
+    try {
+      await dataService.delete(tableName(ds), matchField, matchValue)
+      set({ recordGeneration: get().recordGeneration + 1, lastMessage: `Deleted record` })
+    } catch (e) {
+      console.warn('ODS Delete Row Action Error:', e)
+      set({ lastActionError: `Delete failed: ${e}` })
+    }
+  },
+
+  // -------------------------------------------------------------------------
+  // Copy rows action
+  // -------------------------------------------------------------------------
+
+  executeCopyRowsAction: async (params: {
+    row: Record<string, unknown>
+    sourceDataSourceId: string
+    targetDataSourceId: string
+    parentDataSourceId: string
+    linkField: string
+    nameField: string
+    resetValues: Record<string, string>
+  }) => {
+    const { app, dataService } = get()
+    if (!app || !dataService) return
+
+    const { row, sourceDataSourceId, targetDataSourceId, parentDataSourceId, linkField, nameField, resetValues } = params
+
+    const sourceDsConfig = app.dataSources[sourceDataSourceId]
+    const targetDsConfig = app.dataSources[targetDataSourceId]
+    const parentDsConfig = app.dataSources[parentDataSourceId]
+    if (!sourceDsConfig || !targetDsConfig || !parentDsConfig) return
+
+    try {
+      // 1. Generate a copy name from the parent row.
+      const originalName = String(row[nameField] ?? 'Untitled')
+      const copyName = `${originalName} (copy)`
+
+      // 2. Create the parent copy: duplicate key fields, override values.
+      const parentRow: Record<string, unknown> = { ...row }
+      delete parentRow['_id']
+      parentRow[nameField] = copyName
+      // Apply any reset values to the parent.
+      for (const [key, value] of Object.entries(resetValues)) {
+        if (key in parentRow) {
+          parentRow[key] = value
+        }
+      }
+      // Auto-set date fields to today.
+      const today = new Date().toISOString().split('T')[0]
+      for (const key of Object.keys(parentRow)) {
+        if (key.toLowerCase().includes('date') && parentRow[key] != null) {
+          parentRow[key] = today
+        }
+      }
+      await dataService.insert(tableName(parentDsConfig), parentRow)
+
+      // 3. Query children linked to the original parent.
+      const originalLinkValue = String(row[nameField] ?? '')
+      const children = await dataService.query(tableName(sourceDsConfig))
+      const matchingChildren = children.filter(
+        (child) => String(child[linkField] ?? '') === originalLinkValue,
+      )
+
+      // 4. Copy each child with the new link value and reset fields.
+      for (const child of matchingChildren) {
+        const childCopy: Record<string, unknown> = { ...child }
+        delete childCopy['_id']
+        childCopy[linkField] = copyName
+        for (const [key, value] of Object.entries(resetValues)) {
+          childCopy[key] = value
+        }
+        await dataService.insert(tableName(targetDsConfig), childCopy)
+      }
+
+      set({
+        recordGeneration: get().recordGeneration + 1,
+        lastMessage: `Copied "${originalName}" → "${copyName}" with ${matchingChildren.length} items`,
+      })
+    } catch (e) {
+      console.warn('ODS CopyRows Error:', e)
+      set({ lastActionError: `Copy failed: ${e}` })
+    }
+  },
+
+  // -------------------------------------------------------------------------
+  // Toggle + autoComplete
+  // -------------------------------------------------------------------------
+
+  executeToggle: async (params: {
+    dataSourceId: string
+    matchField: string
+    matchValue: string
+    toggleField: string
+    currentValue: string
+    autoComplete?: {
+      groupField: string
+      groupValue: string
+      parentDataSource: string
+      parentMatchField: string
+      parentValues: Record<string, string>
+    }
+  }) => {
+    const { app, dataService } = get()
+    if (!app || !dataService) return
+
+    const { dataSourceId, matchField, matchValue, toggleField, currentValue, autoComplete } = params
+
+    const ds = app.dataSources[dataSourceId]
+    if (!ds || !isLocal(ds)) return
+
+    const newValue = currentValue === 'true' ? 'false' : 'true'
+
+    try {
+      await dataService.update(tableName(ds), { [toggleField]: newValue }, matchField, matchValue)
+
+      // Check autoComplete after toggling.
+      if (autoComplete && newValue === 'true') {
+        const parentDs = app.dataSources[autoComplete.parentDataSource]
+        if (parentDs && isLocal(parentDs)) {
+          const allRows = await dataService.query(tableName(ds))
+          const groupRows = allRows.filter(
+            (r) => String(r[autoComplete.groupField] ?? '') === autoComplete.groupValue,
+          )
+
+          if (groupRows.length > 0) {
+            const allDone = groupRows.every((r) => String(r[toggleField] ?? '') === 'true')
+            if (allDone) {
+              await dataService.update(
+                tableName(parentDs),
+                autoComplete.parentValues,
+                autoComplete.parentMatchField,
+                autoComplete.groupValue,
+              )
+              set({ lastMessage: 'All items complete — list marked as done!' })
+            }
+          }
+        }
+      }
+
+      set({ recordGeneration: get().recordGeneration + 1 })
+    } catch (e) {
+      console.warn('ODS Toggle Error:', e)
+      set({ lastActionError: `Toggle failed: ${e}` })
+    }
+  },
+
+  // -------------------------------------------------------------------------
   // Data querying
   // -------------------------------------------------------------------------
 
@@ -419,6 +608,50 @@ export const useAppStore = create<AppState>()((set, get) => ({
     }
 
     return dataService.query(table)
+  },
+
+  // -------------------------------------------------------------------------
+  // Cascade rename
+  // -------------------------------------------------------------------------
+
+  cascadeRename: async (params: {
+    parentDataSourceId: string
+    parentMatchField: string
+    oldValue: string
+    newValue: string
+    childDataSourceId: string
+    childLinkField: string
+  }) => {
+    const { app, dataService } = get()
+    if (!app || !dataService) return
+
+    const { parentDataSourceId, parentMatchField, oldValue, newValue, childDataSourceId, childLinkField } = params
+    if (oldValue === newValue) return
+
+    const parentDs = app.dataSources[parentDataSourceId]
+    const childDs = app.dataSources[childDataSourceId]
+    if (!parentDs || !childDs || !isLocal(parentDs) || !isLocal(childDs)) return
+
+    try {
+      // Update parent row.
+      await dataService.update(tableName(parentDs), { [parentMatchField]: newValue }, parentMatchField, oldValue)
+
+      // Update all child rows where the link field matches the old value.
+      const children = await dataService.query(tableName(childDs))
+      for (const child of children) {
+        if (String(child[childLinkField] ?? '') === oldValue) {
+          const id = String(child['_id'] ?? '')
+          if (id) {
+            await dataService.update(tableName(childDs), { [childLinkField]: newValue }, '_id', id)
+          }
+        }
+      }
+
+      set({ recordGeneration: get().recordGeneration + 1 })
+    } catch (e) {
+      console.warn('ODS Cascade Rename Error:', e)
+      set({ lastActionError: `Cascade rename failed: ${e}` })
+    }
   },
 
   // -------------------------------------------------------------------------

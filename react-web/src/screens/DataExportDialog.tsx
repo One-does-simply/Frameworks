@@ -1,0 +1,201 @@
+import { useState } from 'react'
+import { useAppStore } from '@/engine/app-store.ts'
+import { isLocal, tableName } from '@/models/ods-data-source.ts'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Separator } from '@/components/ui/separator'
+import { toast } from 'sonner'
+import { FileJson, Table } from 'lucide-react'
+
+// ---------------------------------------------------------------------------
+// DataExportDialog — export all app data as JSON or CSV
+// ---------------------------------------------------------------------------
+
+type ExportFormat = 'json' | 'csv'
+
+interface DataExportDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+export function DataExportDialog({ open, onOpenChange }: DataExportDialogProps) {
+  const app = useAppStore((s) => s.app)!
+  const dataService = useAppStore((s) => s.dataService)
+
+  const [isExporting, setIsExporting] = useState(false)
+
+  // Collect all local data source table names
+  const localTables: { id: string; table: string }[] = []
+  for (const [dsId, ds] of Object.entries(app.dataSources)) {
+    if (isLocal(ds)) {
+      localTables.push({ id: dsId, table: tableName(ds) })
+    }
+  }
+
+  async function handleExport(format: ExportFormat) {
+    if (!dataService) return
+
+    setIsExporting(true)
+    try {
+      // Query all tables
+      const exportData: Record<string, Record<string, unknown>[]> = {}
+      for (const { table } of localTables) {
+        exportData[table] = await dataService.query(table)
+      }
+
+      const safeName = app.appName.replace(/[^\w]/g, '_').toLowerCase()
+
+      if (format === 'json') {
+        downloadJson(safeName, exportData)
+      } else {
+        downloadCsv(safeName, exportData)
+      }
+
+      toast.success(`Data exported as ${format.toUpperCase()}.`)
+      onOpenChange(false)
+    } catch (err) {
+      console.error('Export failed:', err)
+      toast.error('Export failed. Check the console for details.')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Export Data</DialogTitle>
+          <DialogDescription>
+            Download all your app data in the format of your choice.
+          </DialogDescription>
+        </DialogHeader>
+
+        {localTables.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            No local data sources to export.
+          </p>
+        ) : (
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">
+              {localTables.length} table{localTables.length === 1 ? '' : 's'}: {localTables.map((t) => t.table).join(', ')}
+            </p>
+            <Separator className="my-3" />
+
+            <button
+              onClick={() => handleExport('json')}
+              disabled={isExporting}
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm transition-colors hover:bg-muted disabled:opacity-50"
+            >
+              <FileJson className="size-5 text-primary" />
+              <div>
+                <div className="font-medium">JSON</div>
+                <div className="text-xs text-muted-foreground">
+                  Standard JSON — works with any programming language
+                </div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => handleExport('csv')}
+              disabled={isExporting}
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm transition-colors hover:bg-muted disabled:opacity-50"
+            >
+              <Table className="size-5 text-primary" />
+              <div>
+                <div className="font-medium">CSV</div>
+                <div className="text-xs text-muted-foreground">
+                  Comma-separated values — opens in Excel, Sheets, etc.
+                </div>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {isExporting && (
+          <p className="text-center text-sm text-muted-foreground">Exporting...</p>
+        )}
+
+        <DialogFooter showCloseButton />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Download helpers — Blob + URL.createObjectURL
+// ---------------------------------------------------------------------------
+
+function triggerDownload(filename: string, content: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+function downloadJson(
+  safeName: string,
+  tables: Record<string, Record<string, unknown>[]>,
+) {
+  const payload = {
+    appName: safeName,
+    exportedAt: new Date().toISOString(),
+    tables,
+  }
+  const jsonStr = JSON.stringify(payload, null, 2)
+  triggerDownload(`${safeName}_export.json`, jsonStr, 'application/json')
+}
+
+function downloadCsv(
+  safeName: string,
+  tables: Record<string, Record<string, unknown>[]>,
+) {
+  const tableNames = Object.keys(tables)
+
+  for (const tableName of tableNames) {
+    const rows = tables[tableName]
+    if (!rows || rows.length === 0) continue
+
+    // Collect all column names, excluding internal _id
+    const columnSet = new Set<string>()
+    for (const row of rows) {
+      for (const key of Object.keys(row)) {
+        if (key !== '_id' && key !== 'id' && key !== 'collectionId' && key !== 'collectionName') {
+          columnSet.add(key)
+        }
+      }
+    }
+    const columns = Array.from(columnSet)
+
+    // Build CSV
+    const lines: string[] = []
+    lines.push(columns.map(csvEscape).join(','))
+    for (const row of rows) {
+      lines.push(columns.map((col) => csvEscape(String(row[col] ?? ''))).join(','))
+    }
+
+    const filename = tableNames.length === 1
+      ? `${safeName}_export.csv`
+      : `${safeName}_${tableName}.csv`
+
+    triggerDownload(filename, lines.join('\n'), 'text/csv')
+  }
+}
+
+function csvEscape(value: string): string {
+  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+    return `"${value.replace(/"/g, '""')}"`
+  }
+  return value
+}

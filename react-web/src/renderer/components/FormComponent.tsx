@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAppStore } from '@/engine/app-store'
 import { evaluateFormula } from '@/engine/formula-evaluator'
-import { validateField, isComputed, type OdsFieldDefinition } from '@/models/ods-field'
+import { validateField, isComputed, type OdsFieldDefinition, type OdsOptionsFrom } from '@/models/ods-field'
 import type { OdsFormComponent } from '@/models/ods-component'
 
 import { Input } from '@/components/ui/input'
@@ -94,6 +94,8 @@ interface FieldProps {
 function FormField({ field, formId, value, onChange }: FieldProps) {
   const [error, setError] = useState<string | undefined>(undefined)
   const [touched, setTouched] = useState(false)
+  const appSettings = useAppStore((s) => s.appSettings)
+  const formState = useAppStore((s) => s.getFormState(formId))
 
   const handleBlur = useCallback(() => {
     setTouched(true)
@@ -135,13 +137,62 @@ function FormField({ field, formId, value, onChange }: FieldProps) {
     [field.name, onChange],
   )
 
+  // Read-only fields with display variants render as clean text.
+  if (field.readOnly && field.displayVariant) {
+    const variant = field.displayVariant
+    const label = field.label || field.name
+
+    // Apply currency formatting for display.
+    let displayValue = value
+    if (field.currency && field.type === 'number' && value) {
+      const currency = appSettings['currency'] ?? ''
+      if (currency && !isNaN(Number(value))) {
+        displayValue = `${currency}${value}`
+      }
+    }
+
+    if (variant === 'plain' || variant === 'heading' || variant === 'caption' || variant === 'subtitle') {
+      let valueClassName = ''
+      switch (variant) {
+        case 'heading':
+          valueClassName = 'text-xl font-semibold'
+          break
+        case 'caption':
+          valueClassName = 'text-sm text-muted-foreground'
+          break
+        case 'subtitle':
+          valueClassName = 'text-base font-medium'
+          break
+        default: // plain
+          valueClassName = 'text-base'
+          break
+      }
+
+      return (
+        <div className="space-y-1">
+          <span className="text-xs text-muted-foreground">{label}</span>
+          <p className={valueClassName}>{displayValue}</p>
+        </div>
+      )
+    }
+  }
+
+  // Currency formatting for read-only number fields (default variant).
+  let displayValue = value
+  if (field.readOnly && field.currency && field.type === 'number' && value) {
+    const currency = appSettings['currency'] ?? ''
+    if (currency && !isNaN(Number(value))) {
+      displayValue = `${currency}${value}`
+    }
+  }
+
   return (
     <div className="space-y-1">
       <Label htmlFor={`${formId}-${field.name}`}>
         {field.label || field.name}
         {field.required && <span className="text-destructive"> *</span>}
       </Label>
-      {renderInput(field, formId, value, handleChange, handleBlur)}
+      {renderInput(field, formId, value, displayValue, handleChange, handleBlur, formState)}
       {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   )
@@ -151,8 +202,10 @@ function renderInput(
   field: OdsFieldDefinition,
   formId: string,
   value: string,
+  displayValue: string,
   onChange: (value: string) => void,
   onBlur: () => void,
+  formState: Record<string, string>,
 ) {
   const id = `${formId}-${field.name}`
   const placeholder = field.placeholder ?? ''
@@ -172,6 +225,19 @@ function renderInput(
       )
 
     case 'select':
+      if (field.optionsFrom) {
+        return (
+          <DynamicSelect
+            field={field}
+            formId={formId}
+            value={value}
+            optionsFrom={field.optionsFrom}
+            formState={formState}
+            onChange={onChange}
+            onBlur={onBlur}
+          />
+        )
+      }
       return (
         <Select value={value || undefined} onValueChange={(v) => onChange(v ?? '')}>
           <SelectTrigger id={id} onBlur={onBlur}>
@@ -235,7 +301,16 @@ function renderInput(
       )
 
     case 'number':
-      return (
+      return field.readOnly ? (
+        <Input
+          id={id}
+          type="text"
+          value={displayValue}
+          readOnly
+          disabled
+          className="bg-muted"
+        />
+      ) : (
         <Input
           id={id}
           type="number"
@@ -282,6 +357,105 @@ function renderInput(
 }
 
 // ---------------------------------------------------------------------------
+// Dynamic select (optionsFrom) sub-component
+// ---------------------------------------------------------------------------
+
+interface DynamicSelectProps {
+  field: OdsFieldDefinition
+  formId: string
+  value: string
+  optionsFrom: OdsOptionsFrom
+  formState: Record<string, string>
+  onChange: (value: string) => void
+  onBlur: () => void
+}
+
+function DynamicSelect({ field, formId, value, optionsFrom, formState, onChange, onBlur }: DynamicSelectProps) {
+  const queryDataSource = useAppStore((s) => s.queryDataSource)
+  const [options, setOptions] = useState<string[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Determine the dependency field value for filtered/dependent dropdowns.
+  const filterDependencyValue = optionsFrom.filter
+    ? (formState[optionsFrom.filter.fromField] ?? '')
+    : undefined
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      setLoading(true)
+      let rows = await queryDataSource(optionsFrom.dataSource)
+
+      // Apply dependent dropdown filter.
+      if (optionsFrom.filter && filterDependencyValue) {
+        rows = rows.filter(
+          (row) =>
+            String(row[optionsFrom.filter!.field] ?? '') === filterDependencyValue,
+        )
+      }
+
+      // Extract unique values from the valueField column.
+      const unique = new Set<string>()
+      for (const row of rows) {
+        const val = row[optionsFrom.valueField]
+        if (val != null && String(val) !== '') {
+          unique.add(String(val))
+        }
+      }
+
+      if (!cancelled) {
+        setOptions(Array.from(unique))
+        setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [optionsFrom.dataSource, optionsFrom.valueField, optionsFrom.filter, filterDependencyValue, queryDataSource])
+
+  const id = `${formId}-${field.name}`
+  const placeholder = field.placeholder ?? ''
+
+  if (loading) {
+    return (
+      <Select disabled>
+        <SelectTrigger id={id}>
+          <SelectValue placeholder="Loading..." />
+        </SelectTrigger>
+        <SelectContent />
+      </Select>
+    )
+  }
+
+  if (options.length === 0) {
+    return (
+      <Select disabled>
+        <SelectTrigger id={id}>
+          <SelectValue placeholder="No options available" />
+        </SelectTrigger>
+        <SelectContent />
+      </Select>
+    )
+  }
+
+  const effectiveValue = options.includes(value) ? value : undefined
+
+  return (
+    <Select value={effectiveValue} onValueChange={(v) => onChange(v ?? '')}>
+      <SelectTrigger id={id} onBlur={onBlur}>
+        <SelectValue placeholder={placeholder || 'Select...'} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((opt) => (
+          <SelectItem key={opt} value={opt}>
+            {opt}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Computed (formula) field renderer
 // ---------------------------------------------------------------------------
 
@@ -294,6 +468,7 @@ interface ComputedFieldProps {
 
 function ComputedField({ field, formId, allFields, formState }: ComputedFieldProps) {
   const updateFormField = useAppStore((s) => s.updateFormField)
+  const appSettings = useAppStore((s) => s.appSettings)
 
   // Build values map from form state.
   const values: Record<string, string | null | undefined> = {}
@@ -310,6 +485,17 @@ function ComputedField({ field, formId, allFields, formState }: ComputedFieldPro
     }
   }, [result, formId, field.name, updateFormField])
 
+  // Apply currency symbol for fields marked with currency: true,
+  // or fall back to all number computed fields when no field opts in.
+  let displayResult = result
+  const anyCurrency = allFields.some((f) => f.currency)
+  if (field.currency || (!anyCurrency && field.type === 'number')) {
+    const currency = appSettings['currency'] ?? ''
+    if (currency && !isNaN(Number(result)) && result !== '') {
+      displayResult = `${currency}${result}`
+    }
+  }
+
   return (
     <div className="space-y-1">
       <Label htmlFor={`${formId}-${field.name}`}>
@@ -319,7 +505,7 @@ function ComputedField({ field, formId, allFields, formState }: ComputedFieldPro
       <Input
         id={`${formId}-${field.name}`}
         type="text"
-        value={result}
+        value={displayResult}
         readOnly
         disabled
         className="bg-muted"
