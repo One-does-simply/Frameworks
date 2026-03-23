@@ -117,6 +117,8 @@ function AggregateValue({
   className: string
 }) {
   const queryDataSource = useAppStore((s) => s.queryDataSource)
+  const currentPageId = useAppStore((s) => s.currentPageId)
+  const recordGeneration = useAppStore((s) => s.recordGeneration)
   const [resolved, setResolved] = useState('...')
 
   useEffect(() => {
@@ -125,7 +127,7 @@ function AggregateValue({
       if (!cancelled) setResolved(text)
     })
     return () => { cancelled = true }
-  }, [rawValue, queryDataSource])
+  }, [rawValue, queryDataSource, currentPageId, recordGeneration])
 
   return <p className={className}>{resolved}</p>
 }

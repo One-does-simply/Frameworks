@@ -172,6 +172,7 @@ function OdsPieChart({ data }: { data: AggregatedEntry[] }) {
 export function ChartComponent({ model }: { model: OdsChartComponent }) {
   const queryDataSource = useAppStore((s) => s.queryDataSource)
   const recordGeneration = useAppStore((s) => s.recordGeneration)
+  const currentPageId = useAppStore((s) => s.currentPageId)
   const [data, setData] = useState<AggregatedEntry[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -195,7 +196,7 @@ export function ChartComponent({ model }: { model: OdsChartComponent }) {
 
     load()
     return () => { cancelled = true }
-  }, [queryDataSource, model.dataSource, model.labelField, model.valueField, model.aggregate, recordGeneration])
+  }, [queryDataSource, model.dataSource, model.labelField, model.valueField, model.aggregate, recordGeneration, currentPageId])
 
   if (loading) {
     return (

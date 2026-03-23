@@ -275,7 +275,9 @@ export function ListComponent({ model }: ListComponentProps) {
 
   const hasRowActions = visibleRowActions.length > 0
 
-  // Load data on mount and whenever lastMessage changes (indicating a data mutation).
+  // Re-fetch data on mount, page navigation, and after mutations.
+  // currentPageId ensures lists refresh when navigating back to them.
+  const currentPageId = useAppStore((s) => s.currentPageId)
   useEffect(() => {
     let cancelled = false
     const load = async () => {
@@ -288,7 +290,7 @@ export function ListComponent({ model }: ListComponentProps) {
     }
     load()
     return () => { cancelled = true }
-  }, [model.dataSource, queryDataSource, lastMessage, recordGeneration])
+  }, [model.dataSource, queryDataSource, lastMessage, recordGeneration, currentPageId])
 
   // Process rows: filter -> search -> sort.
   const processedRows = useMemo(() => {

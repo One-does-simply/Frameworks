@@ -69,6 +69,8 @@ function AggregateText({
   colorClass: string
 }) {
   const queryDataSource = useAppStore((s) => s.queryDataSource)
+  const currentPageId = useAppStore((s) => s.currentPageId)
+  const recordGeneration = useAppStore((s) => s.recordGeneration)
   const [resolved, setResolved] = useState(content)
 
   useEffect(() => {
@@ -77,7 +79,7 @@ function AggregateText({
       if (!cancelled) setResolved(text)
     })
     return () => { cancelled = true }
-  }, [content, queryDataSource])
+  }, [content, queryDataSource, currentPageId, recordGeneration])
 
   return (
     <div className={cn('py-2', alignClass)}>
