@@ -51,7 +51,7 @@ export class AppRegistry {
           fields: [
             { name: 'name', type: 'text', required: true },
             { name: 'slug', type: 'text', required: true },
-            { name: 'specJson', type: 'text', required: true },
+            { name: 'specJson', type: 'text', required: true, maxSize: 5000000 },
             { name: 'status', type: 'text', required: false },
             { name: 'description', type: 'text', required: false },
           ],
@@ -61,8 +61,16 @@ export class AppRegistry {
           updateRule: '',
           deleteRule: '',
         })
+        console.log('Created _ods_apps collection')
       } catch (e) {
         console.error('Failed to create _ods_apps collection:', e)
+        // May already exist from a previous session — try to verify
+        try {
+          await this.pb.collection(COLLECTION_NAME).getList(1, 1, { requestKey: null })
+          console.log('_ods_apps collection already exists (creation failed but collection is usable)')
+        } catch (e2) {
+          console.error('_ods_apps collection is unusable:', e2)
+        }
       }
     }
   }
@@ -151,7 +159,8 @@ export class AppRegistry {
       }
     } catch (e) {
       console.error('Failed to save app:', e)
-      return null
+      // Re-throw with details so the UI can show a meaningful message
+      throw e
     }
   }
 

@@ -114,18 +114,25 @@ export function AdminDashboard() {
     const appName = result.app!.appName
     const description = result.app!.help?.overview ?? ''
 
-    const saved = await registry.saveApp(appName, jsonString, description)
-    setSaving(false)
+    try {
+      const saved = await registry.saveApp(appName, jsonString, description)
+      setSaving(false)
 
-    if (saved) {
-      toast.success(`App "${appName}" saved`)
-      setMode(null)
-      setUrlInput('')
-      setPasteInput('')
-      await loadApps()
-      navigate(`/${saved.slug}`)
-    } else {
-      setLocalError('Failed to save app to PocketBase')
+      if (saved) {
+        toast.success(`App "${appName}" saved`)
+        setMode(null)
+        setUrlInput('')
+        setPasteInput('')
+        await loadApps()
+        navigate(`/${saved.slug}`)
+      } else {
+        setLocalError('Failed to save app to PocketBase')
+      }
+    } catch (e) {
+      setSaving(false)
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error('Save app error:', e)
+      setLocalError(`Failed to save app: ${msg}`)
     }
   }
 
