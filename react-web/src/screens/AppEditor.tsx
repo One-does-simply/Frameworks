@@ -37,7 +37,7 @@ export function AppEditor() {
           id: record.id,
           name: record['name'] as string,
           slug: record['slug'] as string,
-          specJson: record['specJson'] as string,
+          specJson: typeof record['specJson'] === 'string' ? record['specJson'] : JSON.stringify(record['specJson']),
           status: (record['status'] as string) === 'archived' ? 'archived' : 'active',
           description: (record['description'] as string) ?? '',
           created: record.created,
