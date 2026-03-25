@@ -51,7 +51,7 @@ export class AppRegistry {
           fields: [
             { name: 'name', type: 'text', required: true },
             { name: 'slug', type: 'text', required: true },
-            { name: 'specJson', type: 'text', required: true, maxSize: 5000000 },
+            { name: 'specJson', type: 'json', required: true, maxSize: 5242880 },
             { name: 'status', type: 'text', required: false },
             { name: 'description', type: 'text', required: false },
           ],
@@ -85,7 +85,7 @@ export class AppRegistry {
         id: r.id,
         name: r['name'] as string,
         slug: r['slug'] as string,
-        specJson: r['specJson'] as string,
+        specJson: typeof r['specJson'] === 'string' ? r['specJson'] : JSON.stringify(r['specJson']),
         status: (r['status'] as string) === 'archived' ? 'archived' as const : 'active' as const,
         description: r['description'] as string ?? '',
         created: r.created,
@@ -111,7 +111,7 @@ export class AppRegistry {
         id: record.id,
         name: record['name'] as string,
         slug: record['slug'] as string,
-        specJson: record['specJson'] as string,
+        specJson: typeof record['specJson'] === 'string' ? record['specJson'] : JSON.stringify(record['specJson']),
         status: (record['status'] as string) === 'archived' ? 'archived' : 'active',
         description: record['description'] as string ?? '',
         created: record.created,
@@ -140,10 +140,12 @@ export class AppRegistry {
     }
 
     try {
+      // PocketBase json fields expect a parsed object, not a string.
+      const specObj = JSON.parse(specJson)
       const record = await this.pb.collection(COLLECTION_NAME).create({
         name,
         slug,
-        specJson,
+        specJson: specObj,
         status: 'active',
         description: description ?? '',
       })
@@ -151,15 +153,18 @@ export class AppRegistry {
         id: record.id,
         name: record['name'] as string,
         slug: record['slug'] as string,
-        specJson: record['specJson'] as string,
+        specJson: typeof record['specJson'] === 'string' ? record['specJson'] : JSON.stringify(record['specJson']),
         status: 'active',
         description: record['description'] as string ?? '',
         created: record.created,
         updated: record.updated,
       }
-    } catch (e) {
+    } catch (e: unknown) {
+      // PocketBase ClientResponseError has a `data` field with per-field errors
+      const pbErr = e as { data?: Record<string, unknown>; response?: unknown }
       console.error('Failed to save app:', e)
-      // Re-throw with details so the UI can show a meaningful message
+      console.error('PB error data:', pbErr.data)
+      console.error('PB error response:', pbErr.response)
       throw e
     }
   }
@@ -167,7 +172,7 @@ export class AppRegistry {
   /** Update an existing app's spec JSON. */
   async updateApp(appId: string, specJson: string): Promise<boolean> {
     try {
-      await this.pb.collection(COLLECTION_NAME).update(appId, { specJson })
+      await this.pb.collection(COLLECTION_NAME).update(appId, { specJson: JSON.parse(specJson) })
       return true
     } catch (e) {
       console.error('Failed to update app:', e)
