@@ -34,6 +34,7 @@ import {
   Loader2,
   ExternalLink,
   Pencil,
+  Sparkles,
   Archive,
   ArchiveRestore,
   Trash2,
@@ -41,7 +42,42 @@ import {
   ChevronDown,
   ChevronRight,
   Plus,
+  BookOpen,
+  Sun,
+  Moon,
+  Monitor,
+  Zap,
+  LayoutGrid,
+  MoreVertical,
+  Play,
+  Link2,
+  Download,
+  Code,
+  Star,
+  StarOff,
+  Info,
+  Settings as SettingsIcon,
+  LogOut,
 } from 'lucide-react'
+import { ExampleCatalogDialog } from './ExampleCatalogDialog.tsx'
+import { DataExportDialog } from './DataExportDialog.tsx'
+import { GenerateCodeDialog } from './GenerateCodeDialog.tsx'
+import { DataService } from '@/engine/data-service.ts'
+import type { OdsApp } from '@/models/ods-app.ts'
+import {
+  OnboardingScreen,
+  isOnboardingComplete,
+} from './OnboardingScreen.tsx'
+import {
+  getThemeMode,
+  setThemeMode,
+  type ThemeMode,
+} from '@/engine/theme-store.ts'
+import {
+  getDefaultAppSlug,
+  setDefaultAppSlug,
+  ensureDefaultApp,
+} from '@/engine/default-app-store.ts'
 
 // ---------------------------------------------------------------------------
 // AdminDashboard — manage all ODS apps
@@ -56,6 +92,10 @@ export function AdminDashboard() {
   const [apps, setApps] = useState<AppRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [archivedOpen, setArchivedOpen] = useState(false)
+  const [catalogOpen, setCatalogOpen] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const [theme, setTheme] = useState<ThemeMode>(getThemeMode)
+  const [defaultSlug, setDefaultSlug] = useState<string | null>(getDefaultAppSlug)
 
   // Add app state
   const [mode, setMode] = useState<LoadMode>(null)
@@ -67,6 +107,10 @@ export function AdminDashboard() {
 
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<AppRecord | null>(null)
+
+  // Off-ramp dialogs
+  const [exportTarget, setExportTarget] = useState<{ app: OdsApp; dataService: DataService } | null>(null)
+  const [generateTarget, setGenerateTarget] = useState<OdsApp | null>(null)
 
   const activeApps = apps.filter((a) => a.status === 'active')
   const archivedApps = apps.filter((a) => a.status === 'archived')
@@ -80,11 +124,28 @@ export function AdminDashboard() {
     const list = await registry.listApps()
     setApps(list)
     setLoading(false)
+
+    // Ensure first active app becomes default if none set
+    const active = list.filter((a) => a.status === 'active')
+    if (active.length > 0) {
+      ensureDefaultApp(active[0].slug)
+      setDefaultSlug(getDefaultAppSlug())
+    }
+
+    // Show onboarding if this is first visit and no apps exist
+    if (list.length === 0 && !isOnboardingComplete()) {
+      setShowOnboarding(true)
+    }
   }, [registry])
 
   useEffect(() => {
     loadApps()
   }, [loadApps])
+
+  // Shared install handler for onboarding + catalog dialog
+  async function installExample(name: string, specJson: string, description: string) {
+    await registry.saveApp(name, specJson, description)
+  }
 
   // -------------------------------------------------------------------------
   // Save new app from spec JSON
@@ -212,98 +273,161 @@ export function AdminDashboard() {
   }
 
   // -------------------------------------------------------------------------
+  // Off-ramp: parse spec -> open dialog
+  // -------------------------------------------------------------------------
+
+  function handleExportData(appRecord: AppRecord) {
+    const result = parseSpec(appRecord.specJson)
+    if (!result.app) {
+      toast.error('Could not parse app spec')
+      return
+    }
+    const ds = new DataService(pb)
+    ds.initialize(result.app.appName)
+    setExportTarget({ app: result.app, dataService: ds })
+  }
+
+  function handleSetDefault(app: AppRecord) {
+    setDefaultAppSlug(app.slug)
+    setDefaultSlug(app.slug)
+    toast.success(`"${app.name}" set as default app`)
+  }
+
+  function handleLogout() {
+    // Clear admin auth from localStorage and PocketBase
+    localStorage.removeItem('ods_pb_admin_email')
+    localStorage.removeItem('ods_pb_admin_password')
+    pb.authStore.clear()
+    navigate('/')
+    // Force page reload to clear all state
+    window.location.reload()
+  }
+
+  function handleGenerateCode(appRecord: AppRecord) {
+    const result = parseSpec(appRecord.specJson)
+    if (!result.app) {
+      toast.error('Could not parse app spec')
+      return
+    }
+    setGenerateTarget(result.app)
+  }
+
+  // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
 
+  // Show onboarding if first run
+  if (showOnboarding) {
+    return (
+      <OnboardingScreen
+        onComplete={() => {
+          setShowOnboarding(false)
+          loadApps()
+        }}
+        onInstall={installExample}
+      />
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Top bar */}
-      <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-background/95 px-6 supports-backdrop-filter:backdrop-blur-sm">
-        <h1 className="text-lg font-semibold">ODS Admin</h1>
-        <div className="flex-1" />
-        <Button variant="ghost" size="sm">
-          <Link to="/admin/users">
-            <Users className="mr-2 size-4" />
-            Users
-          </Link>
-        </Button>
+      {/* Hero header */}
+      <header className="border-b bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-6 text-white">
+        <div className="mx-auto max-w-5xl">
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <h1 className="text-xl font-extrabold tracking-tight">One Does Simply</h1>
+              <p className="text-sm font-medium text-white/90">Vibe Coding with Guardrails</p>
+              <p className="mt-1 text-xs text-white/60">A web-based implementation perfect for multi-user applications</p>
+            </div>
+            <a
+              href="https://github.com/One-does-simply"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <Info className="size-3.5" />
+              Learn More
+            </a>
+            <div className="flex gap-0.5 rounded-lg border border-white/20 bg-white/10 p-0.5">
+              {([
+                { mode: 'light' as ThemeMode, icon: Sun },
+                { mode: 'system' as ThemeMode, icon: Monitor },
+                { mode: 'dark' as ThemeMode, icon: Moon },
+              ]).map(({ mode, icon: Icon }) => (
+                <button
+                  key={mode}
+                  onClick={() => { setTheme(mode); setThemeMode(mode) }}
+                  className={`rounded-md p-1.5 transition-colors ${
+                    theme === mode
+                      ? 'bg-white text-indigo-700'
+                      : 'text-white/70 hover:text-white'
+                  }`}
+                  aria-label={`${mode} theme`}
+                >
+                  <Icon className="size-4" />
+                </button>
+              ))}
+            </div>
+            <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" asChild>
+              <Link to="/admin/users">
+                <Users className="mr-2 size-4" />
+                Users
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" asChild>
+              <Link to="/admin/settings">
+                <SettingsIcon className="mr-2 size-4" />
+                Settings
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" onClick={handleLogout}>
+              <LogOut className="mr-2 size-4" />
+              Logout
+            </Button>
+          </div>
+        </div>
       </header>
 
-      <div className="mx-auto max-w-5xl space-y-8 p-6">
-        {/* Add App section */}
-        <section>
-          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
-            <Plus className="size-5" />
-            Add App
-          </h2>
-
-          {/* Error display */}
-          {localError && (
-            <div className="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive whitespace-pre-wrap">
-              {localError}
-            </div>
-          )}
-
-          {saving && (
-            <div className="mb-4 flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              <span>Saving app...</span>
-            </div>
-          )}
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Card
-              className="cursor-pointer transition-colors hover:bg-muted/50"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <CardContent className="flex flex-col items-center gap-2 py-6 text-center">
-                <FileUp className="size-8 text-primary" />
-                <span className="text-sm font-medium">Load from File</span>
-              </CardContent>
-            </Card>
-
-            <Card
-              className="cursor-pointer transition-colors hover:bg-muted/50"
-              onClick={() => {
-                setLocalError(null)
-                setMode('url')
-              }}
-            >
-              <CardContent className="flex flex-col items-center gap-2 py-6 text-center">
-                <Globe className="size-8 text-primary" />
-                <span className="text-sm font-medium">Load from URL</span>
-              </CardContent>
-            </Card>
-
-            <Card
-              className="cursor-pointer transition-colors hover:bg-muted/50"
-              onClick={() => {
-                setLocalError(null)
-                setMode('paste')
-              }}
-            >
-              <CardContent className="flex flex-col items-center gap-2 py-6 text-center">
-                <ClipboardPaste className="size-8 text-primary" />
-                <span className="text-sm font-medium">Paste JSON</span>
-              </CardContent>
-            </Card>
+      <div className="mx-auto max-w-5xl space-y-6 p-6">
+        {/* Error display */}
+        {localError && (
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive whitespace-pre-wrap">
+            {localError}
           </div>
+        )}
 
-          {/* Hidden file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json,application/json"
-            className="hidden"
-            onChange={handleFileSelect}
-          />
-        </section>
+        {saving && (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            <span>Saving app...</span>
+          </div>
+        )}
 
-        {/* Active Apps */}
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+
+        {/* My Apps header with Add App dropdown */}
         <section>
-          <h2 className="mb-4 text-lg font-semibold">
-            Apps {!loading && `(${activeApps.length})`}
-          </h2>
+          <div className="mb-4 flex items-center">
+            <h2 className="text-lg font-bold">
+              My Apps {!loading && activeApps.length > 0 && <span className="text-muted-foreground font-normal">({activeApps.length})</span>}
+            </h2>
+            <div className="flex-1" />
+            <AddAppButton
+              onPickFile={() => fileInputRef.current?.click()}
+              onLoadUrl={() => { setLocalError(null); setMode('url') }}
+              onPasteJson={() => { setLocalError(null); setMode('paste') }}
+              onBrowseExamples={() => setCatalogOpen(true)}
+              onQuickBuild={() => navigate('/admin/quick-build')}
+            />
+          </div>
 
           {loading ? (
             <div className="flex items-center gap-2 py-8 text-muted-foreground">
@@ -311,19 +435,28 @@ export function AdminDashboard() {
               Loading apps...
             </div>
           ) : activeApps.length === 0 ? (
-            <div className="rounded-lg border border-dashed py-12 text-center text-muted-foreground">
-              No apps loaded yet. Add one above to get started.
+            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-16 text-center">
+              <LayoutGrid className="size-10 text-muted-foreground/40" />
+              <div>
+                <p className="font-medium text-muted-foreground">No apps yet</p>
+                <p className="text-sm text-muted-foreground/70">Add an app above or browse examples to get started.</p>
+              </div>
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="space-y-2">
               {activeApps.map((app) => (
                 <AppCard
                   key={app.id}
                   app={app}
+                  isDefault={app.slug === defaultSlug}
                   onOpen={() => navigate(`/${app.slug}`)}
                   onEdit={() => navigate(`/admin/apps/${app.id}/edit`)}
+                  onEditWithAi={() => navigate(`/admin/apps/${app.id}/edit-ai`)}
+                  onExportData={() => handleExportData(app)}
+                  onGenerateCode={() => handleGenerateCode(app)}
                   onArchive={() => handleArchive(app)}
                   onDelete={() => setDeleteTarget(app)}
+                  onSetDefault={() => handleSetDefault(app)}
                 />
               ))}
             </div>
@@ -346,7 +479,7 @@ export function AdminDashboard() {
             </button>
 
             {archivedOpen && (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-2">
                 {archivedApps.map((app) => (
                   <AppCard
                     key={app.id}
@@ -354,6 +487,9 @@ export function AdminDashboard() {
                     archived
                     onOpen={() => navigate(`/${app.slug}`)}
                     onEdit={() => navigate(`/admin/apps/${app.id}/edit`)}
+                    onEditWithAi={() => navigate(`/admin/apps/${app.id}/edit-ai`)}
+                    onExportData={() => handleExportData(app)}
+                    onGenerateCode={() => handleGenerateCode(app)}
                     onRestore={() => handleRestore(app)}
                     onDelete={() => setDeleteTarget(app)}
                   />
@@ -364,7 +500,7 @@ export function AdminDashboard() {
         )}
 
         {/* Footer */}
-        <p className="pb-4 text-center text-xs text-muted-foreground">
+        <p className="pb-4 text-center text-xs text-muted-foreground/50">
           ODS React Web Framework
         </p>
       </div>
@@ -449,6 +585,36 @@ export function AdminDashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Example Catalog Dialog */}
+      <ExampleCatalogDialog
+        open={catalogOpen}
+        onOpenChange={setCatalogOpen}
+        existingSlugs={apps.map((a) => a.slug)}
+        onInstall={async (name, specJson, description) => {
+          await installExample(name, specJson, description)
+          await loadApps()
+        }}
+      />
+
+      {/* Off-ramp: Export Data */}
+      {exportTarget && (
+        <DataExportDialog
+          open={!!exportTarget}
+          onOpenChange={(v) => { if (!v) setExportTarget(null) }}
+          app={exportTarget.app}
+          dataService={exportTarget.dataService}
+        />
+      )}
+
+      {/* Off-ramp: Generate Code */}
+      {generateTarget && (
+        <GenerateCodeDialog
+          open={!!generateTarget}
+          onOpenChange={(v) => { if (!v) setGenerateTarget(null) }}
+          app={generateTarget}
+        />
+      )}
     </div>
   )
 }
@@ -460,70 +626,225 @@ export function AdminDashboard() {
 interface AppCardProps {
   app: AppRecord
   archived?: boolean
+  isDefault?: boolean
   onOpen: () => void
   onEdit: () => void
+  onEditWithAi?: () => void
+  onExportData?: () => void
+  onGenerateCode?: () => void
   onArchive?: () => void
   onRestore?: () => void
   onDelete: () => void
+  onSetDefault?: () => void
 }
 
-function AppCard({ app, archived, onOpen, onEdit, onArchive, onRestore, onDelete }: AppCardProps) {
-  const created = new Date(app.created).toLocaleDateString()
+function AppCard({ app, archived, isDefault, onOpen, onEdit, onEditWithAi, onExportData, onGenerateCode, onArchive, onRestore, onDelete, onSetDefault }: AppCardProps) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuBtnRef = useRef<HTMLButtonElement>(null)
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
+
+  function openMenu() {
+    if (menuBtnRef.current) {
+      const rect = menuBtnRef.current.getBoundingClientRect()
+      setMenuPos({ top: rect.bottom + 4, left: rect.right })
+    }
+    setMenuOpen(true)
+  }
+
+  function closeMenu() {
+    setMenuOpen(false)
+    setMenuPos(null)
+  }
 
   return (
-    <Card className="flex flex-col">
-      <CardContent className="flex flex-1 flex-col gap-3 p-4">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h3 className="truncate font-semibold">{app.name}</h3>
-            <p className="text-xs text-muted-foreground">/{app.slug}</p>
+    <Card
+      className="group cursor-pointer transition-all hover:shadow-md hover:border-primary/20"
+      onClick={onOpen}
+    >
+      <CardContent className="flex items-center gap-4 p-4">
+        {/* App icon */}
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+          <LayoutGrid className="size-5 text-primary" />
+        </div>
+
+        {/* App info */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="truncate text-sm font-semibold">{app.name}</h3>
+            {isDefault && <Badge variant="default" className="text-[10px] px-1.5 py-0 bg-amber-500 hover:bg-amber-500">Default</Badge>}
+            {archived && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Archived</Badge>}
           </div>
-          <Badge variant={archived ? 'secondary' : 'default'}>
-            {archived ? 'Archived' : 'Active'}
-          </Badge>
-        </div>
-
-        {app.description && (
-          <p className="line-clamp-2 text-sm text-muted-foreground">{app.description}</p>
-        )}
-
-        <p className="text-xs text-muted-foreground">Created {created}</p>
-
-        <div className="mt-auto flex flex-wrap gap-2 pt-2">
-          <Button variant="default" size="sm" onClick={onOpen}>
-            <ExternalLink className="mr-1 size-3.5" />
-            Open
-          </Button>
-          <Button variant="outline" size="sm" onClick={onEdit}>
-            <Pencil className="mr-1 size-3.5" />
-            Edit
-          </Button>
-          {archived ? (
-            onRestore && (
-              <Button variant="outline" size="sm" onClick={onRestore}>
-                <ArchiveRestore className="mr-1 size-3.5" />
-                Restore
-              </Button>
-            )
+          {app.description ? (
+            <p className="truncate text-xs text-muted-foreground">{app.description}</p>
           ) : (
-            onArchive && (
-              <Button variant="outline" size="sm" onClick={onArchive}>
-                <Archive className="mr-1 size-3.5" />
-                Archive
-              </Button>
-            )
+            <p className="text-xs text-muted-foreground">/{app.slug}</p>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onDelete}
-            className="text-destructive hover:text-destructive"
-          >
-            <Trash2 className="mr-1 size-3.5" />
-            Delete
-          </Button>
         </div>
+
+        {/* Context menu trigger */}
+        <div onClick={(e) => e.stopPropagation()}>
+          <button
+            ref={menuBtnRef}
+            onClick={() => menuOpen ? closeMenu() : openMenu()}
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <MoreVertical className="size-4" />
+          </button>
+        </div>
+
+        {/* Play button */}
+        <Play className="size-6 shrink-0 text-primary opacity-0 transition-opacity group-hover:opacity-100" />
       </CardContent>
+
+      {/* Context menu — rendered as fixed portal to escape overflow clipping */}
+      {menuOpen && menuPos && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={closeMenu} />
+          <div
+            className="fixed z-50 w-48 rounded-lg border bg-popover p-1 shadow-lg"
+            style={{ top: menuPos.top, left: menuPos.left - 192 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {onEditWithAi && <ContextMenuItem icon={Sparkles} label="Edit with AI" onClick={() => { closeMenu(); onEditWithAi() }} />}
+            <ContextMenuItem icon={Pencil} label="Edit JSON Spec" onClick={() => { closeMenu(); onEdit() }} />
+            {onSetDefault && !isDefault && (
+              <ContextMenuItem icon={Star} label="Set as Default" onClick={() => { closeMenu(); onSetDefault() }} />
+            )}
+            <div className="my-1 h-px bg-border" />
+            {onExportData && <ContextMenuItem icon={Download} label="Export Data" onClick={() => { closeMenu(); onExportData() }} />}
+            {onGenerateCode && <ContextMenuItem icon={Code} label="Generate Code" onClick={() => { closeMenu(); onGenerateCode() }} />}
+            <div className="my-1 h-px bg-border" />
+            {archived ? (
+              onRestore && <ContextMenuItem icon={ArchiveRestore} label="Restore" onClick={() => { closeMenu(); onRestore() }} />
+            ) : (
+              onArchive && <ContextMenuItem icon={Archive} label="Archive" onClick={() => { closeMenu(); onArchive() }} />
+            )}
+            <ContextMenuItem icon={Trash2} label="Delete" onClick={() => { closeMenu(); onDelete() }} destructive />
+          </div>
+        </>
+      )}
     </Card>
+  )
+}
+
+function ContextMenuItem({ icon: Icon, label, onClick, destructive }: {
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  onClick: () => void
+  destructive?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors ${
+        destructive
+          ? 'text-destructive hover:bg-destructive/10'
+          : 'text-popover-foreground hover:bg-muted'
+      }`}
+    >
+      <Icon className="size-3.5" />
+      {label}
+    </button>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// AddAppButton — popup menu matching Flutter's _AddAppButton
+// ---------------------------------------------------------------------------
+
+function AddAppButton({
+  onPickFile,
+  onLoadUrl,
+  onPasteJson,
+  onBrowseExamples,
+  onQuickBuild,
+}: {
+  onPickFile: () => void
+  onLoadUrl: () => void
+  onPasteJson: () => void
+  onBrowseExamples: () => void
+  onQuickBuild: () => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  function item(action: () => void) {
+    return () => { setOpen(false); action() }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-[13px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+      >
+        <Plus className="size-4" />
+        Add App
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl border bg-popover p-1.5 shadow-xl">
+            <AddAppMenuItem
+              icon={Zap}
+              title="Quick Build"
+              subtitle="Build an app in seconds from a template"
+              onClick={item(onQuickBuild)}
+            />
+            <AddAppMenuItem
+              icon={BookOpen}
+              title="Browse Examples"
+              subtitle="Pick from the example catalog"
+              onClick={item(onBrowseExamples)}
+            />
+            <div className="my-1.5 h-px bg-border" />
+            <AddAppMenuItem
+              icon={FileUp}
+              title="Open Spec File"
+              subtitle="Load a .json file from your device"
+              onClick={item(onPickFile)}
+            />
+            <AddAppMenuItem
+              icon={Link2}
+              title="Load from URL"
+              subtitle="Fetch a spec from the web"
+              onClick={item(onLoadUrl)}
+            />
+            <div className="my-1.5 h-px bg-border" />
+            <AddAppMenuItem
+              icon={Sparkles}
+              title="Create New"
+              subtitle="Build an app with AI assistance"
+              onClick={item(onPasteJson)}
+            />
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function AddAppMenuItem({
+  icon: Icon,
+  title,
+  subtitle,
+  onClick,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  title: string
+  subtitle: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-muted"
+    >
+      <Icon className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+      <div className="min-w-0">
+        <div className="text-sm font-medium">{title}</div>
+        <div className="text-xs text-muted-foreground">{subtitle}</div>
+      </div>
+    </button>
   )
 }

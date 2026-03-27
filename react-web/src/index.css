@@ -55,73 +55,81 @@ body {
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* -----------------------------------------------------------------------
+   Light theme — Indigo primary (#4F46E5), Slate neutrals
+   Matches Flutter's seed-color-based Material 3 palette
+   ----------------------------------------------------------------------- */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --background: oklch(0.985 0.002 247);    /* Slate 50 — #F8FAFC */
+  --foreground: oklch(0.208 0.042 265);    /* Slate 900 — #0F172A */
+  --card: oklch(1 0 0);                    /* White */
+  --card-foreground: oklch(0.208 0.042 265);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.208 0.042 265);
+  --primary: oklch(0.398 0.195 277);       /* Indigo 600 — #4F46E5 */
+  --primary-foreground: oklch(0.985 0 0);  /* White */
+  --secondary: oklch(0.968 0.005 247);     /* Slate 100 — #F1F5F9 */
+  --secondary-foreground: oklch(0.293 0.042 264);  /* Slate 800 */
+  --muted: oklch(0.968 0.005 247);         /* Slate 100 */
+  --muted-foreground: oklch(0.554 0.022 258); /* Slate 500 */
+  --accent: oklch(0.929 0.013 255);        /* Indigo 50 — #EEF2FF */
+  --accent-foreground: oklch(0.257 0.09 281); /* Indigo 900 */
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --border: oklch(0.929 0.006 247);        /* Slate 200 */
+  --input: oklch(0.929 0.006 247);
+  --ring: oklch(0.398 0.195 277);          /* Indigo 600 — matches primary */
+  --chart-1: oklch(0.398 0.195 277);       /* Indigo */
+  --chart-2: oklch(0.6 0.213 18);          /* Rose */
+  --chart-3: oklch(0.696 0.17 163);        /* Emerald */
+  --chart-4: oklch(0.702 0.183 73);        /* Amber */
+  --chart-5: oklch(0.546 0.245 262);       /* Blue */
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.208 0.042 265);
+  --sidebar-primary: oklch(0.398 0.195 277);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-accent: oklch(0.929 0.013 255);
+  --sidebar-accent-foreground: oklch(0.257 0.09 281);
+  --sidebar-border: oklch(0.929 0.006 247);
+  --sidebar-ring: oklch(0.398 0.195 277);
 }
 
+/* -----------------------------------------------------------------------
+   Dark theme — Indigo primary (lighter for contrast), Slate backgrounds
+   Matches Flutter's dark scaffold (#0F172A) and app bar (#1E293B)
+   ----------------------------------------------------------------------- */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: oklch(0.208 0.042 265);    /* Slate 900 — #0F172A */
+  --foreground: oklch(0.968 0.005 247);    /* Slate 100 */
+  --card: oklch(0.257 0.038 264);          /* Slate 800 — #1E293B */
+  --card-foreground: oklch(0.968 0.005 247);
+  --popover: oklch(0.257 0.038 264);
+  --popover-foreground: oklch(0.968 0.005 247);
+  --primary: oklch(0.673 0.182 276);       /* Indigo 400 — brighter for dark */
+  --primary-foreground: oklch(0.208 0.042 265);
+  --secondary: oklch(0.293 0.042 264);     /* Slate 700 */
+  --secondary-foreground: oklch(0.968 0.005 247);
+  --muted: oklch(0.293 0.042 264);
+  --muted-foreground: oklch(0.704 0.015 256); /* Slate 400 */
+  --accent: oklch(0.293 0.042 264);
+  --accent-foreground: oklch(0.968 0.005 247);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.673 0.182 276);
+  --chart-1: oklch(0.673 0.182 276);
+  --chart-2: oklch(0.7 0.18 18);
+  --chart-3: oklch(0.75 0.15 163);
+  --chart-4: oklch(0.75 0.15 73);
+  --chart-5: oklch(0.65 0.2 262);
+  --sidebar: oklch(0.257 0.038 264);
+  --sidebar-foreground: oklch(0.968 0.005 247);
+  --sidebar-primary: oklch(0.673 0.182 276);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.34 0.04 264);
+  --sidebar-accent-foreground: oklch(0.968 0.005 247);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.673 0.182 276);
 }
 
 @layer base {

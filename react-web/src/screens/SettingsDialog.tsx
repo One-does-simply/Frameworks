@@ -1,6 +1,16 @@
 import { useState } from 'react'
 import { useAppStore } from '@/engine/app-store.ts'
 import {
+  getThemeMode,
+  setThemeMode,
+  type ThemeMode,
+} from '@/engine/theme-store.ts'
+import {
+  getBackupSettings,
+  setBackupSettings,
+  type BackupSettings,
+} from '@/engine/backup-service.ts'
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -37,6 +47,17 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const toggleDebugMode = useAppStore((s) => s.toggleDebugMode)
   const appSettings = useAppStore((s) => s.appSettings)
   const dataService = useAppStore((s) => s.dataService)
+
+  // Theme mode
+  const [theme, setTheme] = useState<ThemeMode>(getThemeMode)
+
+  // Backup settings
+  const [backupSettings, setBackupState] = useState<BackupSettings>(getBackupSettings)
+
+  function handleThemeChange(mode: ThemeMode) {
+    setTheme(mode)
+    setThemeMode(mode)
+  }
 
   // Local state for editing text/number settings (tap-to-save pattern)
   const [editingKey, setEditingKey] = useState<string | null>(null)
@@ -182,6 +203,26 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             </span>
           </div>
 
+          {/* Theme mode */}
+          <div className="flex items-center justify-between gap-4">
+            <Label>Theme</Label>
+            <div className="flex gap-1 rounded-lg border p-0.5">
+              {(['light', 'system', 'dark'] as ThemeMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => handleThemeChange(mode)}
+                  className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                    theme === mode
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Debug mode */}
           <div className="flex items-center justify-between">
             <Label htmlFor="debug-mode">Debug Panel</Label>
@@ -193,6 +234,57 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               className="h-4 w-4 rounded border-input accent-primary"
             />
           </div>
+
+          <Separator />
+
+          {/* ---- Backup Settings ---- */}
+          <div>
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Backup
+            </span>
+          </div>
+
+          {/* Auto-backup toggle */}
+          <div className="flex items-center justify-between">
+            <Label htmlFor="auto-backup">Auto-Backup</Label>
+            <input
+              type="checkbox"
+              id="auto-backup"
+              checked={backupSettings.autoBackup}
+              onChange={(e) => {
+                const updated = { ...backupSettings, autoBackup: e.target.checked }
+                setBackupState(updated)
+                setBackupSettings(updated)
+              }}
+              className="h-4 w-4 rounded border-input accent-primary"
+            />
+          </div>
+
+          {/* Retention count */}
+          {backupSettings.autoBackup && (
+            <div className="flex items-center justify-between gap-4">
+              <Label>Keep snapshots</Label>
+              <Select
+                value={String(backupSettings.retention)}
+                onValueChange={(v) => {
+                  const updated = { ...backupSettings, retention: Number(v) }
+                  setBackupState(updated)
+                  setBackupSettings(updated)
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1, 3, 5, 10, 20].map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      {n}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         <DialogFooter showCloseButton />

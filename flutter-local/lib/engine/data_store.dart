@@ -201,11 +201,22 @@ class DataStore {
   }
 
   /// Returns all rows from a table, ordered by most recent first.
+  ///
+  /// Falls back to no ORDER BY if the table lacks an `_id` column (e.g.,
+  /// `_ods_settings` uses `key TEXT PRIMARY KEY` instead).
   Future<List<Map<String, dynamic>>> query(String tableName) async {
     final db = _db!;
-    final rows = await db.query(tableName, orderBy: '_id DESC');
+    final hasId = await _tableHasColumn(tableName, '_id');
+    final rows = await db.query(tableName, orderBy: hasId ? '_id DESC' : null);
     _log('SELECT from "$tableName": ${rows.length} rows');
     return rows;
+  }
+
+  /// Checks whether a table has a specific column.
+  Future<bool> _tableHasColumn(String tableName, String column) async {
+    final db = _db!;
+    final info = await db.rawQuery('PRAGMA table_info("$tableName")');
+    return info.any((row) => row['name'] == column);
   }
 
   /// Queries a table with an optional WHERE filter, returning all matching rows.

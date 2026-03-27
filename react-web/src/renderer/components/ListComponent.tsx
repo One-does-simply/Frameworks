@@ -470,8 +470,9 @@ export function ListComponent({ model }: ListComponentProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-8 text-muted-foreground">
-        Loading...
+      <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+        <div className="size-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <span className="text-sm">Loading...</span>
       </div>
     )
   }
@@ -483,8 +484,14 @@ export function ListComponent({ model }: ListComponentProps) {
   if (rows.length === 0) {
     return (
       <Card>
-        <CardContent className="py-6">
-          <p className="text-muted-foreground text-center">No data yet.</p>
+        <CardContent className="flex flex-col items-center gap-2 py-10">
+          <div className="size-10 rounded-full bg-muted flex items-center justify-center">
+            <svg className="size-5 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+            </svg>
+          </div>
+          <p className="text-sm font-medium text-muted-foreground">No data yet</p>
+          <p className="text-xs text-muted-foreground/60">Records will appear here once added.</p>
         </CardContent>
       </Card>
     )

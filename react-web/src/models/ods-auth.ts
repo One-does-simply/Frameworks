@@ -4,6 +4,8 @@ export interface OdsAuth {
   multiUserOnly: boolean
   customRoles: string[]
   defaultRole: string
+  /** When true, the login screen shows a "Sign Up" option for new users. */
+  selfRegistration: boolean
 }
 
 /** All available roles: three built-ins plus custom. */
@@ -13,7 +15,7 @@ export function allRoles(auth: OdsAuth): string[] {
 
 export function parseAuth(json: unknown): OdsAuth {
   if (json == null || typeof json !== 'object') {
-    return { multiUser: false, multiUserOnly: false, customRoles: [], defaultRole: 'user' }
+    return { multiUser: false, multiUserOnly: false, customRoles: [], defaultRole: 'user', selfRegistration: false }
   }
   const j = json as Record<string, unknown>
   return {
@@ -21,5 +23,6 @@ export function parseAuth(json: unknown): OdsAuth {
     multiUserOnly: (j['multiUserOnly'] as boolean) ?? false,
     customRoles: (j['roles'] as string[]) ?? [],
     defaultRole: (j['defaultRole'] as string) ?? 'user',
+    selfRegistration: (j['selfRegistration'] as boolean) ?? false,
   }
 }

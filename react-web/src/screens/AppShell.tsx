@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { useAppStore } from '@/engine/app-store.ts'
 import { PageRenderer } from '@/renderer/PageRenderer.tsx'
@@ -21,12 +21,13 @@ import {
   Users,
   LogOut,
   X,
-  Download,
+  Save,
+  Upload,
 } from 'lucide-react'
 import { SettingsDialog } from './SettingsDialog.tsx'
 import { HelpScreen } from './HelpScreen.tsx'
 import { UserManagementScreen } from './UserManagementScreen.tsx'
-import { DataExportDialog } from './DataExportDialog.tsx'
+import { downloadBackup, restoreBackup } from '@/engine/backup-service.ts'
 import { TourDialog } from './TourDialog.tsx'
 import { DebugPanel } from './DebugPanel.tsx'
 
@@ -58,11 +59,13 @@ export function AppShell() {
     }
   }
 
+  const dataService = useAppStore((s) => s.dataService)
+
   const [menuOpen, setMenuOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
-  const [exportOpen, setExportOpen] = useState(false)
+  const restoreInputRef = useRef<HTMLInputElement>(null)
 
   const currentPage = currentPageId ? app.pages[currentPageId] : null
   const pageTitle = currentPage?.title ?? app.appName
@@ -125,6 +128,35 @@ export function AppShell() {
     reset()
     routerNavigate('/admin')
   }
+
+  async function handleBackup() {
+    if (!dataService) return
+    setMenuOpen(false)
+    try {
+      await downloadBackup(app, dataService)
+      toast.success('Backup downloaded')
+    } catch (e) {
+      toast.error('Backup failed')
+      console.error(e)
+    }
+  }
+
+  const handleRestoreFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !dataService) return
+
+    const text = await file.text()
+    const error = await restoreBackup(text, app, dataService)
+    if (error) {
+      toast.error(error)
+    } else {
+      toast.success('Data restored from backup')
+      // Bump generation to refresh lists
+      useAppStore.setState({ recordGeneration: useAppStore.getState().recordGeneration + 1 })
+    }
+
+    if (restoreInputRef.current) restoreInputRef.current.value = ''
+  }, [app, dataService])
 
   // -------------------------------------------------------------------------
   // Render
@@ -196,14 +228,15 @@ export function AppShell() {
       {/* Navigation drawer (Sheet from left) */}
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <SheetContent side="left">
-          <SheetHeader>
-            <SheetTitle>{app.appName}</SheetTitle>
+          {/* Gradient header — matches Flutter's drawer header */}
+          <div className="-mx-6 -mt-6 mb-2 rounded-b-xl bg-gradient-to-br from-indigo-600 to-violet-600 px-6 py-5">
+            <SheetTitle className="text-lg font-bold text-white">{app.appName}</SheetTitle>
             {app.help && (
-              <SheetDescription className="line-clamp-2">
+              <SheetDescription className="mt-1 line-clamp-2 text-white/75">
                 {app.help.overview}
               </SheetDescription>
             )}
-          </SheetHeader>
+          </div>
 
           <nav className="mt-4 flex flex-1 flex-col gap-1 overflow-y-auto">
             {/* Navigation section label */}
@@ -245,17 +278,35 @@ export function AppShell() {
               Settings
             </button>
 
-            {/* Export Data */}
+            {/* Backup */}
+            <button
+              onClick={handleBackup}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
+            >
+              <Save className="size-4" />
+              Backup Data
+            </button>
+
+            {/* Restore */}
             <button
               onClick={() => {
                 setMenuOpen(false)
-                setExportOpen(true)
+                restoreInputRef.current?.click()
               }}
               className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
             >
-              <Download className="size-4" />
-              Export Data
+              <Upload className="size-4" />
+              Restore Data
             </button>
+
+            {/* Hidden file input for restore */}
+            <input
+              ref={restoreInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={handleRestoreFile}
+            />
 
             {/* Multi-user section */}
             {isMultiUser && authService?.isLoggedIn && (
@@ -314,7 +365,6 @@ export function AppShell() {
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       {app.help && <HelpScreen open={helpOpen} onOpenChange={setHelpOpen} />}
       <UserManagementScreen open={usersOpen} onOpenChange={setUsersOpen} />
-      <DataExportDialog open={exportOpen} onOpenChange={setExportOpen} />
 
       {/* Tour dialog — auto-shows on first launch if tour is defined */}
       <TourDialog />

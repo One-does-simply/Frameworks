@@ -25,6 +25,10 @@ class OdsAuth {
   /// Defaults to "user".
   final String defaultRole;
 
+  /// When true, the login screen shows a "Sign Up" option for new users.
+  /// Not supported in the Flutter Local framework (local/desktop only).
+  final bool selfRegistration;
+
   /// All available roles: the three built-ins plus any custom roles.
   List<String> get allRoles => ['guest', 'user', 'admin', ...customRoles];
 
@@ -33,6 +37,7 @@ class OdsAuth {
     this.multiUserOnly = false,
     this.customRoles = const [],
     this.defaultRole = 'user',
+    this.selfRegistration = false,
   });
 
   factory OdsAuth.fromJson(Map<String, dynamic>? json) {
@@ -42,6 +47,7 @@ class OdsAuth {
       multiUserOnly: json['multiUserOnly'] as bool? ?? false,
       customRoles: (json['roles'] as List<dynamic>?)?.cast<String>() ?? const [],
       defaultRole: json['defaultRole'] as String? ?? 'user',
+      selfRegistration: json['selfRegistration'] as bool? ?? false,
     );
   }
 
@@ -50,5 +56,6 @@ class OdsAuth {
         if (multiUserOnly) 'multiUserOnly': multiUserOnly,
         if (customRoles.isNotEmpty) 'roles': customRoles,
         if (defaultRole != 'user') 'defaultRole': defaultRole,
+        if (selfRegistration) 'selfRegistration': selfRegistration,
       };
 }

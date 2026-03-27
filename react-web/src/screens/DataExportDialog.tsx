@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useAppStore } from '@/engine/app-store.ts'
 import { isLocal, tableName } from '@/models/ods-data-source.ts'
+import type { OdsApp } from '@/models/ods-app.ts'
+import type { DataService } from '@/engine/data-service.ts'
 import {
   Dialog,
   DialogContent,
@@ -11,30 +13,43 @@ import {
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { FileJson, Table } from 'lucide-react'
+import { FileJson, Table, Database } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
-// DataExportDialog — export all app data as JSON or CSV
+// DataExportDialog — export all app data as JSON, CSV, or SQL
+//
+// Can be used from either:
+//   1. Inside an app (reads from store)  — pass no extra props
+//   2. Admin dashboard (pass app + dataService props)
 // ---------------------------------------------------------------------------
 
-type ExportFormat = 'json' | 'csv'
+type ExportFormat = 'json' | 'csv' | 'sql'
 
 interface DataExportDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** When provided, use this app instead of reading from store. */
+  app?: OdsApp
+  /** When provided, use this DataService instead of reading from store. */
+  dataService?: DataService
 }
 
-export function DataExportDialog({ open, onOpenChange }: DataExportDialogProps) {
-  const app = useAppStore((s) => s.app)!
-  const dataService = useAppStore((s) => s.dataService)
+export function DataExportDialog({ open, onOpenChange, app: appProp, dataService: dsProp }: DataExportDialogProps) {
+  const storeApp = useAppStore((s) => s.app)
+  const storeDs = useAppStore((s) => s.dataService)
+
+  const app = appProp ?? storeApp!
+  const dataService = dsProp ?? storeDs
 
   const [isExporting, setIsExporting] = useState(false)
 
   // Collect all local data source table names
   const localTables: { id: string; table: string }[] = []
-  for (const [dsId, ds] of Object.entries(app.dataSources)) {
-    if (isLocal(ds)) {
-      localTables.push({ id: dsId, table: tableName(ds) })
+  if (app) {
+    for (const [dsId, ds] of Object.entries(app.dataSources)) {
+      if (isLocal(ds)) {
+        localTables.push({ id: dsId, table: tableName(ds) })
+      }
     }
   }
 
@@ -53,8 +68,10 @@ export function DataExportDialog({ open, onOpenChange }: DataExportDialogProps) 
 
       if (format === 'json') {
         downloadJson(safeName, exportData)
-      } else {
+      } else if (format === 'csv') {
         downloadCsv(safeName, exportData)
+      } else {
+        downloadSql(safeName, exportData)
       }
 
       toast.success(`Data exported as ${format.toUpperCase()}.`)
@@ -112,6 +129,20 @@ export function DataExportDialog({ open, onOpenChange }: DataExportDialogProps) 
                 <div className="font-medium">CSV</div>
                 <div className="text-xs text-muted-foreground">
                   Comma-separated values — opens in Excel, Sheets, etc.
+                </div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => handleExport('sql')}
+              disabled={isExporting}
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm transition-colors hover:bg-muted disabled:opacity-50"
+            >
+              <Database className="size-5 text-primary" />
+              <div>
+                <div className="font-medium">SQL</div>
+                <div className="text-xs text-muted-foreground">
+                  CREATE TABLE + INSERT statements for any SQL database
                 </div>
               </div>
             </button>
@@ -191,6 +222,50 @@ function downloadCsv(
 
     triggerDownload(filename, lines.join('\n'), 'text/csv')
   }
+}
+
+function downloadSql(
+  safeName: string,
+  tables: Record<string, Record<string, unknown>[]>,
+) {
+  const lines: string[] = []
+  lines.push(`-- ODS Data Export: ${safeName}`)
+  lines.push(`-- Exported at: ${new Date().toISOString()}`)
+  lines.push('')
+
+  for (const [tblName, rows] of Object.entries(tables)) {
+    if (!rows || rows.length === 0) continue
+
+    // Collect all column names, excluding internal fields
+    const columnSet = new Set<string>()
+    for (const row of rows) {
+      for (const key of Object.keys(row)) {
+        if (key !== '_id' && key !== 'id' && key !== 'collectionId' && key !== 'collectionName') {
+          columnSet.add(key)
+        }
+      }
+    }
+    const columns = Array.from(columnSet)
+
+    // CREATE TABLE
+    lines.push(`CREATE TABLE IF NOT EXISTS "${tblName}" (`)
+    lines.push(columns.map((col) => `  "${col}" TEXT`).join(',\n'))
+    lines.push(');')
+    lines.push('')
+
+    // INSERT statements
+    for (const row of rows) {
+      const values = columns.map((col) => {
+        const val = row[col]
+        if (val == null) return 'NULL'
+        return `'${String(val).replace(/'/g, "''")}'`
+      })
+      lines.push(`INSERT INTO "${tblName}" (${columns.map((c) => `"${c}"`).join(', ')}) VALUES (${values.join(', ')});`)
+    }
+    lines.push('')
+  }
+
+  triggerDownload(`${safeName}_export.sql`, lines.join('\n'), 'application/sql')
 }
 
 function csvEscape(value: string): string {

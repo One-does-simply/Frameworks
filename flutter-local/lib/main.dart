@@ -26,6 +26,7 @@ import 'screens/app_tour_dialog.dart';
 import 'screens/login_screen.dart';
 import 'screens/ods_about_screen.dart';
 import 'screens/quick_build_screen.dart';
+import 'screens/settings_screen.dart';
 import 'screens/user_management_screen.dart';
 
 // ---------------------------------------------------------------------------
@@ -2457,14 +2458,13 @@ class _AppShellState extends State<AppShell> {
               contentPadding: const EdgeInsets.symmetric(horizontal: 24),
               onTap: () {
                 Navigator.pop(context);
-                showDialog(
-                  context: context,
-                  builder: (_) => _SettingsDialog(
+                Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => SettingsScreen(
                     engine: engine,
                     settings: settings,
                     app: app,
                   ),
-                );
+                ));
               },
             ),
             // Multi-user section: user info, manage users, logout.

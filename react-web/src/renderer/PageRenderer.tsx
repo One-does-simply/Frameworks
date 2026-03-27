@@ -24,7 +24,7 @@ import { DetailComponent } from './components/DetailComponent.tsx'
 
 export function PageRenderer({ page }: { page: OdsPage }) {
   return (
-    <div className="space-y-4 p-4">
+    <div className="mx-auto max-w-5xl space-y-3 px-4 py-5">
       {page.content.map((component, i) => (
         <ComponentRenderer key={i} component={component} />
       ))}

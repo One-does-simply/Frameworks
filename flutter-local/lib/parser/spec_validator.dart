@@ -360,6 +360,16 @@ class SpecValidator {
       result.warning('auth.multiUserOnly is true but auth.multiUser is false');
     }
 
+    // Warn about self-registration — not supported in Flutter Local.
+    if (auth.selfRegistration) {
+      result.warning(
+        'auth.selfRegistration is enabled but self-registration is not supported '
+        'in the Flutter Local framework (local/desktop apps have no public '
+        'network for user sign-up). Users must be created by an admin. '
+        'This feature is supported in the React Web framework.',
+      );
+    }
+
     // Warn if custom roles duplicate built-in names.
     for (final role in auth.customRoles) {
       if (builtInRoles.contains(role)) {

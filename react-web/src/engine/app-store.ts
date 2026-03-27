@@ -9,6 +9,7 @@ import type { ValidationResult } from '../parser/spec-validator.ts'
 import { executeAction, type ActionResult } from './action-handler.ts'
 import type { AuthService } from './auth-service.ts'
 import type { DataService } from './data-service.ts'
+import { runAutoBackup } from './backup-service.ts'
 
 // ---------------------------------------------------------------------------
 // Record cursor — step-through navigation for forms with recordSource
@@ -214,6 +215,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
         needsAdminSetup: app.auth.multiUser && !authService.isAdminSetUp,
         needsLogin: app.auth.multiUser && authService.isAdminSetUp && !authService.isLoggedIn,
       })
+
+      // Run auto-backup in background (best-effort, non-blocking)
+      runAutoBackup(app, dataService).catch(() => {})
 
       return true
     } catch (e) {
