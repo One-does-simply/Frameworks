@@ -206,36 +206,50 @@ export function AdminSettingsPage() {
     setTimeout(() => window.location.reload(), 500)
   }
 
-  // OAuth2 handlers — update the users collection's oauth2.providers array
-  async function getOAuth2Providers(): Promise<Array<Record<string, unknown>>> {
+  // OAuth2 handlers — read the full collection, modify oauth2, write back.
+  // PocketBase stores oauth2 config at the collection level. We log the
+  // shape on first read so we can debug mismatches across PB versions.
+
+  async function getCollectionOAuth2(): Promise<{
+    collectionId: string
+    oauth2: Record<string, unknown>
+    providers: Array<Record<string, unknown>>
+  }> {
     const collection = await pb.collections.getOne('users')
-    const oauth2 = (collection as Record<string, unknown>)['oauth2'] as Record<string, unknown> | undefined
-    return ((oauth2?.['providers'] ?? []) as Array<Record<string, unknown>>).slice()
+    const raw = collection as Record<string, unknown>
+    const oauth2 = (raw['oauth2'] ?? {}) as Record<string, unknown>
+    const providers = ((oauth2['providers'] ?? []) as Array<Record<string, unknown>>).slice()
+    console.log('PocketBase users collection oauth2:', JSON.stringify(oauth2, null, 2))
+    return { collectionId: collection.id, oauth2, providers }
   }
 
-  async function saveOAuth2Providers(providers: Array<Record<string, unknown>>) {
-    await pb.collections.update('users', {
-      oauth2: {
-        enabled: providers.some((p) => !!p['clientId']),
-        providers,
-      },
-    })
+  async function saveCollectionOAuth2(
+    collectionId: string,
+    oauth2Base: Record<string, unknown>,
+    providers: Array<Record<string, unknown>>,
+  ) {
+    const hasProviders = providers.some((p) => !!p['clientId'])
+    const updated = {
+      ...oauth2Base,
+      enabled: hasProviders,
+      providers,
+    }
+    console.log('Saving oauth2 config:', JSON.stringify(updated, null, 2))
+    await pb.collections.update(collectionId, { oauth2: updated })
   }
 
   async function handleSaveOAuthProvider() {
     if (!editingProvider) return
     try {
-      const providers = await getOAuth2Providers()
+      const { collectionId, oauth2, providers } = await getCollectionOAuth2()
       const idx = providers.findIndex((p) => p['name'] === editingProvider)
       const entry: Record<string, unknown> = {
         name: editingProvider,
         clientId: providerClientId,
       }
-      // Only update secret if a new one was entered
       if (providerClientSecret) {
         entry.clientSecret = providerClientSecret
-      } else if (idx >= 0) {
-        // Keep existing secret
+      } else if (idx >= 0 && providers[idx]['clientSecret']) {
         entry.clientSecret = providers[idx]['clientSecret']
       }
 
@@ -245,7 +259,7 @@ export function AdminSettingsPage() {
         providers.push(entry)
       }
 
-      await saveOAuth2Providers(providers)
+      await saveCollectionOAuth2(collectionId, oauth2, providers)
       toast.success(`${editingProvider} provider configured`)
       setEditingProvider(null)
       setProviderClientId('')
@@ -259,16 +273,12 @@ export function AdminSettingsPage() {
 
   async function handleToggleOAuthProvider(providerId: string, enabled: boolean) {
     try {
-      const providers = await getOAuth2Providers()
-      if (enabled) {
-        // Re-enable: provider must already have clientId
-        // Nothing to change in the array — just ensure oauth2.enabled is true
-      } else {
-        // Disable: remove the provider from the array
+      const { collectionId, oauth2, providers } = await getCollectionOAuth2()
+      if (!enabled) {
         const idx = providers.findIndex((p) => p['name'] === providerId)
         if (idx >= 0) providers.splice(idx, 1)
       }
-      await saveOAuth2Providers(providers)
+      await saveCollectionOAuth2(collectionId, oauth2, providers)
       toast.success(`${providerId} ${enabled ? 'enabled' : 'disabled'}`)
       await loadOAuthProviders()
     } catch (e) {
