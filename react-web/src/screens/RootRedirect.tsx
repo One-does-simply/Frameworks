@@ -186,7 +186,7 @@ export function RootRedirect() {
                   type="email"
                   value={adminEmail}
                   onChange={(e) => setAdminEmail(e.target.value)}
-                  placeholder="admin@localhost"
+                  placeholder="admin@ods.local"
                   autoFocus
                   disabled={adminSubmitting}
                 />
