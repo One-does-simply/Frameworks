@@ -154,7 +154,7 @@ export function AdminSettingsPage() {
     setIsLoadingOAuth(true)
     try {
       // PocketBase 0.23+: OAuth2 providers are on the users collection, not global settings
-      const collection = await pb.collections.getOne('users')
+      const collection = await pb.collections.getOne('users', { requestKey: null })
       const oauth2 = (collection as Record<string, unknown>)['oauth2'] as Record<string, unknown> | undefined
       const configuredProviders = (oauth2?.['providers'] ?? []) as Array<Record<string, unknown>>
 
@@ -165,7 +165,9 @@ export function AdminSettingsPage() {
           displayName: known.displayName,
           enabled: !!configured?.['clientId'],
           clientId: (configured?.['clientId'] as string) ?? '',
-          hasSecret: !!(configured?.['clientSecret']),
+          // PB doesn't return clientSecret in reads — if provider exists with clientId,
+          // assume secret was set (user configured it via our dialog)
+          hasSecret: !!configured?.['clientId'],
         }
       })
       setOauthProviders(providers)
@@ -210,16 +212,19 @@ export function AdminSettingsPage() {
   // PocketBase stores oauth2 config at the collection level. We log the
   // shape on first read so we can debug mismatches across PB versions.
 
+  // PocketBase does NOT return clientSecret in reads (security). So when
+  // saving, we must only include clientSecret if the user entered a new one.
+  // Otherwise PB keeps the existing secret untouched.
+
   async function getCollectionOAuth2(): Promise<{
     collectionId: string
     oauth2: Record<string, unknown>
     providers: Array<Record<string, unknown>>
   }> {
-    const collection = await pb.collections.getOne('users')
+    const collection = await pb.collections.getOne('users', { requestKey: null })
     const raw = collection as Record<string, unknown>
     const oauth2 = (raw['oauth2'] ?? {}) as Record<string, unknown>
     const providers = ((oauth2['providers'] ?? []) as Array<Record<string, unknown>>).slice()
-    console.log('PocketBase users collection oauth2:', JSON.stringify(oauth2, null, 2))
     return { collectionId: collection.id, oauth2, providers }
   }
 
@@ -234,8 +239,7 @@ export function AdminSettingsPage() {
       enabled: hasProviders,
       providers,
     }
-    console.log('Saving oauth2 config:', JSON.stringify(updated, null, 2))
-    await pb.collections.update(collectionId, { oauth2: updated })
+    await pb.collections.update(collectionId, { oauth2: updated }, { requestKey: null })
   }
 
   async function handleSaveOAuthProvider() {
@@ -243,16 +247,16 @@ export function AdminSettingsPage() {
     try {
       const { collectionId, oauth2, providers } = await getCollectionOAuth2()
       const idx = providers.findIndex((p) => p['name'] === editingProvider)
+
+      // Build the provider entry — only include clientSecret if user entered one
       const entry: Record<string, unknown> = {
         name: editingProvider,
         clientId: providerClientId,
       }
       if (providerClientSecret) {
         entry.clientSecret = providerClientSecret
-      } else if (idx >= 0 && providers[idx]['clientSecret']) {
-        entry.clientSecret = providers[idx]['clientSecret']
       }
-
+      // Keep all other existing fields (pkce, authURL, etc.) from the current entry
       if (idx >= 0) {
         providers[idx] = { ...providers[idx], ...entry }
       } else {
