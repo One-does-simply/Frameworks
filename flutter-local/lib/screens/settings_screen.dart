@@ -282,30 +282,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const Divider(),
                 ],
 
-                // -- Data --
-                _SectionHeader(label: 'DATA'),
-                ListTile(
-                  leading: const Icon(Icons.backup_outlined),
-                  title: const Text('Backup Data'),
-                  subtitle: const Text('Save all app data to a file'),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-                  onTap: _backupData,
-                ),
-                ListTile(
-                  leading: const Icon(Icons.restore),
-                  title: const Text('Restore Data'),
-                  subtitle: const Text('Load data from a backup file'),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-                  onTap: _restoreData,
-                ),
-                ListTile(
-                  leading: const Icon(Icons.file_upload_outlined),
-                  title: const Text('Import Data'),
-                  subtitle: const Text('Add rows from a CSV or JSON file'),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-                  onTap: _importData,
-                ),
-                const Divider(),
+                // -- Data (admin-only in multi-user mode) --
+                if (!engine.isMultiUser || engine.authService.isAdmin) ...[
+                  _SectionHeader(label: 'DATA'),
+                  ListTile(
+                    leading: const Icon(Icons.backup_outlined),
+                    title: const Text('Backup Data'),
+                    subtitle: const Text('Save all app data to a file'),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                    onTap: _backupData,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.restore),
+                    title: const Text('Restore Data'),
+                    subtitle: const Text('Load data from a backup file'),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                    onTap: _restoreData,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.file_upload_outlined),
+                    title: const Text('Import Data'),
+                    subtitle: const Text('Add rows from a CSV or JSON file'),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                    onTap: _importData,
+                  ),
+                  const Divider(),
+                ],
 
                 // -- Framework --
                 _SectionHeader(label: 'FRAMEWORK'),

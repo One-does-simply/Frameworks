@@ -2358,7 +2358,34 @@ class _AppShellState extends State<AppShell> {
           ),
         ),
         actions: [
-          // Help is the only button in the top right
+          // User/guest indicator
+          if (engine.isMultiUser)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: engine.authService.isLoggedIn
+                  ? Chip(
+                      avatar: Icon(
+                        engine.authService.isAdmin ? Icons.shield : Icons.person,
+                        size: 16,
+                      ),
+                      label: Text(
+                        engine.authService.currentDisplayName,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    )
+                  : TextButton.icon(
+                      icon: const Icon(Icons.login, size: 16),
+                      label: const Text('Sign In', style: TextStyle(fontSize: 12)),
+                      onPressed: () {
+                        engine.authService.logout();
+                        engine.clearFormStates();
+                        engine.notifyListeners();
+                      },
+                    ),
+            ),
+          // Help button
           if (app.help != null)
             IconButton(
               icon: const Icon(Icons.help_outline),
@@ -2451,65 +2478,97 @@ class _AppShellState extends State<AppShell> {
                 },
               );
             }),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.settings_outlined),
-              title: const Text('Settings'),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => SettingsScreen(
-                    engine: engine,
-                    settings: settings,
-                    app: app,
-                  ),
-                ));
-              },
-            ),
-            // Multi-user section: user info, manage users, logout.
-            if (engine.isMultiUser && engine.authService.isLoggedIn) ...[
+            // Settings — admin-only in multi-user mode
+            if (!engine.isMultiUser || engine.authService.isAdmin) ...[
               const Divider(),
-              Padding(
-                padding: const EdgeInsets.only(left: 24, top: 4, bottom: 4),
-                child: Row(
-                  children: [
-                    Icon(Icons.person, size: 16, color: colorScheme.onSurfaceVariant),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Signed in as ${engine.authService.currentUsername}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (engine.authService.isAdmin)
-                ListTile(
-                  leading: const Icon(Icons.people_outline),
-                  title: const Text('Manage Users'),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) => UserManagementScreen(
-                        authService: engine.authService,
-                        availableRoles: app.auth.allRoles,
-                      ),
-                    ));
-                  },
-                ),
               ListTile(
-                leading: const Icon(Icons.logout),
-                title: const Text('Sign Out'),
+                leading: const Icon(Icons.settings_outlined),
+                title: const Text('Settings'),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 24),
                 onTap: () {
                   Navigator.pop(context);
-                  engine.authService.logout();
-                  engine.notifyListeners();
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => SettingsScreen(
+                      engine: engine,
+                      settings: settings,
+                      app: app,
+                    ),
+                  ));
                 },
               ),
+            ],
+            // Multi-user section
+            if (engine.isMultiUser) ...[
+              const Divider(),
+              if (engine.authService.isLoggedIn) ...[
+                Padding(
+                  padding: const EdgeInsets.only(left: 24, top: 4, bottom: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        engine.authService.isAdmin ? Icons.shield : Icons.person,
+                        size: 16,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Signed in as ${engine.authService.currentDisplayName}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (engine.authService.isAdmin)
+                  ListTile(
+                    leading: const Icon(Icons.people_outline),
+                    title: const Text('Manage Users'),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => UserManagementScreen(
+                          authService: engine.authService,
+                          availableRoles: app.auth.allRoles,
+                        ),
+                      ));
+                    },
+                  ),
+                ListTile(
+                  leading: const Icon(Icons.logout),
+                  title: const Text('Sign Out'),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                  onTap: () {
+                    Navigator.pop(context);
+                    engine.authService.logout();
+                    engine.clearFormStates();
+                    engine.notifyListeners();
+                  },
+                ),
+              ] else ...[
+                // Guest — show sign in option
+                Padding(
+                  padding: const EdgeInsets.only(left: 24, top: 4, bottom: 4),
+                  child: Text(
+                    'Browsing as Guest',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.login),
+                  title: const Text('Sign In'),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                  onTap: () {
+                    Navigator.pop(context);
+                    engine.authService.logout();
+                    engine.clearFormStates();
+                    engine.notifyListeners();
+                  },
+                ),
+              ],
             ],
             const Divider(),
             ListTile(

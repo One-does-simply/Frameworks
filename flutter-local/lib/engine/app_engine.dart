@@ -296,6 +296,13 @@ class AppEngine extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Clears all form states and record cursors. Used when switching users
+  /// to prevent stale data from leaking between sessions.
+  void clearFormStates() {
+    _formStates.clear();
+    _recordCursors.clear();
+  }
+
   // ---------------------------------------------------------------------------
   // Action execution — processes button onClick action arrays.
   // ---------------------------------------------------------------------------
