@@ -20,9 +20,11 @@ import {
   Settings,
   Users,
   LogOut,
+  LogIn,
   X,
   Save,
   Upload,
+  User,
 } from 'lucide-react'
 import { SettingsDialog } from './SettingsDialog.tsx'
 import { HelpScreen } from './HelpScreen.tsx'
@@ -190,6 +192,28 @@ export function AppShell() {
 
         {/* Page title */}
         <h1 className="flex-1 truncate text-base font-semibold">{pageTitle}</h1>
+
+        {/* User indicator / login button */}
+        {isMultiUser && authService && (
+          authService.isLoggedIn ? (
+            <div className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground">
+              <User className="size-3.5" />
+              <span className="max-w-24 truncate">{authService.currentDisplayName}</span>
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs"
+              onClick={() => {
+                useAppStore.setState({ needsLogin: true })
+              }}
+            >
+              <LogIn className="mr-1.5 size-3.5" />
+              Sign In
+            </Button>
+          )
+        )}
 
         {/* Help button */}
         {app.help && (
