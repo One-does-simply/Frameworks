@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Shield } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // LoginScreen — username/password login for multi-user apps
@@ -14,6 +14,7 @@ import { Loader2 } from 'lucide-react'
 export function LoginScreen() {
   const app = useAppStore((s) => s.app)!
   const authService = useAppStore((s) => s.authService)!
+  const dataService = useAppStore((s) => s.dataService)
 
   const [isSignUp, setIsSignUp] = useState(false)
   const [username, setUsername] = useState('')
@@ -25,6 +26,7 @@ export function LoginScreen() {
 
   const allowSelfRegistration = app.auth.selfRegistration
   const isMultiUserOnly = app.auth.multiUserOnly
+  const pbSuperAdminAvailable = dataService?.isAdminAuthenticated ?? false
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -97,8 +99,15 @@ export function LoginScreen() {
     }
   }
 
+  function handleContinueAsAdmin() {
+    authService.setSuperAdmin(true)
+    useAppStore.setState({
+      needsLogin: false,
+    })
+  }
+
   function handleContinueAsGuest() {
-    // Skip login — user proceeds without auth
+    authService.setSuperAdmin(false)
     useAppStore.setState({
       needsLogin: false,
     })
@@ -257,6 +266,20 @@ export function LoginScreen() {
                 disabled={loading}
               >
                 Don&apos;t have an account? Sign Up
+              </Button>
+            )}
+
+            {/* Continue as Admin (PB superadmin) */}
+            {pbSuperAdminAvailable && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleContinueAsAdmin}
+                disabled={loading}
+              >
+                <Shield className="mr-2 size-4" />
+                Continue as Admin
               </Button>
             )}
 
