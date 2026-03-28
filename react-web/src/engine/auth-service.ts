@@ -110,19 +110,39 @@ export class AuthService {
    * checks if an admin user exists.
    */
   async initialize(): Promise<void> {
+    // Check if any user with admin role exists.
+    // The roles filter may 400 if the field doesn't exist yet — fall back
+    // to listing all users and checking manually.
     try {
-      // Check if any user with admin role exists
-      const admins = await this.pb.collection('users').getFullList({
-        filter: 'roles ~ "admin"',
-      })
-      this._isAdminSetUp = admins.length > 0
+      let foundAdmin = false
+      try {
+        const admins = await this.pb.collection('users').getFullList({
+          filter: 'roles ~ "admin"',
+          requestKey: null,
+        })
+        foundAdmin = admins.length > 0
+      } catch {
+        // roles field may not exist — check all users manually
+        try {
+          const allUsers = await this.pb.collection('users').getFullList({ requestKey: null })
+          foundAdmin = allUsers.some((u) => {
+            const roles = u['roles']
+            if (typeof roles === 'string') return roles.includes('admin')
+            if (Array.isArray(roles)) return (roles as string[]).includes('admin')
+            return false
+          })
+        } catch {
+          // Users collection may not exist
+        }
+      }
+      this._isAdminSetUp = foundAdmin
     } catch {
       this._isAdminSetUp = false
     }
 
     // Discover OAuth2 providers configured in PocketBase
     try {
-      const methods = await this.pb.collection('users').listAuthMethods()
+      const methods = await this.pb.collection('users').listAuthMethods({ requestKey: null } as Record<string, unknown>)
       this._oauthProviders = (methods.oauth2?.providers ?? []).map((p: Record<string, unknown>) => ({
         name: p.name as string,
         displayName: p.displayName as string ?? p.name as string,
@@ -261,7 +281,7 @@ export class AuthService {
   /** List all users (admin operation). */
   async listUsers(): Promise<Record<string, unknown>[]> {
     try {
-      const records = await this.pb.collection('users').getFullList({ sort: 'created' })
+      const records = await this.pb.collection('users').getFullList({ sort: 'created', requestKey: null })
       return records.map(r => ({
         _id: r.id,
         username: r['username'],
