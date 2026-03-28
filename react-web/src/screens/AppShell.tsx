@@ -293,82 +293,108 @@ export function AppShell() {
               )
             })}
 
-            <Separator className="my-2" />
-
-            {/* Settings */}
-            <button
-              onClick={() => {
-                setMenuOpen(false)
-                setSettingsOpen(true)
-              }}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
-            >
-              <Settings className="size-4" />
-              Settings
-            </button>
-
-            {/* Backup */}
-            <button
-              onClick={handleBackup}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
-            >
-              <Save className="size-4" />
-              Backup Data
-            </button>
-
-            {/* Restore */}
-            <button
-              onClick={() => {
-                setMenuOpen(false)
-                restoreInputRef.current?.click()
-              }}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
-            >
-              <Upload className="size-4" />
-              Restore Data
-            </button>
-
-            {/* Hidden file input for restore */}
-            <input
-              ref={restoreInputRef}
-              type="file"
-              accept=".json,application/json"
-              className="hidden"
-              onChange={handleRestoreFile}
-            />
-
-            {/* Multi-user section */}
-            {isMultiUser && authService?.isLoggedIn && (
+            {/* Admin-only drawer items: settings, backup, restore */}
+            {(!isMultiUser || authService?.isAdmin) && (
               <>
                 <Separator className="my-2" />
 
-                {/* Current user info */}
-                <div className="px-3 py-1 text-xs text-muted-foreground">
-                  Signed in as {authService.currentUsername}
-                </div>
-
-                {/* Admin: Manage Users */}
-                {authService.isAdmin && (
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false)
-                      setUsersOpen(true)
-                    }}
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
-                  >
-                    <Users className="size-4" />
-                    Manage Users
-                  </button>
-                )}
-
-                {/* Sign Out */}
+                {/* Settings */}
                 <button
-                  onClick={handleSignOut}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setSettingsOpen(true)
+                  }}
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
                 >
-                  <LogOut className="size-4" />
-                  Sign Out
+                  <Settings className="size-4" />
+                  Settings
                 </button>
+
+                {/* Backup */}
+                <button
+                  onClick={handleBackup}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
+                >
+                  <Save className="size-4" />
+                  Backup Data
+                </button>
+
+                {/* Restore */}
+                <button
+                  onClick={() => {
+                    setMenuOpen(false)
+                    restoreInputRef.current?.click()
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
+                >
+                  <Upload className="size-4" />
+                  Restore Data
+                </button>
+
+                {/* Hidden file input for restore */}
+                <input
+                  ref={restoreInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  className="hidden"
+                  onChange={handleRestoreFile}
+                />
+              </>
+            )}
+
+            {/* Multi-user section */}
+            {isMultiUser && (
+              <>
+                <Separator className="my-2" />
+
+                {authService?.isLoggedIn ? (
+                  <>
+                    {/* Current user info */}
+                    <div className="px-3 py-1 text-xs text-muted-foreground">
+                      Signed in as {authService.currentDisplayName}
+                    </div>
+
+                    {/* Admin: Manage Users */}
+                    {authService.isAdmin && (
+                      <button
+                        onClick={() => {
+                          setMenuOpen(false)
+                          setUsersOpen(true)
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
+                      >
+                        <Users className="size-4" />
+                        Manage Users
+                      </button>
+                    )}
+
+                    {/* Sign Out */}
+                    <button
+                      onClick={handleSignOut}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
+                    >
+                      <LogOut className="size-4" />
+                      Sign Out
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {/* Guest — show sign in option */}
+                    <div className="px-3 py-1 text-xs text-muted-foreground">
+                      Browsing as Guest
+                    </div>
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false)
+                        useAppStore.setState({ needsLogin: true })
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
+                    >
+                      <LogIn className="size-4" />
+                      Sign In
+                    </button>
+                  </>
+                )}
               </>
             )}
 
