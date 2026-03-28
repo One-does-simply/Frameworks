@@ -8,6 +8,9 @@ import type PocketBase from 'pocketbase'
  *
  * PocketBase handles password hashing, tokens, and sessions natively.
  * ODS roles are stored as a JSON array field on the user record.
+ *
+ * Login uses email as the primary identifier. OAuth2 providers configured
+ * in PocketBase are automatically discovered and shown on the login screen.
  */
 export class AuthService {
   private pb: PocketBase
@@ -15,6 +18,8 @@ export class AuthService {
   private _isInitialized = false
   /** When true, the PocketBase superadmin is running this app — bypass all role checks. */
   private _isSuperAdmin = false
+  /** Cached list of OAuth2 providers configured in PocketBase. */
+  private _oauthProviders: OAuthProvider[] = []
 
   constructor(pb: PocketBase) {
     this.pb = pb
@@ -46,7 +51,10 @@ export class AuthService {
 
   get currentDisplayName(): string {
     if (this._isSuperAdmin) return 'Admin'
-    return (this.pb.authStore.record?.['displayName'] as string) ?? this.currentUsername
+    return (this.pb.authStore.record?.['displayName'] as string)
+      ?? (this.pb.authStore.record?.['name'] as string)
+      ?? this.currentEmail
+      ?? this.currentUsername
   }
 
   get currentEmail(): string {
@@ -77,19 +85,15 @@ export class AuthService {
     return this._isAdminSetUp
   }
 
+  /** Returns the list of OAuth2 providers configured in PocketBase. */
+  get oauthProviders(): OAuthProvider[] {
+    return this._oauthProviders
+  }
+
   // ---------------------------------------------------------------------------
   // Core permission check
   // ---------------------------------------------------------------------------
 
-  /**
-   * Checks whether the current user has access to an element with the given
-   * role restriction.
-   *
-   * Returns true when:
-   *   - requiredRoles is null/undefined or empty (no restriction)
-   *   - The current user is an admin (admin bypasses all restrictions)
-   *   - The current user has at least one matching role
-   */
   hasAccess(requiredRoles: string[] | undefined): boolean {
     if (!requiredRoles || requiredRoles.length === 0) return true
     if (this._isSuperAdmin) return true
@@ -102,8 +106,8 @@ export class AuthService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Initializes the auth service: ensures users collection has roles field,
-   * and checks if an admin user exists.
+   * Initializes the auth service: discovers OAuth2 providers,
+   * checks if an admin user exists.
    */
   async initialize(): Promise<void> {
     try {
@@ -113,9 +117,25 @@ export class AuthService {
       })
       this._isAdminSetUp = admins.length > 0
     } catch {
-      // Users collection may not exist or roles field may not be set up
       this._isAdminSetUp = false
     }
+
+    // Discover OAuth2 providers configured in PocketBase
+    try {
+      const methods = await this.pb.collection('users').listAuthMethods()
+      this._oauthProviders = (methods.oauth2?.providers ?? []).map((p: Record<string, unknown>) => ({
+        name: p.name as string,
+        displayName: p.displayName as string ?? p.name as string,
+        state: p.state as string,
+        authURL: p.authURL as string,
+        codeVerifier: p.codeVerifier as string,
+        codeChallenge: p.codeChallenge as string,
+        codeChallengeMethod: p.codeChallengeMethod as string,
+      }))
+    } catch {
+      this._oauthProviders = []
+    }
+
     this._isInitialized = true
   }
 
@@ -123,12 +143,38 @@ export class AuthService {
   // Authentication operations
   // ---------------------------------------------------------------------------
 
-  /** Attempt to log in with username + password. Returns true on success. */
-  async login(username: string, password: string): Promise<boolean> {
+  /** Attempt to log in with email + password. Returns true on success. */
+  async login(email: string, password: string): Promise<boolean> {
     try {
-      await this.pb.collection('users').authWithPassword(username, password)
+      await this.pb.collection('users').authWithPassword(email, password)
       return true
     } catch {
+      return false
+    }
+  }
+
+  /**
+   * Authenticate via OAuth2 provider. PocketBase handles the full flow
+   * (popup redirect, token exchange, user creation/linking).
+   * Returns true on success.
+   */
+  async loginWithOAuth2(providerName: string): Promise<boolean> {
+    try {
+      const result = await this.pb.collection('users').authWithOAuth2({ provider: providerName })
+
+      // Ensure the OAuth user has roles set (new users won't have them)
+      const roles = result.record['roles']
+      if (!roles || roles === '[]' || roles === '') {
+        await this.pb.collection('users').update(result.record.id, {
+          roles: JSON.stringify(['user']),
+        })
+        // Refresh the auth record to pick up the new roles
+        await this.pb.collection('users').authRefresh()
+      }
+
+      return true
+    } catch (e) {
+      console.error('ODS AuthService: OAuth2 login failed:', e)
       return false
     }
   }
@@ -142,19 +188,22 @@ export class AuthService {
    * Create the initial admin account. Called from the admin setup wizard.
    * Creates a PocketBase user with admin + user roles.
    */
-  async setupAdmin(username: string, password: string): Promise<boolean> {
+  async setupAdmin(email: string, password: string, displayName?: string): Promise<boolean> {
     try {
+      // Generate a username from the email (before @)
+      const username = email.split('@')[0].replace(/[^\w]/g, '_').toLowerCase()
+
       await this.pb.collection('users').create({
         username,
         password,
         passwordConfirm: password,
-        email: `${username}@ods.local`,
-        displayName: username,
+        email,
+        displayName: displayName ?? username,
         roles: JSON.stringify(['admin', 'user']),
       })
 
       // Auto-login as the new admin
-      await this.pb.collection('users').authWithPassword(username, password)
+      await this.pb.collection('users').authWithPassword(email, password)
       this._isAdminSetUp = true
       return true
     } catch (e) {
@@ -165,7 +214,7 @@ export class AuthService {
 
   /** Register a new user with the given role. Returns user ID on success. */
   async registerUser(params: {
-    username: string
+    email: string
     password: string
     role: string
     displayName?: string
@@ -176,12 +225,16 @@ export class AuthService {
         roles.push('user')
       }
 
+      // Generate username from email
+      const username = params.email.split('@')[0].replace(/[^\w]/g, '_').toLowerCase()
+        + '_' + Math.random().toString(36).slice(2, 6)
+
       const record = await this.pb.collection('users').create({
-        username: params.username,
+        username,
         password: params.password,
         passwordConfirm: params.password,
-        email: `${params.username}@ods.local`,
-        displayName: params.displayName ?? params.username,
+        email: params.email,
+        displayName: params.displayName ?? params.email.split('@')[0],
         roles: JSON.stringify(roles),
       })
 
@@ -212,7 +265,8 @@ export class AuthService {
       return records.map(r => ({
         _id: r.id,
         username: r['username'],
-        displayName: r['displayName'] ?? r['username'],
+        email: r['email'] ?? '',
+        displayName: r['displayName'] ?? r['name'] ?? r['email'] ?? r['username'],
         roles: (() => {
           const roles = r['roles']
           if (Array.isArray(roles)) return roles
@@ -262,5 +316,18 @@ export class AuthService {
     this.pb.authStore.clear()
     this._isAdminSetUp = false
     this._isInitialized = false
+    this._isSuperAdmin = false
+    this._oauthProviders = []
   }
+}
+
+/** Describes an OAuth2 provider discovered from PocketBase. */
+export interface OAuthProvider {
+  name: string
+  displayName: string
+  state: string
+  authURL: string
+  codeVerifier: string
+  codeChallenge: string
+  codeChallengeMethod: string
 }

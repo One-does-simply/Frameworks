@@ -48,6 +48,7 @@ import { ArrowLeft, UserPlus, KeyRound, Trash2, Loader2 } from 'lucide-react'
 interface UserRecord {
   _id: string
   username: string
+  email: string
   displayName: string
   roles: string[]
 }
@@ -62,7 +63,8 @@ export function UserManagementPage() {
 
   // Add user form state
   const [showAddUser, setShowAddUser] = useState(false)
-  const [newUsername, setNewUsername] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+  const [newDisplayName, setNewDisplayName] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newRole, setNewRole] = useState('user')
 
@@ -84,7 +86,8 @@ export function UserManagementPage() {
         rawUsers.map((u) => ({
           _id: u._id as string,
           username: u.username as string,
-          displayName: (u.displayName as string) ?? (u.username as string),
+          email: (u.email as string) ?? '',
+          displayName: (u.displayName as string) ?? (u.email as string) ?? (u.username as string),
           roles: (u.roles as string[]) ?? [],
         })),
       )
@@ -102,23 +105,25 @@ export function UserManagementPage() {
   // ---- Add User ----
 
   async function handleAddUser() {
-    if (!newUsername.trim() || !newPassword) return
+    if (!newEmail.trim() || !newPassword) return
 
     const userId = await authService.registerUser({
-      username: newUsername.trim(),
+      email: newEmail.trim(),
       password: newPassword,
       role: newRole,
+      displayName: newDisplayName.trim() || undefined,
     })
 
     if (userId) {
       setShowAddUser(false)
-      setNewUsername('')
+      setNewEmail('')
+      setNewDisplayName('')
       setNewPassword('')
       setNewRole('user')
       await loadUsers()
-      toast.success(`User "${newUsername.trim()}" created.`)
+      toast.success(`User "${newEmail.trim()}" created.`)
     } else {
-      toast.error('Failed to create user. Username may be taken.')
+      toast.error('Failed to create user. Email may already be in use.')
     }
   }
 
@@ -198,8 +203,8 @@ export function UserManagementPage() {
                       </div>
                       <div>
                         <div className="font-medium">{user.displayName}</div>
-                        {user.displayName !== user.username && (
-                          <div className="text-xs text-muted-foreground">@{user.username}</div>
+                        {user.email && (
+                          <div className="text-xs text-muted-foreground">{user.email}</div>
                         )}
                       </div>
                     </div>
@@ -256,12 +261,23 @@ export function UserManagementPage() {
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="add-username">Username</Label>
+              <Label htmlFor="add-email">Email</Label>
               <Input
-                id="add-username"
-                value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
+                id="add-email"
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder="user@example.com"
                 autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="add-displayname">Display Name (optional)</Label>
+              <Input
+                id="add-displayname"
+                value={newDisplayName}
+                onChange={(e) => setNewDisplayName(e.target.value)}
+                placeholder="User's name"
               />
             </div>
             <div className="space-y-2">
@@ -296,7 +312,7 @@ export function UserManagementPage() {
             </Button>
             <Button
               onClick={handleAddUser}
-              disabled={!newUsername.trim() || !newPassword}
+              disabled={!newEmail.trim() || !newPassword}
             >
               Add
             </Button>

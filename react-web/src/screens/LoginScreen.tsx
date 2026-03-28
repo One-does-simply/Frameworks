@@ -4,12 +4,23 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
 import { Loader2, Shield } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
-// LoginScreen — username/password login for multi-user apps
+// LoginScreen — email/password + OAuth2 login for multi-user apps
 // Supports self-registration when auth.selfRegistration is enabled in spec.
 // ---------------------------------------------------------------------------
+
+/** Map of known OAuth2 provider names to display labels and colors. */
+const OAUTH_STYLES: Record<string, { label: string; bg: string; hover: string }> = {
+  google: { label: 'Continue with Google', bg: 'bg-white text-gray-800 border', hover: 'hover:bg-gray-50' },
+  microsoft: { label: 'Continue with Microsoft', bg: 'bg-[#2F2F2F] text-white', hover: 'hover:bg-[#1a1a1a]' },
+  github: { label: 'Continue with GitHub', bg: 'bg-[#24292f] text-white', hover: 'hover:bg-[#1b1f23]' },
+  apple: { label: 'Continue with Apple', bg: 'bg-black text-white', hover: 'hover:bg-gray-900' },
+  facebook: { label: 'Continue with Facebook', bg: 'bg-[#1877F2] text-white', hover: 'hover:bg-[#166FE5]' },
+  discord: { label: 'Continue with Discord', bg: 'bg-[#5865F2] text-white', hover: 'hover:bg-[#4752C4]' },
+}
 
 export function LoginScreen() {
   const app = useAppStore((s) => s.app)!
@@ -17,7 +28,7 @@ export function LoginScreen() {
   const dataService = useAppStore((s) => s.dataService)
 
   const [isSignUp, setIsSignUp] = useState(false)
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -27,13 +38,15 @@ export function LoginScreen() {
   const allowSelfRegistration = app.auth.selfRegistration
   const isMultiUserOnly = app.auth.multiUserOnly
   const pbSuperAdminAvailable = dataService?.isAdminAuthenticated ?? false
+  const oauthProviders = authService.oauthProviders ?? []
 
+  // ---- Login ----
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
 
-    if (!username.trim()) {
-      setError('Username is required')
+    if (!email.trim()) {
+      setError('Email is required')
       return
     }
     if (!password) {
@@ -42,25 +55,38 @@ export function LoginScreen() {
     }
 
     setLoading(true)
-    const success = await authService.login(username.trim(), password)
+    const success = await authService.login(email.trim(), password)
     setLoading(false)
 
     if (success) {
-      // Refresh store state to pass the auth gate
-      useAppStore.setState({
-        needsLogin: false,
-      })
+      useAppStore.setState({ needsLogin: false })
     } else {
-      setError('Invalid username or password')
+      setError('Invalid email or password')
     }
   }
 
+  // ---- OAuth2 ----
+  async function handleOAuth2(providerName: string) {
+    setError(null)
+    setLoading(true)
+
+    const success = await authService.loginWithOAuth2(providerName)
+    setLoading(false)
+
+    if (success) {
+      useAppStore.setState({ needsLogin: false })
+    } else {
+      setError(`Sign in with ${providerName} failed. Please try again.`)
+    }
+  }
+
+  // ---- Sign Up ----
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
 
-    if (!username.trim()) {
-      setError('Username is required')
+    if (!email.trim()) {
+      setError('Email is required')
       return
     }
     if (password.length < 8) {
@@ -74,44 +100,42 @@ export function LoginScreen() {
 
     setLoading(true)
     const userId = await authService.registerUser({
-      username: username.trim(),
+      email: email.trim(),
       password,
       role: app.auth.defaultRole,
       displayName: displayName.trim() || undefined,
     })
 
     if (userId) {
-      // Auto-login after registration
-      const loginSuccess = await authService.login(username.trim(), password)
+      const loginSuccess = await authService.login(email.trim(), password)
       setLoading(false)
 
       if (loginSuccess) {
-        useAppStore.setState({
-          needsLogin: false,
-        })
+        useAppStore.setState({ needsLogin: false })
       } else {
         setError('Account created but login failed. Please try signing in.')
         setIsSignUp(false)
       }
     } else {
       setLoading(false)
-      setError('Failed to create account. Username may already be taken.')
+      setError('Failed to create account. Email may already be in use.')
     }
   }
 
+  // ---- Admin / Guest ----
   function handleContinueAsAdmin() {
     authService.setSuperAdmin(true)
-    useAppStore.setState({
-      needsLogin: false,
-    })
+    useAppStore.setState({ needsLogin: false })
   }
 
   function handleContinueAsGuest() {
     authService.setSuperAdmin(false)
-    useAppStore.setState({
-      needsLogin: false,
-    })
+    useAppStore.setState({ needsLogin: false })
   }
+
+  // =========================================================================
+  // Sign Up View
+  // =========================================================================
 
   if (isSignUp) {
     return (
@@ -119,9 +143,7 @@ export function LoginScreen() {
         <Card className="w-full max-w-sm">
           <CardHeader>
             <CardTitle>Sign Up</CardTitle>
-            <CardDescription>
-              Create an account for {app.appName}
-            </CardDescription>
+            <CardDescription>Create an account for {app.appName}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSignUp} className="space-y-4">
@@ -132,14 +154,14 @@ export function LoginScreen() {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="signup-username">Username</Label>
+                <Label htmlFor="signup-email">Email</Label>
                 <Input
-                  id="signup-username"
-                  type="text"
-                  autoComplete="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Choose a username"
+                  id="signup-email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
                   disabled={loading}
                   autoFocus
                 />
@@ -204,57 +226,91 @@ export function LoginScreen() {
     )
   }
 
+  // =========================================================================
+  // Sign In View
+  // =========================================================================
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>Sign In</CardTitle>
-          <CardDescription>
-            Sign in to {app.appName}
-          </CardDescription>
+          <CardDescription>Sign in to {app.appName}</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-            {/* Error message */}
+          <div className="space-y-4">
             {error && (
               <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {error}
               </div>
             )}
 
-            {/* Username */}
-            <div className="space-y-2">
-              <Label htmlFor="login-username">Username</Label>
-              <Input
-                id="login-username"
-                type="text"
-                autoComplete="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter username"
-                disabled={loading}
-              />
-            </div>
+            {/* OAuth2 providers */}
+            {oauthProviders.length > 0 && (
+              <>
+                <div className="space-y-2">
+                  {oauthProviders.map((provider) => {
+                    const style = OAUTH_STYLES[provider.name] ?? {
+                      label: `Continue with ${provider.displayName}`,
+                      bg: 'bg-secondary text-secondary-foreground',
+                      hover: 'hover:bg-secondary/80',
+                    }
+                    return (
+                      <button
+                        key={provider.name}
+                        type="button"
+                        disabled={loading}
+                        onClick={() => handleOAuth2(provider.name)}
+                        className={`flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors ${style.bg} ${style.hover} disabled:opacity-50`}
+                      >
+                        {style.label}
+                      </button>
+                    )
+                  })}
+                </div>
 
-            {/* Password */}
-            <div className="space-y-2">
-              <Label htmlFor="login-password">Password</Label>
-              <Input
-                id="login-password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
-                disabled={loading}
-              />
-            </div>
+                <div className="relative">
+                  <Separator />
+                  <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
+                    or
+                  </span>
+                </div>
+              </>
+            )}
 
-            {/* Login button */}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading && <Loader2 className="mr-2 size-4 animate-spin" />}
-              Sign In
-            </Button>
+            {/* Email/password form */}
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="login-email">Email</Label>
+                <Input
+                  id="login-email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="login-password">Password</Label>
+                <Input
+                  id="login-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password"
+                  disabled={loading}
+                />
+              </div>
+
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading && <Loader2 className="mr-2 size-4 animate-spin" />}
+                Sign In
+              </Button>
+            </form>
 
             {/* Self-registration */}
             {allowSelfRegistration && (
@@ -295,7 +351,7 @@ export function LoginScreen() {
                 Continue as Guest
               </Button>
             )}
-          </form>
+          </div>
         </CardContent>
       </Card>
     </div>

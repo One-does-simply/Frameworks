@@ -30,7 +30,7 @@ export function RootRedirect() {
   const [adminSubmitting, setAdminSubmitting] = useState(false)
 
   // User login state
-  const [username, setUsername] = useState('')
+  const [userEmail, setUserEmail] = useState('')
   const [password, setPassword] = useState('')
   const [userError, setUserError] = useState<string | null>(null)
   const [userSubmitting, setUserSubmitting] = useState(false)
@@ -74,8 +74,8 @@ export function RootRedirect() {
     e.preventDefault()
     setUserError(null)
 
-    if (!username.trim()) {
-      setUserError('Username is required')
+    if (!userEmail.trim()) {
+      setUserError('Email is required')
       return
     }
     if (!password) {
@@ -86,7 +86,7 @@ export function RootRedirect() {
     setUserSubmitting(true)
 
     try {
-      await pb.collection('users').authWithPassword(username.trim(), password)
+      await pb.collection('users').authWithPassword(userEmail.trim(), password)
       // Redirect to default app or admin
       if (defaultSlug) {
         navigate(`/${defaultSlug}`, { replace: true })
@@ -231,14 +231,14 @@ export function RootRedirect() {
                 </div>
               )}
               <div className="space-y-2">
-                <Label htmlFor="root-username">Username</Label>
+                <Label htmlFor="root-email">Email</Label>
                 <Input
-                  id="root-username"
-                  type="text"
-                  autoComplete="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter username"
+                  id="root-email"
+                  type="email"
+                  autoComplete="email"
+                  value={userEmail}
+                  onChange={(e) => setUserEmail(e.target.value)}
+                  placeholder="you@example.com"
                   autoFocus
                   disabled={userSubmitting}
                 />

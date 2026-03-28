@@ -105,7 +105,7 @@ export function AdminSettingsPage() {
   const [users, setUsers] = useState<UserRecord[]>([])
   const [isLoadingUsers, setIsLoadingUsers] = useState(true)
   const [showAddUser, setShowAddUser] = useState(false)
-  const [newUsername, setNewUsername] = useState('')
+  const [newEmail, setNewEmail] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newRole, setNewRole] = useState('user')
   const [deleteTarget, setDeleteTarget] = useState<UserRecord | null>(null)
@@ -174,21 +174,21 @@ export function AdminSettingsPage() {
 
   // User management handlers
   async function handleAddUser() {
-    if (!newUsername.trim() || !newPassword) return
+    if (!newEmail.trim() || !newPassword) return
     const userId = await authService.registerUser({
-      username: newUsername.trim(),
+      email: newEmail.trim(),
       password: newPassword,
       role: newRole,
     })
     if (userId) {
       setShowAddUser(false)
-      setNewUsername('')
+      setNewEmail('')
       setNewPassword('')
       setNewRole('user')
       await loadUsers()
-      toast.success(`User "${newUsername.trim()}" created.`)
+      toast.success(`User "${newEmail.trim()}" created.`)
     } else {
-      toast.error('Failed to create user. Username may be taken.')
+      toast.error('Failed to create user. Email may already be in use.')
     }
   }
 
@@ -539,11 +539,13 @@ export function AdminSettingsPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="settings-add-username">Username</Label>
+              <Label htmlFor="settings-add-email">Email</Label>
               <Input
-                id="settings-add-username"
-                value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
+                id="settings-add-email"
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder="user@example.com"
                 autoFocus
               />
             </div>
@@ -574,7 +576,7 @@ export function AdminSettingsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddUser(false)}>Cancel</Button>
-            <Button onClick={handleAddUser} disabled={!newUsername.trim() || !newPassword}>Add</Button>
+            <Button onClick={handleAddUser} disabled={!newEmail.trim() || !newPassword}>Add</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

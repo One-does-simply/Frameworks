@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
-// AdminSetupScreen — first-run admin account creation
+// AdminSetupScreen — first-run admin account creation (email-based)
 // ---------------------------------------------------------------------------
 
 export function AdminSetupScreen() {
@@ -15,7 +15,8 @@ export function AdminSetupScreen() {
   const authService = useAppStore((s) => s.authService)!
   const isMultiUserOnly = useAppStore((s) => s.isMultiUserOnly)
 
-  const [username, setUsername] = useState('admin')
+  const [email, setEmail] = useState('')
+  const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -25,8 +26,8 @@ export function AdminSetupScreen() {
     e.preventDefault()
     setError(null)
 
-    if (!username.trim()) {
-      setError('Username is required')
+    if (!email.trim()) {
+      setError('Email is required')
       return
     }
     if (password.length < 8) {
@@ -39,11 +40,10 @@ export function AdminSetupScreen() {
     }
 
     setLoading(true)
-    const success = await authService.setupAdmin(username.trim(), password)
+    const success = await authService.setupAdmin(email.trim(), password, displayName.trim() || undefined)
     setLoading(false)
 
     if (success) {
-      // Refresh store state to pass the auth gate
       useAppStore.setState({
         needsAdminSetup: false,
         needsLogin: false,
@@ -54,7 +54,6 @@ export function AdminSetupScreen() {
   }
 
   function handleSkip() {
-    // Skip admin setup — proceed without auth
     useAppStore.setState({
       needsAdminSetup: false,
       needsLogin: false,
@@ -74,27 +73,38 @@ export function AdminSetupScreen() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSetup} className="space-y-4">
-            {/* Error message */}
             {error && (
               <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {error}
               </div>
             )}
 
-            {/* Username */}
             <div className="space-y-2">
-              <Label htmlFor="admin-username">Username</Label>
+              <Label htmlFor="admin-email">Email</Label>
               <Input
-                id="admin-username"
+                id="admin-email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="admin@example.com"
+                disabled={loading}
+                autoFocus
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="admin-displayname">Display Name (optional)</Label>
+              <Input
+                id="admin-displayname"
                 type="text"
-                autoComplete="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Your name"
                 disabled={loading}
               />
             </div>
 
-            {/* Password */}
             <div className="space-y-2">
               <Label htmlFor="admin-password">Password</Label>
               <Input
@@ -108,7 +118,6 @@ export function AdminSetupScreen() {
               />
             </div>
 
-            {/* Confirm Password */}
             <div className="space-y-2">
               <Label htmlFor="admin-confirm-password">Confirm Password</Label>
               <Input
@@ -122,13 +131,11 @@ export function AdminSetupScreen() {
               />
             </div>
 
-            {/* Create button */}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading && <Loader2 className="mr-2 size-4 animate-spin" />}
               Create Admin &amp; Continue
             </Button>
 
-            {/* Skip for now */}
             {!isMultiUserOnly && (
               <Button
                 type="button"

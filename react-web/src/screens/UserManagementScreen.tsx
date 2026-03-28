@@ -64,7 +64,7 @@ export function UserManagementScreen({ open, onOpenChange }: UserManagementScree
 
   // Add user form state
   const [showAddUser, setShowAddUser] = useState(false)
-  const [newUsername, setNewUsername] = useState('')
+  const [newEmail, setNewEmail] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newRole, setNewRole] = useState('user')
 
@@ -99,23 +99,23 @@ export function UserManagementScreen({ open, onOpenChange }: UserManagementScree
   // ---- Add User ----
 
   async function handleAddUser() {
-    if (!authService || !newUsername.trim() || !newPassword) return
+    if (!authService || !newEmail.trim() || !newPassword) return
 
     const userId = await authService.registerUser({
-      username: newUsername.trim(),
+      email: newEmail.trim(),
       password: newPassword,
       role: newRole,
     })
 
     if (userId) {
       setShowAddUser(false)
-      setNewUsername('')
+      setNewEmail('')
       setNewPassword('')
       setNewRole('user')
       await loadUsers()
-      toast.success(`User "${newUsername.trim()}" created.`)
+      toast.success(`User "${newEmail.trim()}" created.`)
     } else {
-      toast.error('Failed to create user. Username may be taken.')
+      toast.error('Failed to create user. Email may already be in use.')
     }
   }
 
@@ -269,11 +269,13 @@ export function UserManagementScreen({ open, onOpenChange }: UserManagementScree
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="add-username">Username</Label>
+              <Label htmlFor="add-email">Email</Label>
               <Input
-                id="add-username"
-                value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
+                id="add-email"
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder="user@example.com"
                 autoFocus
               />
             </div>
@@ -309,7 +311,7 @@ export function UserManagementScreen({ open, onOpenChange }: UserManagementScree
             </Button>
             <Button
               onClick={handleAddUser}
-              disabled={!newUsername.trim() || !newPassword}
+              disabled={!newEmail.trim() || !newPassword}
             >
               Add
             </Button>
