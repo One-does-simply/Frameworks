@@ -118,10 +118,13 @@ export function AppShell() {
 
   function handleSignOut() {
     setMenuOpen(false)
+    // Clear all auth state — superadmin flag, PB auth, form data
+    authService?.setSuperAdmin(false)
     authService?.logout()
-    // Force a re-render by resetting auth-related state
     useAppStore.setState({
       needsLogin: true,
+      formStates: {},
+      recordCursors: {},
     })
   }
 
@@ -386,7 +389,7 @@ export function AppShell() {
                     <button
                       onClick={() => {
                         setMenuOpen(false)
-                        useAppStore.setState({ needsLogin: true })
+                        useAppStore.setState({ needsLogin: true, formStates: {}, recordCursors: {} })
                       }}
                       className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
                     >

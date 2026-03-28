@@ -58,6 +58,7 @@ import {
   Info,
   Settings as SettingsIcon,
   LogOut,
+  Link as LinkIcon,
 } from 'lucide-react'
 import { ExampleCatalogDialog } from './ExampleCatalogDialog.tsx'
 import { DataExportDialog } from './DataExportDialog.tsx'
@@ -303,6 +304,12 @@ export function AdminDashboard() {
     window.location.reload()
   }
 
+  function handleCopyUrl(app: AppRecord) {
+    const url = `${window.location.origin}/${app.slug}`
+    navigator.clipboard.writeText(url)
+    toast.success(`URL copied: ${url}`)
+  }
+
   function handleGenerateCode(appRecord: AppRecord) {
     const result = parseSpec(appRecord.specJson)
     if (!result.app) {
@@ -331,61 +338,43 @@ export function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Hero header */}
-      <header className="border-b bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-6 text-white">
-        <div className="mx-auto max-w-5xl">
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
-              <h1 className="text-xl font-extrabold tracking-tight">One Does Simply</h1>
-              <p className="text-sm font-medium text-white/90">Vibe Coding with Guardrails</p>
-              <p className="mt-1 text-xs text-white/60">A web-based implementation perfect for multi-user applications</p>
-            </div>
-            <a
-              href="https://one-does-simply.github.io/Specification/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-white/80 hover:text-white hover:bg-white/10 transition-colors"
-            >
-              <Info className="size-3.5" />
-              Learn More
-            </a>
-            <div className="flex gap-0.5 rounded-lg border border-white/20 bg-white/10 p-0.5">
-              {([
-                { mode: 'light' as ThemeMode, icon: Sun },
-                { mode: 'system' as ThemeMode, icon: Monitor },
-                { mode: 'dark' as ThemeMode, icon: Moon },
-              ]).map(({ mode, icon: Icon }) => (
-                <button
-                  key={mode}
-                  onClick={() => { setTheme(mode); setThemeMode(mode) }}
-                  className={`rounded-md p-1.5 transition-colors ${
-                    theme === mode
-                      ? 'bg-white text-indigo-700'
-                      : 'text-white/70 hover:text-white'
-                  }`}
-                  aria-label={`${mode} theme`}
-                >
-                  <Icon className="size-4" />
-                </button>
-              ))}
-            </div>
-            <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" asChild>
-              <Link to="/admin/users">
-                <Users className="mr-2 size-4" />
-                Users
-              </Link>
-            </Button>
-            <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" asChild>
-              <Link to="/admin/settings">
-                <SettingsIcon className="mr-2 size-4" />
-                Settings
-              </Link>
-            </Button>
-            <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" onClick={handleLogout}>
-              <LogOut className="mr-2 size-4" />
-              Logout
-            </Button>
+      {/* Header */}
+      <header className="border-b bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-5 text-white">
+        <div className="mx-auto flex max-w-5xl items-center gap-4">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl font-extrabold tracking-tight">One Does Simply</h1>
+            <p className="text-sm text-white/75">Vibe Coding with Guardrails</p>
           </div>
+
+          {/* Theme toggle */}
+          <div className="flex gap-0.5 rounded-lg border border-white/20 bg-white/10 p-0.5">
+            {([
+              { mode: 'light' as ThemeMode, icon: Sun },
+              { mode: 'system' as ThemeMode, icon: Monitor },
+              { mode: 'dark' as ThemeMode, icon: Moon },
+            ]).map(({ mode, icon: Icon }) => (
+              <button
+                key={mode}
+                onClick={() => { setTheme(mode); setThemeMode(mode) }}
+                className={`rounded-md p-1.5 transition-colors ${
+                  theme === mode
+                    ? 'bg-white text-indigo-700'
+                    : 'text-white/70 hover:text-white'
+                }`}
+                aria-label={`${mode} theme`}
+              >
+                <Icon className="size-4" />
+              </button>
+            ))}
+          </div>
+
+          {/* Icon buttons */}
+          <Link to="/admin/settings" className="rounded-md p-1.5 text-white/70 hover:text-white hover:bg-white/10 transition-colors" title="Settings">
+            <SettingsIcon className="size-4" />
+          </Link>
+          <button onClick={handleLogout} className="rounded-md p-1.5 text-white/70 hover:text-white hover:bg-white/10 transition-colors" title="Logout">
+            <LogOut className="size-4" />
+          </button>
         </div>
       </header>
 
@@ -457,6 +446,7 @@ export function AdminDashboard() {
                   onArchive={() => handleArchive(app)}
                   onDelete={() => setDeleteTarget(app)}
                   onSetDefault={() => handleSetDefault(app)}
+                  onCopyUrl={() => handleCopyUrl(app)}
                 />
               ))}
             </div>
@@ -636,9 +626,10 @@ interface AppCardProps {
   onRestore?: () => void
   onDelete: () => void
   onSetDefault?: () => void
+  onCopyUrl?: () => void
 }
 
-function AppCard({ app, archived, isDefault, onOpen, onEdit, onEditWithAi, onExportData, onGenerateCode, onArchive, onRestore, onDelete, onSetDefault }: AppCardProps) {
+function AppCard({ app, archived, isDefault, onOpen, onEdit, onEditWithAi, onExportData, onGenerateCode, onArchive, onRestore, onDelete, onSetDefault, onCopyUrl }: AppCardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuBtnRef = useRef<HTMLButtonElement>(null)
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
@@ -707,6 +698,7 @@ function AppCard({ app, archived, isDefault, onOpen, onEdit, onEditWithAi, onExp
           >
             {onEditWithAi && <ContextMenuItem icon={Sparkles} label="Edit with AI" onClick={() => { closeMenu(); onEditWithAi() }} />}
             <ContextMenuItem icon={Pencil} label="Edit JSON Spec" onClick={() => { closeMenu(); onEdit() }} />
+            {onCopyUrl && <ContextMenuItem icon={LinkIcon} label="Copy Client URL" onClick={() => { closeMenu(); onCopyUrl() }} />}
             {onSetDefault && !isDefault && (
               <ContextMenuItem icon={Star} label="Set as Default" onClick={() => { closeMenu(); onSetDefault() }} />
             )}
