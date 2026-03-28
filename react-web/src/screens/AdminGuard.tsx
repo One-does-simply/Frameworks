@@ -75,7 +75,7 @@ export function AdminGuard() {
           <CardHeader>
             <CardTitle>ODS Admin Login</CardTitle>
             <CardDescription>
-              Enter the PocketBase superadmin credentials to manage ODS apps.
+              Enter the PocketBase superadmin credentials. If this is your first time, create a superadmin at <code className="rounded bg-muted px-1">http://127.0.0.1:8090/_/</code> using <strong>admin@localhost</strong> as the email.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -93,7 +93,7 @@ export function AdminGuard() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@example.com"
+                  placeholder="admin@localhost"
                   autoFocus
                   disabled={submitting}
                 />

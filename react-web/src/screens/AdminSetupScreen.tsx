@@ -39,6 +39,13 @@ export function AdminSetupScreen() {
       return
     }
 
+    // Check for PB superadmin email conflict
+    const pbAdminEmail = localStorage.getItem('ods_pb_admin_email') ?? ''
+    if (pbAdminEmail && email.trim().toLowerCase() === pbAdminEmail.toLowerCase()) {
+      setError('This email is used by the PocketBase superadmin. Please use a different email for the app admin account.')
+      return
+    }
+
     setLoading(true)
     const success = await authService.setupAdmin(email.trim(), password, displayName.trim() || undefined)
     setLoading(false)

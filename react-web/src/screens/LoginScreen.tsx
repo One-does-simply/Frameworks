@@ -98,6 +98,13 @@ export function LoginScreen() {
       return
     }
 
+    // Check for PB superadmin email conflict
+    const pbAdminEmail = localStorage.getItem('ods_pb_admin_email') ?? ''
+    if (pbAdminEmail && email.trim().toLowerCase() === pbAdminEmail.toLowerCase()) {
+      setError('This email is reserved for the system administrator. Please use a different email.')
+      return
+    }
+
     setLoading(true)
     const userId = await authService.registerUser({
       email: email.trim(),

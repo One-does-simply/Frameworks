@@ -210,6 +210,13 @@ export class AuthService {
    */
   async setupAdmin(email: string, password: string, displayName?: string): Promise<boolean> {
     try {
+      // Reject if email matches PocketBase superadmin — they are separate identity stores
+      const pbAdminEmail = localStorage.getItem('ods_pb_admin_email') ?? ''
+      if (pbAdminEmail && email.toLowerCase() === pbAdminEmail.toLowerCase()) {
+        console.error('ODS AuthService: Cannot create app user with same email as PocketBase superadmin')
+        return false
+      }
+
       // Generate a username from the email (before @)
       const username = email.split('@')[0].replace(/[^\w]/g, '_').toLowerCase()
 
@@ -240,6 +247,13 @@ export class AuthService {
     displayName?: string
   }): Promise<string | null> {
     try {
+      // Reject if email matches PocketBase superadmin
+      const pbAdminEmail = localStorage.getItem('ods_pb_admin_email') ?? ''
+      if (pbAdminEmail && params.email.toLowerCase() === pbAdminEmail.toLowerCase()) {
+        console.error('ODS AuthService: Cannot register with PocketBase superadmin email')
+        return null
+      }
+
       const roles = [params.role]
       if (params.role !== 'user' && params.role !== 'guest') {
         roles.push('user')
