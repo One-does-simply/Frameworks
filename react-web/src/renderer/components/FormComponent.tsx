@@ -23,12 +23,19 @@ import {
 function resolveMagicDefault(defaultValue: string, fieldType: string, authService?: { currentUsername: string; currentDisplayName: string; currentEmail: string; isLoggedIn: boolean } | null): string {
   const upper = defaultValue.toUpperCase()
 
-  // User-context magic defaults
+  // User-context magic defaults: CURRENT_USER.NAME, CURRENT_USER.EMAIL, etc.
+  if (upper.startsWith('CURRENT_USER.') && authService?.isLoggedIn) {
+    const prop = upper.slice('CURRENT_USER.'.length)
+    switch (prop) {
+      case 'NAME': return authService.currentDisplayName
+      case 'EMAIL': return authService.currentEmail
+      case 'USERNAME': return authService.currentUsername
+      default: return defaultValue // unknown property — return literal
+    }
+  }
+  // Legacy: bare CURRENT_USER still resolves to display name
   if (upper === 'CURRENT_USER' && authService?.isLoggedIn) {
     return authService.currentDisplayName
-  }
-  if (upper === 'CURRENT_USER_EMAIL' && authService?.isLoggedIn) {
-    return authService.currentEmail
   }
 
   if (upper === 'NOW' || upper === 'CURRENTDATE') {
