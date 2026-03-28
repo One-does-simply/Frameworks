@@ -199,6 +199,13 @@ export const useAppStore = create<AppState>()((set, get) => ({
         await authService.initialize()
       }
 
+      // PocketBase superadmin bypasses the per-app admin setup and login
+      // gates — they already authenticated to manage apps.
+      const isSuperAdmin = dataService.isAdminAuthenticated
+      if (isSuperAdmin) {
+        authService.setSuperAdmin(true)
+      }
+
       set({
         app,
         dataService,
@@ -212,8 +219,8 @@ export const useAppStore = create<AppState>()((set, get) => ({
         currentSlug: slug ?? null,
         isMultiUser: app.auth.multiUser,
         isMultiUserOnly: app.auth.multiUserOnly ?? false,
-        needsAdminSetup: app.auth.multiUser && !authService.isAdminSetUp,
-        needsLogin: app.auth.multiUser && authService.isAdminSetUp && !authService.isLoggedIn,
+        needsAdminSetup: app.auth.multiUser && !isSuperAdmin && !authService.isAdminSetUp,
+        needsLogin: app.auth.multiUser && !isSuperAdmin && authService.isAdminSetUp && !authService.isLoggedIn,
       })
 
       // Run auto-backup in background (best-effort, non-blocking)

@@ -195,7 +195,12 @@ export function AppShell() {
 
         {/* User indicator / login button */}
         {isMultiUser && authService && (
-          authService.isLoggedIn ? (
+          authService.isSuperAdmin ? (
+            <div className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground">
+              <User className="size-3.5" />
+              <span>Admin</span>
+            </div>
+          ) : authService.isLoggedIn ? (
             <div className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground">
               <User className="size-3.5" />
               <span className="max-w-24 truncate">{authService.currentDisplayName}</span>

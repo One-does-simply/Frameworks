@@ -13,10 +13,19 @@ export class AuthService {
   private pb: PocketBase
   private _isAdminSetUp = false
   private _isInitialized = false
+  /** When true, the PocketBase superadmin is running this app — bypass all role checks. */
+  private _isSuperAdmin = false
 
   constructor(pb: PocketBase) {
     this.pb = pb
   }
+
+  /** Mark that the PocketBase superadmin is operating this app. */
+  setSuperAdmin(value: boolean): void {
+    this._isSuperAdmin = value
+  }
+
+  get isSuperAdmin(): boolean { return this._isSuperAdmin }
 
   // ---------------------------------------------------------------------------
   // Public getters
@@ -75,6 +84,7 @@ export class AuthService {
    */
   hasAccess(requiredRoles: string[] | undefined): boolean {
     if (!requiredRoles || requiredRoles.length === 0) return true
+    if (this._isSuperAdmin) return true
     if (this.isAdmin) return true
     return this.currentRoles.some(r => requiredRoles.includes(r))
   }
