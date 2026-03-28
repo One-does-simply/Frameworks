@@ -140,12 +140,10 @@ export function AppLoader() {
     )
   }
 
-  // App is loaded — auth gate
-  if (needsAdminSetup) {
-    return <AdminSetupScreen />
-  }
-
-  if (needsLogin) {
+  // App is loaded — auth gate.
+  // Show login screen first (lets users choose admin/guest/sign-in).
+  // Admin setup only shows if explicitly needed AND no login bypass.
+  if (needsLogin || needsAdminSetup) {
     return <LoginScreen />
   }
 

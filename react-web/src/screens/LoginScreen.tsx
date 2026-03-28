@@ -28,6 +28,8 @@ export function LoginScreen() {
   const dataService = useAppStore((s) => s.dataService)
 
   const [isSignUp, setIsSignUp] = useState(false)
+  const [isAdminSetup, setIsAdminSetup] = useState(false)
+  const needsAdminSetup = useAppStore((s) => s.needsAdminSetup)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -124,13 +126,94 @@ export function LoginScreen() {
 
   // ---- Admin / Guest ----
   function handleContinueAsAdmin() {
-    authService.setSuperAdmin(true)
-    useAppStore.setState({ needsLogin: false })
+    if (pbSuperAdminAvailable) {
+      // PB superadmin — bypass directly
+      authService.setSuperAdmin(true)
+      useAppStore.setState({ needsLogin: false, needsAdminSetup: false })
+    } else if (needsAdminSetup) {
+      // No admin exists — show admin setup form
+      setIsAdminSetup(true)
+      setError(null)
+    }
+  }
+
+  async function handleAdminSetup(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+
+    if (!email.trim()) { setError('Email is required'); return }
+    if (password.length < 8) { setError('Password must be at least 8 characters'); return }
+    if (password !== confirmPassword) { setError('Passwords do not match'); return }
+
+    const pbAdminEmail = localStorage.getItem('ods_pb_admin_email') ?? ''
+    if (pbAdminEmail && email.trim().toLowerCase() === pbAdminEmail.toLowerCase()) {
+      setError('This email is used by the PocketBase superadmin. Please use a different email.')
+      return
+    }
+
+    setLoading(true)
+    const success = await authService.setupAdmin(email.trim(), password, displayName.trim() || undefined)
+    setLoading(false)
+
+    if (success) {
+      useAppStore.setState({ needsAdminSetup: false, needsLogin: false })
+    } else {
+      setError('Failed to create admin account. Please try again.')
+    }
   }
 
   function handleContinueAsGuest() {
     authService.setSuperAdmin(false)
-    useAppStore.setState({ needsLogin: false })
+    useAppStore.setState({ needsLogin: false, needsAdminSetup: false })
+  }
+
+  // =========================================================================
+  // Admin Setup View (only when no admin exists and user chose to create one)
+  // =========================================================================
+
+  if (isAdminSetup) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-sm">
+          <CardHeader>
+            <CardTitle>Create Admin Account</CardTitle>
+            <CardDescription>Set up the administrator account for {app.appName}.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleAdminSetup} className="space-y-4">
+              {error && (
+                <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {error}
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="admin-setup-email">Email</Label>
+                <Input id="admin-setup-email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@example.com" disabled={loading} autoFocus />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="admin-setup-name">Display Name (optional)</Label>
+                <Input id="admin-setup-name" type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Your name" disabled={loading} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="admin-setup-pw">Password</Label>
+                <Input id="admin-setup-pw" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Minimum 8 characters" disabled={loading} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="admin-setup-confirm">Confirm Password</Label>
+                <Input id="admin-setup-confirm" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Re-enter password" disabled={loading} />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading && <Loader2 className="mr-2 size-4 animate-spin" />}
+                Create Admin &amp; Continue
+              </Button>
+              <Button type="button" variant="ghost" className="w-full" onClick={() => { setIsAdminSetup(false); setError(null) }} disabled={loading}>
+                Back
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   // =========================================================================
@@ -360,8 +443,8 @@ export function LoginScreen() {
               </Button>
             )}
 
-            {/* Continue as Admin (PB superadmin) */}
-            {pbSuperAdminAvailable && (
+            {/* Continue as Admin (PB superadmin or first-time admin setup) */}
+            {(pbSuperAdminAvailable || needsAdminSetup) && (
               <Button
                 type="button"
                 variant="outline"
