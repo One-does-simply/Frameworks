@@ -565,7 +565,7 @@ export function AdminSettingsPage() {
                 ))}
                 <p className="text-xs text-muted-foreground pt-2">
                   Get OAuth2 credentials from each provider's developer console. Redirect URI:
-                  <code className="ml-1 rounded bg-muted px-1 py-0.5">{pbUrl}/api/oauth2-redirect</code>
+                  <code className="ml-1 rounded bg-muted px-1 py-0.5">{window.location.origin}/oauth2-callback</code>
                 </p>
               </div>
             )}
@@ -875,12 +875,12 @@ export function AdminSettingsPage() {
                   <div
                     className="flex items-center gap-2 rounded-md border bg-muted px-3 py-2 font-mono text-xs cursor-pointer hover:bg-muted/80 transition-colors"
                     onClick={() => {
-                      navigator.clipboard.writeText(`${pbUrl}/api/oauth2-redirect`)
+                      navigator.clipboard.writeText(`${window.location.origin}/oauth2-callback`)
                       toast.success('Redirect URI copied to clipboard')
                     }}
                     title="Click to copy"
                   >
-                    <span className="flex-1 break-all">{pbUrl}/api/oauth2-redirect</span>
+                    <span className="flex-1 break-all">{window.location.origin}/oauth2-callback</span>
                     <span className="shrink-0 text-muted-foreground text-[10px]">click to copy</span>
                   </div>
                 </div>

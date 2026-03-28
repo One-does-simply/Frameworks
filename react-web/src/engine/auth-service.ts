@@ -174,13 +174,62 @@ export class AuthService {
   }
 
   /**
-   * Authenticate via OAuth2 provider. PocketBase handles the full flow
-   * (popup redirect, token exchange, user creation/linking).
+   * Start OAuth2 redirect flow. Saves state to localStorage and redirects
+   * the browser to the provider's auth URL. After the user authenticates,
+   * PocketBase redirects back to our app where completeOAuth2() finishes
+   * the flow.
+   */
+  async startOAuth2Redirect(providerName: string): Promise<void> {
+    try {
+      const methods = await this.pb.collection('users').listAuthMethods({ requestKey: null } as Record<string, unknown>)
+      const provider = (methods.oauth2?.providers ?? []).find(
+        (p: Record<string, unknown>) => p.name === providerName,
+      )
+      if (!provider) {
+        console.error(`ODS AuthService: OAuth2 provider "${providerName}" not found`)
+        return
+      }
+
+      // Save provider state for the callback
+      localStorage.setItem('ods_oauth2_provider', providerName)
+      localStorage.setItem('ods_oauth2_state', provider.state as string)
+      localStorage.setItem('ods_oauth2_codeVerifier', provider.codeVerifier as string)
+      localStorage.setItem('ods_oauth2_returnUrl', window.location.href)
+
+      // Redirect to provider — use our app's callback URL (not PB's built-in one)
+      const redirectUrl = `${window.location.origin}/oauth2-callback`
+      const authUrl = (provider.authURL as string) + encodeURIComponent(redirectUrl)
+
+      window.location.href = authUrl
+    } catch (e) {
+      console.error('ODS AuthService: OAuth2 redirect failed:', e)
+    }
+  }
+
+  /**
+   * Complete the OAuth2 flow after the provider redirects back.
+   * Extracts the code from URL params and exchanges it for a PB auth token.
    * Returns true on success.
    */
-  async loginWithOAuth2(providerName: string): Promise<boolean> {
+  async completeOAuth2(code: string, state: string): Promise<boolean> {
     try {
-      const result = await this.pb.collection('users').authWithOAuth2({ provider: providerName })
+      const savedProvider = localStorage.getItem('ods_oauth2_provider') ?? ''
+      const savedState = localStorage.getItem('ods_oauth2_state') ?? ''
+      const codeVerifier = localStorage.getItem('ods_oauth2_codeVerifier') ?? ''
+
+      if (state !== savedState) {
+        console.error('ODS AuthService: OAuth2 state mismatch')
+        return false
+      }
+
+      const redirectUrl = `${window.location.origin}/oauth2-callback`
+
+      const result = await this.pb.collection('users').authWithOAuth2Code(
+        savedProvider,
+        code,
+        codeVerifier,
+        redirectUrl,
+      )
 
       // Ensure the OAuth user has roles set (new users won't have them)
       const roles = result.record['roles']
@@ -188,15 +237,26 @@ export class AuthService {
         await this.pb.collection('users').update(result.record.id, {
           roles: JSON.stringify(['user']),
         })
-        // Refresh the auth record to pick up the new roles
         await this.pb.collection('users').authRefresh()
       }
 
+      // Clean up localStorage
+      localStorage.removeItem('ods_oauth2_provider')
+      localStorage.removeItem('ods_oauth2_state')
+      localStorage.removeItem('ods_oauth2_codeVerifier')
+
       return true
     } catch (e) {
-      console.error('ODS AuthService: OAuth2 login failed:', e)
+      console.error('ODS AuthService: OAuth2 code exchange failed:', e)
       return false
     }
+  }
+
+  /** Get the saved return URL after OAuth2 callback. */
+  static getOAuth2ReturnUrl(): string | null {
+    const url = localStorage.getItem('ods_oauth2_returnUrl')
+    localStorage.removeItem('ods_oauth2_returnUrl')
+    return url
   }
 
   /** Log out the current user. */

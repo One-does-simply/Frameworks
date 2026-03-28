@@ -65,19 +65,12 @@ export function LoginScreen() {
     }
   }
 
-  // ---- OAuth2 ----
+  // ---- OAuth2 (redirect flow) ----
   async function handleOAuth2(providerName: string) {
     setError(null)
     setLoading(true)
-
-    const success = await authService.loginWithOAuth2(providerName)
-    setLoading(false)
-
-    if (success) {
-      useAppStore.setState({ needsLogin: false })
-    } else {
-      setError(`Sign in with ${providerName} failed. Please try again.`)
-    }
+    await authService.startOAuth2Redirect(providerName)
+    // Browser will redirect — loading state stays true
   }
 
   // ---- Sign Up ----

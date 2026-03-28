@@ -8,6 +8,7 @@ import { EditWithAiScreen } from '@/screens/EditWithAiScreen.tsx'
 import { QuickBuildScreen } from '@/screens/QuickBuildScreen.tsx'
 import { AppLoader } from '@/screens/AppLoader.tsx'
 import { RootRedirect } from '@/screens/RootRedirect.tsx'
+import { OAuth2Callback } from '@/screens/OAuth2Callback.tsx'
 import { Toaster } from '@/components/ui/sonner'
 
 // ---------------------------------------------------------------------------
@@ -26,6 +27,7 @@ export default function App() {
           <Route path="apps/:appId/edit-ai" element={<EditWithAiScreen />} />
           <Route path="quick-build" element={<QuickBuildScreen />} />
         </Route>
+        <Route path="/oauth2-callback" element={<OAuth2Callback />} />
         <Route path="/:slug/*" element={<AppLoader />} />
         <Route path="/" element={<RootRedirect />} />
       </Routes>

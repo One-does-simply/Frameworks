@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router'
+import { AuthService } from '@/engine/auth-service.ts'
 import { DataService } from '@/engine/data-service.ts'
 import pb from '@/lib/pocketbase.ts'
 import { getDefaultAppSlug } from '@/engine/default-app-store.ts'
@@ -130,17 +131,10 @@ export function RootRedirect() {
   async function handleOAuth2(providerName: string) {
     setUserError(null)
     setUserSubmitting(true)
-    try {
-      await pb.collection('users').authWithOAuth2({ provider: providerName })
-      if (defaultSlug) {
-        navigate(`/${defaultSlug}`, { replace: true })
-      } else {
-        setUserError('No default app configured. Please contact an administrator.')
-      }
-    } catch {
-      setUserError(`Sign in with ${providerName} failed. Please try again.`)
-    }
-    setUserSubmitting(false)
+    // Redirect flow — saves state and navigates to provider
+    const authService = new AuthService(pb)
+    await authService.startOAuth2Redirect(providerName)
+    // Browser will redirect — loading state stays true
   }
 
   function handleGuestAccess() {
