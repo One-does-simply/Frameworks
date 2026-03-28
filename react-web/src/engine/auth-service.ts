@@ -229,6 +229,9 @@ export class AuthService {
         code,
         codeVerifier,
         redirectUrl,
+        {},  // createData
+        {},  // body
+        { requestKey: null },  // prevent auto-cancellation
       )
 
       // Ensure the OAuth user has roles set (new users won't have them)

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { AuthService } from '@/engine/auth-service.ts'
 import pb from '@/lib/pocketbase.ts'
@@ -6,13 +6,20 @@ import { Loader2 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // OAuth2Callback — handles the redirect back from OAuth2 providers
+//
+// React strict mode fires effects twice in dev. Since OAuth2 auth codes are
+// single-use, we guard with a ref to ensure only one exchange attempt.
 // ---------------------------------------------------------------------------
 
 export function OAuth2Callback() {
   const navigate = useNavigate()
   const [error, setError] = useState<string | null>(null)
+  const handledRef = useRef(false)
 
   useEffect(() => {
+    if (handledRef.current) return
+    handledRef.current = true
+
     async function handleCallback() {
       const params = new URLSearchParams(window.location.search)
       const code = params.get('code')
@@ -27,7 +34,6 @@ export function OAuth2Callback() {
       const success = await authService.completeOAuth2(code, state)
 
       if (success) {
-        // Redirect back to where the user came from
         const returnUrl = AuthService.getOAuth2ReturnUrl()
         if (returnUrl) {
           window.location.href = returnUrl
