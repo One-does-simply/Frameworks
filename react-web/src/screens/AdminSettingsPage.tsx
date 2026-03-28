@@ -78,6 +78,7 @@ import {
 interface UserRecord {
   _id: string
   username: string
+  email: string
   displayName: string
   roles: string[]
 }
@@ -139,8 +140,9 @@ export function AdminSettingsPage() {
       setUsers(
         rawUsers.map((u) => ({
           _id: u._id as string,
-          username: u.username as string,
-          displayName: (u.displayName as string) ?? (u.username as string),
+          username: (u.username as string) ?? '',
+          email: (u.email as string) ?? '',
+          displayName: (u.displayName as string) ?? (u.email as string) ?? (u.username as string) ?? '?',
           roles: (u.roles as string[]) ?? [],
         })),
       )
@@ -631,12 +633,12 @@ export function AdminSettingsPage() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <div className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-                            {user.username[0]?.toUpperCase() ?? '?'}
+                            {(user.displayName || user.email || '?')[0]?.toUpperCase() ?? '?'}
                           </div>
                           <div>
                             <div className="font-medium">{user.displayName}</div>
-                            {user.displayName !== user.username && (
-                              <div className="text-xs text-muted-foreground">@{user.username}</div>
+                            {user.email && (
+                              <div className="text-xs text-muted-foreground">{user.email}</div>
                             )}
                           </div>
                         </div>
