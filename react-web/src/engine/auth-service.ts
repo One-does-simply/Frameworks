@@ -32,7 +32,7 @@ export class AuthService {
   // ---------------------------------------------------------------------------
 
   get isInitialized(): boolean { return this._isInitialized }
-  get isLoggedIn(): boolean { return this.pb.authStore.isValid }
+  get isLoggedIn(): boolean { return this._isSuperAdmin || this.pb.authStore.isValid }
   get isGuest(): boolean { return !this.isLoggedIn }
 
   get currentUserId(): string | undefined {
@@ -40,18 +40,26 @@ export class AuthService {
   }
 
   get currentUsername(): string {
+    if (this._isSuperAdmin) return 'admin'
     return (this.pb.authStore.record?.['username'] as string) ?? 'guest'
   }
 
   get currentDisplayName(): string {
+    if (this._isSuperAdmin) return 'Admin'
     return (this.pb.authStore.record?.['displayName'] as string) ?? this.currentUsername
   }
 
   get currentEmail(): string {
+    if (this._isSuperAdmin) {
+      return (this.pb.authStore.record?.['email'] as string)
+        ?? localStorage.getItem('ods_pb_admin_email')
+        ?? ''
+    }
     return (this.pb.authStore.record?.['email'] as string) ?? ''
   }
 
   get currentRoles(): string[] {
+    if (this._isSuperAdmin) return ['admin', 'user']
     if (this.isGuest) return ['guest']
     const roles = this.pb.authStore.record?.['roles']
     if (Array.isArray(roles)) return roles as string[]
