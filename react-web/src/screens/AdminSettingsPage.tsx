@@ -781,47 +781,90 @@ export function AdminSettingsPage() {
       </Dialog>
 
       {/* ---- Configure OAuth Provider Dialog ---- */}
-      <Dialog open={!!editingProvider} onOpenChange={(v) => { if (!v) setEditingProvider(null) }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              Configure {KNOWN_OAUTH_PROVIDERS.find((p) => p.id === editingProvider)?.displayName ?? editingProvider}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="oauth-client-id">Client ID</Label>
-              <Input
-                id="oauth-client-id"
-                value={providerClientId}
-                onChange={(e) => setProviderClientId(e.target.value)}
-                placeholder="Enter client ID"
-                autoFocus
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="oauth-client-secret">Client Secret</Label>
-              <Input
-                id="oauth-client-secret"
-                type="password"
-                value={providerClientSecret}
-                onChange={(e) => setProviderClientSecret(e.target.value)}
-                placeholder={oauthProviders.find((p) => p.id === editingProvider)?.hasSecret ? '(unchanged — enter new to replace)' : 'Enter client secret'}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Redirect URI for your provider's developer console:
-              <code className="ml-1 block mt-1 rounded bg-muted px-2 py-1 text-xs break-all">{pbUrl}/api/oauth2-redirect</code>
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingProvider(null)}>Cancel</Button>
-            <Button onClick={handleSaveOAuthProvider} disabled={!providerClientId.trim()}>
-              Save &amp; Enable
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {(() => {
+        const providerInfo = KNOWN_OAUTH_PROVIDERS.find((p) => p.id === editingProvider)
+        return (
+          <Dialog open={!!editingProvider} onOpenChange={(v) => { if (!v) setEditingProvider(null) }}>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>
+                  Configure {providerInfo?.displayName ?? editingProvider}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="max-h-[70vh] space-y-4 overflow-y-auto">
+                {/* Setup instructions */}
+                {providerInfo && (
+                  <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Setup Steps</span>
+                      <a
+                        href={providerInfo.consoleUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                      >
+                        <ExternalLink className="size-3" />
+                        Open {providerInfo.displayName} Console
+                      </a>
+                    </div>
+                    <ol className="list-decimal list-inside space-y-1.5 text-sm text-muted-foreground">
+                      {providerInfo.steps.map((step, i) => (
+                        <li key={i}>{step}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+
+                {/* Redirect URI (show prominently) */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Redirect URI (copy this into the provider's console)</Label>
+                  <div
+                    className="flex items-center gap-2 rounded-md border bg-muted px-3 py-2 font-mono text-xs cursor-pointer hover:bg-muted/80 transition-colors"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${pbUrl}/api/oauth2-redirect`)
+                      toast.success('Redirect URI copied to clipboard')
+                    }}
+                    title="Click to copy"
+                  >
+                    <span className="flex-1 break-all">{pbUrl}/api/oauth2-redirect</span>
+                    <span className="shrink-0 text-muted-foreground text-[10px]">click to copy</span>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Credentials */}
+                <div className="space-y-2">
+                  <Label htmlFor="oauth-client-id">Client ID</Label>
+                  <Input
+                    id="oauth-client-id"
+                    value={providerClientId}
+                    onChange={(e) => setProviderClientId(e.target.value)}
+                    placeholder="Paste client ID here"
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="oauth-client-secret">Client Secret</Label>
+                  <Input
+                    id="oauth-client-secret"
+                    type="password"
+                    value={providerClientSecret}
+                    onChange={(e) => setProviderClientSecret(e.target.value)}
+                    placeholder={oauthProviders.find((p) => p.id === editingProvider)?.hasSecret ? '(unchanged — enter new to replace)' : 'Paste client secret here'}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditingProvider(null)}>Cancel</Button>
+                <Button onClick={handleSaveOAuthProvider} disabled={!providerClientId.trim()}>
+                  Save &amp; Enable
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )
+      })()}
     </div>
   )
 }
@@ -838,13 +881,101 @@ interface OAuthProviderConfig {
   hasSecret: boolean
 }
 
-const KNOWN_OAUTH_PROVIDERS = [
-  { id: 'google', displayName: 'Google' },
-  { id: 'microsoft', displayName: 'Microsoft' },
-  { id: 'github', displayName: 'GitHub' },
-  { id: 'apple', displayName: 'Apple' },
-  { id: 'facebook', displayName: 'Facebook' },
-  { id: 'discord', displayName: 'Discord' },
-  { id: 'gitlab', displayName: 'GitLab' },
-  { id: 'twitter', displayName: 'Twitter / X' },
+const KNOWN_OAUTH_PROVIDERS: {
+  id: string
+  displayName: string
+  consoleUrl: string
+  steps: string[]
+}[] = [
+  {
+    id: 'google',
+    displayName: 'Google',
+    consoleUrl: 'https://console.cloud.google.com/apis/credentials',
+    steps: [
+      'Go to Google Cloud Console > APIs & Services > Credentials',
+      'Click "Create Credentials" > "OAuth client ID"',
+      'Choose "Web application" as the application type',
+      'Add the redirect URI shown below under "Authorized redirect URIs"',
+      'Copy the Client ID and Client Secret',
+    ],
+  },
+  {
+    id: 'microsoft',
+    displayName: 'Microsoft',
+    consoleUrl: 'https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade',
+    steps: [
+      'Go to Azure Portal > App registrations > New registration',
+      'Set "Supported account types" to "Accounts in any org directory + personal Microsoft accounts"',
+      'Under "Redirect URI", select "Web" and add the redirect URI shown below',
+      'After creation, copy the "Application (client) ID" — this is your Client ID',
+      'Go to Certificates & secrets > New client secret, copy the secret value',
+    ],
+  },
+  {
+    id: 'github',
+    displayName: 'GitHub',
+    consoleUrl: 'https://github.com/settings/developers',
+    steps: [
+      'Go to GitHub > Settings > Developer settings > OAuth Apps > New OAuth App',
+      'Set "Authorization callback URL" to the redirect URI shown below',
+      'After creation, copy the Client ID from the app page',
+      'Click "Generate a new client secret" and copy it',
+    ],
+  },
+  {
+    id: 'apple',
+    displayName: 'Apple',
+    consoleUrl: 'https://developer.apple.com/account/resources/identifiers/list/serviceId',
+    steps: [
+      'Go to Apple Developer > Certificates, Identifiers & Profiles',
+      'Register a new Services ID (this becomes your Client ID)',
+      'Enable "Sign in with Apple" and configure the domain and redirect URI',
+      'Create a key for Sign in with Apple under Keys — download the .p8 file',
+      'The Client Secret is generated from the key file (see Apple docs for the JWT format)',
+    ],
+  },
+  {
+    id: 'facebook',
+    displayName: 'Facebook',
+    consoleUrl: 'https://developers.facebook.com/apps/',
+    steps: [
+      'Go to Meta for Developers > My Apps > Create App',
+      'Choose "Consumer" or "Business" app type',
+      'Add the "Facebook Login" product and configure the redirect URI',
+      'Go to Settings > Basic to find your App ID (Client ID) and App Secret (Client Secret)',
+    ],
+  },
+  {
+    id: 'discord',
+    displayName: 'Discord',
+    consoleUrl: 'https://discord.com/developers/applications',
+    steps: [
+      'Go to Discord Developer Portal > Applications > New Application',
+      'Go to OAuth2 in the sidebar',
+      'Add the redirect URI shown below under "Redirects"',
+      'Copy the Client ID and Client Secret from the OAuth2 page',
+    ],
+  },
+  {
+    id: 'gitlab',
+    displayName: 'GitLab',
+    consoleUrl: 'https://gitlab.com/-/user_settings/applications',
+    steps: [
+      'Go to GitLab > Preferences > Applications > Add new application',
+      'Set the redirect URI to the value shown below',
+      'Select scopes: "read_user", "openid", "profile", "email"',
+      'After creation, copy the Application ID (Client ID) and Secret',
+    ],
+  },
+  {
+    id: 'twitter',
+    displayName: 'Twitter / X',
+    consoleUrl: 'https://developer.twitter.com/en/portal/projects-and-apps',
+    steps: [
+      'Go to Twitter Developer Portal > Projects & Apps > Create App',
+      'Under "User authentication settings", enable OAuth 2.0',
+      'Set type to "Web App" and add the redirect URI shown below',
+      'Copy the Client ID and Client Secret from the Keys and Tokens tab',
+    ],
+  },
 ]
