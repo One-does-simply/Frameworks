@@ -892,8 +892,9 @@ const KNOWN_OAUTH_PROVIDERS: {
     displayName: 'Google',
     consoleUrl: 'https://console.cloud.google.com/apis/credentials',
     steps: [
-      'Go to Google Cloud Console > APIs & Services > Credentials',
-      'Click "Create Credentials" > "OAuth client ID"',
+      'Go to Google Cloud Console — if you don\'t have a project yet, click "Create Project" first',
+      'Navigate to APIs & Services > OAuth consent screen and configure it (External, add your app name and email)',
+      'Go to APIs & Services > Credentials and click "Create Credentials" > "OAuth client ID"',
       'Choose "Web application" as the application type',
       'Add the redirect URI shown below under "Authorized redirect URIs"',
       'Copy the Client ID and Client Secret',
