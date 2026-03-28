@@ -153,22 +153,24 @@ export function AdminSettingsPage() {
   const loadOAuthProviders = useCallback(async () => {
     setIsLoadingOAuth(true)
     try {
-      const settings = await pb.settings.getAll()
-      const providers: OAuthProviderConfig[] = []
-      for (const key of KNOWN_OAUTH_PROVIDERS) {
-        const authKey = `${key.id}Auth`
-        const config = settings[authKey] as Record<string, unknown> | undefined
-        providers.push({
-          id: key.id,
-          displayName: key.displayName,
-          enabled: (config?.['enabled'] as boolean) ?? false,
-          clientId: (config?.['clientId'] as string) ?? '',
-          hasSecret: !!config?.['clientSecret'],
-        })
-      }
+      // PocketBase 0.23+: OAuth2 providers are on the users collection, not global settings
+      const collection = await pb.collections.getOne('users')
+      const oauth2 = (collection as Record<string, unknown>)['oauth2'] as Record<string, unknown> | undefined
+      const configuredProviders = (oauth2?.['providers'] ?? []) as Array<Record<string, unknown>>
+
+      const providers: OAuthProviderConfig[] = KNOWN_OAUTH_PROVIDERS.map((known) => {
+        const configured = configuredProviders.find((p) => p['name'] === known.id)
+        return {
+          id: known.id,
+          displayName: known.displayName,
+          enabled: !!configured?.['clientId'],
+          clientId: (configured?.['clientId'] as string) ?? '',
+          hasSecret: !!(configured?.['clientSecret']),
+        }
+      })
       setOauthProviders(providers)
-    } catch {
-      // May fail if not superadmin
+    } catch (e) {
+      console.error('Failed to load OAuth2 providers:', e)
       setOauthProviders([])
     }
     setIsLoadingOAuth(false)
@@ -204,37 +206,73 @@ export function AdminSettingsPage() {
     setTimeout(() => window.location.reload(), 500)
   }
 
-  // OAuth2 handlers
+  // OAuth2 handlers — update the users collection's oauth2.providers array
+  async function getOAuth2Providers(): Promise<Array<Record<string, unknown>>> {
+    const collection = await pb.collections.getOne('users')
+    const oauth2 = (collection as Record<string, unknown>)['oauth2'] as Record<string, unknown> | undefined
+    return ((oauth2?.['providers'] ?? []) as Array<Record<string, unknown>>).slice()
+  }
+
+  async function saveOAuth2Providers(providers: Array<Record<string, unknown>>) {
+    await pb.collections.update('users', {
+      oauth2: {
+        enabled: providers.some((p) => !!p['clientId']),
+        providers,
+      },
+    })
+  }
+
   async function handleSaveOAuthProvider() {
     if (!editingProvider) return
     try {
-      const authKey = `${editingProvider}Auth`
-      await pb.settings.update({
-        [authKey]: {
-          enabled: true,
-          clientId: providerClientId,
-          clientSecret: providerClientSecret || undefined,
-        },
-      })
+      const providers = await getOAuth2Providers()
+      const idx = providers.findIndex((p) => p['name'] === editingProvider)
+      const entry: Record<string, unknown> = {
+        name: editingProvider,
+        clientId: providerClientId,
+      }
+      // Only update secret if a new one was entered
+      if (providerClientSecret) {
+        entry.clientSecret = providerClientSecret
+      } else if (idx >= 0) {
+        // Keep existing secret
+        entry.clientSecret = providers[idx]['clientSecret']
+      }
+
+      if (idx >= 0) {
+        providers[idx] = { ...providers[idx], ...entry }
+      } else {
+        providers.push(entry)
+      }
+
+      await saveOAuth2Providers(providers)
       toast.success(`${editingProvider} provider configured`)
       setEditingProvider(null)
       setProviderClientId('')
       setProviderClientSecret('')
       await loadOAuthProviders()
     } catch (e) {
+      console.error('OAuth2 save error:', e)
       toast.error(`Failed to configure provider: ${e instanceof Error ? e.message : e}`)
     }
   }
 
   async function handleToggleOAuthProvider(providerId: string, enabled: boolean) {
     try {
-      const authKey = `${providerId}Auth`
-      await pb.settings.update({
-        [authKey]: { enabled },
-      })
+      const providers = await getOAuth2Providers()
+      if (enabled) {
+        // Re-enable: provider must already have clientId
+        // Nothing to change in the array — just ensure oauth2.enabled is true
+      } else {
+        // Disable: remove the provider from the array
+        const idx = providers.findIndex((p) => p['name'] === providerId)
+        if (idx >= 0) providers.splice(idx, 1)
+      }
+      await saveOAuth2Providers(providers)
       toast.success(`${providerId} ${enabled ? 'enabled' : 'disabled'}`)
       await loadOAuthProviders()
     } catch (e) {
+      console.error('OAuth2 toggle error:', e)
       toast.error(`Failed to update provider: ${e instanceof Error ? e.message : e}`)
     }
   }
