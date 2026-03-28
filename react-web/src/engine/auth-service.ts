@@ -38,6 +38,10 @@ export class AuthService {
     return (this.pb.authStore.record?.['displayName'] as string) ?? this.currentUsername
   }
 
+  get currentEmail(): string {
+    return (this.pb.authStore.record?.['email'] as string) ?? ''
+  }
+
   get currentRoles(): string[] {
     if (this.isGuest) return ['guest']
     const roles = this.pb.authStore.record?.['roles']

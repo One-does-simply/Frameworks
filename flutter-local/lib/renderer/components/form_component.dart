@@ -240,7 +240,7 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
     final engine = context.read<AppEngine>();
     var currentValue = engine.getFormState(widget.formId)[widget.field.name] ?? '';
     if (currentValue.isEmpty && widget.field.defaultValue != null) {
-      currentValue = _resolveDefault(widget.field.defaultValue!, widget.field.type);
+      currentValue = _resolveDefault(widget.field.defaultValue!, widget.field.type, engine);
       engine.updateFormField(widget.formId, widget.field.name, currentValue);
     }
     _controller = TextEditingController(text: currentValue);
@@ -262,8 +262,16 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
     super.dispose();
   }
 
-  static String _resolveDefault(String defaultValue, String fieldType) {
+  static String _resolveDefault(String defaultValue, String fieldType, AppEngine engine) {
     final upper = defaultValue.toUpperCase();
+
+    // User-context magic defaults.
+    if (upper == 'CURRENT_USER' && engine.isMultiUser && engine.authService.isLoggedIn) {
+      return engine.authService.currentDisplayName;
+    }
+    // CURRENT_USER_EMAIL is not supported in Flutter Local (no email field
+    // in local user accounts) — falls through to return the literal string.
+
     if (upper == 'NOW' || upper == 'CURRENTDATE') {
       return _formatDateTime(DateTime.now(), fieldType);
     }

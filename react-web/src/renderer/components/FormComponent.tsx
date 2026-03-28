@@ -20,8 +20,16 @@ import {
 // Magic default helpers
 // ---------------------------------------------------------------------------
 
-function resolveMagicDefault(defaultValue: string, fieldType: string): string {
+function resolveMagicDefault(defaultValue: string, fieldType: string, authService?: { currentUsername: string; currentDisplayName: string; currentEmail: string; isLoggedIn: boolean } | null): string {
   const upper = defaultValue.toUpperCase()
+
+  // User-context magic defaults
+  if (upper === 'CURRENT_USER' && authService?.isLoggedIn) {
+    return authService.currentDisplayName
+  }
+  if (upper === 'CURRENT_USER_EMAIL' && authService?.isLoggedIn) {
+    return authService.currentEmail
+  }
 
   if (upper === 'NOW' || upper === 'CURRENTDATE') {
     const now = new Date()
@@ -539,7 +547,7 @@ export function FormComponent({ model }: FormComponentProps) {
       if (formState[field.name] != null && formState[field.name] !== '') continue
 
       if (field.defaultValue != null) {
-        const resolved = resolveMagicDefault(field.defaultValue, field.type)
+        const resolved = resolveMagicDefault(field.defaultValue, field.type, authService)
         updateFormField(model.id, field.name, resolved)
       }
     }
