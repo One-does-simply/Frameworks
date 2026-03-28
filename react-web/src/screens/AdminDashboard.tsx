@@ -346,6 +346,17 @@ export function AdminDashboard() {
             <p className="text-sm text-white/75">Vibe Coding with Guardrails</p>
           </div>
 
+          {/* Learn More */}
+          <a
+            href="https://one-does-simply.github.io/Specification/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md p-1.5 text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+            title="Learn More"
+          >
+            <Info className="size-4" />
+          </a>
+
           {/* Theme toggle */}
           <div className="flex gap-0.5 rounded-lg border border-white/20 bg-white/10 p-0.5">
             {([

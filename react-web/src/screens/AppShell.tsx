@@ -107,6 +107,19 @@ export function AppShell() {
     return authService.hasAccess(item.roles)
   })
 
+  // If the current page is role-restricted and the user can't access it,
+  // redirect to the first accessible page (e.g., guest on an admin startPage).
+  useEffect(() => {
+    if (!currentPageId || !isMultiUser || !authService) return
+    const page = app.pages[currentPageId]
+    if (page?.roles && page.roles.length > 0 && !authService.hasAccess(page.roles)) {
+      const fallback = visibleMenuItems[0]?.mapsTo
+      if (fallback && fallback !== currentPageId) {
+        storeNavigateTo(fallback)
+      }
+    }
+  }, [currentPageId, isMultiUser, authService, app.pages, visibleMenuItems, storeNavigateTo])
+
   // -------------------------------------------------------------------------
   // Handlers
   // -------------------------------------------------------------------------
