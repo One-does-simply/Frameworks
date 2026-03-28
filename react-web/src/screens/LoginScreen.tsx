@@ -146,13 +146,47 @@ export function LoginScreen() {
             <CardDescription>Create an account for {app.appName}</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSignUp} className="space-y-4">
+            <div className="space-y-4">
               {error && (
                 <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   {error}
                 </div>
               )}
 
+              {/* OAuth2 — works for sign-up too (PB auto-creates the user) */}
+              {oauthProviders.length > 0 && (
+                <>
+                  <div className="space-y-2">
+                    {oauthProviders.map((provider) => {
+                      const style = OAUTH_STYLES[provider.name] ?? {
+                        label: `Sign up with ${provider.displayName}`,
+                        bg: 'bg-secondary text-secondary-foreground',
+                        hover: 'hover:bg-secondary/80',
+                      }
+                      return (
+                        <button
+                          key={provider.name}
+                          type="button"
+                          disabled={loading}
+                          onClick={() => handleOAuth2(provider.name)}
+                          className={`flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors ${style.bg} ${style.hover} disabled:opacity-50`}
+                        >
+                          Sign up with {provider.displayName}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  <div className="relative">
+                    <Separator />
+                    <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
+                      or sign up with email
+                    </span>
+                  </div>
+                </>
+              )}
+
+            <form onSubmit={handleSignUp} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="signup-email">Email</Label>
                 <Input
@@ -220,6 +254,7 @@ export function LoginScreen() {
                 Already have an account? Sign In
               </Button>
             </form>
+            </div>
           </CardContent>
         </Card>
       </div>
