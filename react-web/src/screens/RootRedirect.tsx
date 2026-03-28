@@ -7,7 +7,18 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
 import { Loader2, Shield, User, Info } from 'lucide-react'
+
+/** Known OAuth2 provider button styles. */
+const OAUTH_STYLES: Record<string, { label: string; bg: string; hover: string }> = {
+  google: { label: 'Continue with Google', bg: 'bg-white text-gray-800 border', hover: 'hover:bg-gray-50' },
+  microsoft: { label: 'Continue with Microsoft', bg: 'bg-[#2F2F2F] text-white', hover: 'hover:bg-[#1a1a1a]' },
+  github: { label: 'Continue with GitHub', bg: 'bg-[#24292f] text-white', hover: 'hover:bg-[#1b1f23]' },
+  apple: { label: 'Continue with Apple', bg: 'bg-black text-white', hover: 'hover:bg-gray-900' },
+  facebook: { label: 'Continue with Facebook', bg: 'bg-[#1877F2] text-white', hover: 'hover:bg-[#166FE5]' },
+  discord: { label: 'Continue with Discord', bg: 'bg-[#5865F2] text-white', hover: 'hover:bg-[#4752C4]' },
+}
 
 // ---------------------------------------------------------------------------
 // RootRedirect — landing page at /
@@ -35,6 +46,9 @@ export function RootRedirect() {
   const [userError, setUserError] = useState<string | null>(null)
   const [userSubmitting, setUserSubmitting] = useState(false)
 
+  // OAuth2 providers
+  const [oauthProviders, setOauthProviders] = useState<{ name: string; displayName: string }[]>([])
+
   const defaultSlug = getDefaultAppSlug()
 
   // Try to auto-restore admin session
@@ -51,6 +65,20 @@ export function RootRedirect() {
   useEffect(() => {
     tryAutoAuth()
   }, [tryAutoAuth])
+
+  // Discover OAuth2 providers when entering user login mode
+  useEffect(() => {
+    if (mode !== 'user') return
+    pb.collection('users').listAuthMethods({ requestKey: null } as Record<string, unknown>)
+      .then((methods) => {
+        const providers = (methods.oauth2?.providers ?? []).map((p: Record<string, unknown>) => ({
+          name: p.name as string,
+          displayName: (p.displayName as string) ?? (p.name as string),
+        }))
+        setOauthProviders(providers)
+      })
+      .catch(() => setOauthProviders([]))
+  }, [mode])
 
   // ---- Admin login ----
   async function handleAdminLogin(e: React.FormEvent) {
@@ -95,6 +123,22 @@ export function RootRedirect() {
       }
     } catch {
       setUserError('Invalid username or password')
+    }
+    setUserSubmitting(false)
+  }
+
+  async function handleOAuth2(providerName: string) {
+    setUserError(null)
+    setUserSubmitting(true)
+    try {
+      await pb.collection('users').authWithOAuth2({ provider: providerName })
+      if (defaultSlug) {
+        navigate(`/${defaultSlug}`, { replace: true })
+      } else {
+        setUserError('No default app configured. Please contact an administrator.')
+      }
+    } catch {
+      setUserError(`Sign in with ${providerName} failed. Please try again.`)
     }
     setUserSubmitting(false)
   }
@@ -224,12 +268,46 @@ export function RootRedirect() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleUserLogin} className="space-y-4">
+            <div className="space-y-4">
               {userError && (
                 <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   {userError}
                 </div>
               )}
+
+              {/* OAuth2 providers */}
+              {oauthProviders.length > 0 && (
+                <>
+                  <div className="space-y-2">
+                    {oauthProviders.map((provider) => {
+                      const style = OAUTH_STYLES[provider.name] ?? {
+                        label: `Continue with ${provider.displayName}`,
+                        bg: 'bg-secondary text-secondary-foreground',
+                        hover: 'hover:bg-secondary/80',
+                      }
+                      return (
+                        <button
+                          key={provider.name}
+                          type="button"
+                          disabled={userSubmitting}
+                          onClick={() => handleOAuth2(provider.name)}
+                          className={`flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors ${style.bg} ${style.hover} disabled:opacity-50`}
+                        >
+                          {style.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="relative">
+                    <Separator />
+                    <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
+                      or
+                    </span>
+                  </div>
+                </>
+              )}
+
+            <form onSubmit={handleUserLogin} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="root-email">Email</Label>
                 <Input
@@ -262,6 +340,7 @@ export function RootRedirect() {
                 Back
               </Button>
             </form>
+            </div>
           </CardContent>
         </Card>
       )}
