@@ -341,7 +341,7 @@ export function AdminDashboard() {
               <p className="mt-1 text-xs text-white/60">A web-based implementation perfect for multi-user applications</p>
             </div>
             <a
-              href="https://github.com/One-does-simply"
+              href="https://one-does-simply.github.io/Specification/"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium text-white/80 hover:text-white hover:bg-white/10 transition-colors"

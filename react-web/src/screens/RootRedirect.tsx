@@ -268,7 +268,7 @@ export function RootRedirect() {
 
       {/* Learn more link */}
       <a
-        href="https://github.com/One-does-simply"
+        href="https://one-does-simply.github.io/Specification/"
         target="_blank"
         rel="noopener noreferrer"
         className="mt-6 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
