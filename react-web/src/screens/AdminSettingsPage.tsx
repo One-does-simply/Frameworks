@@ -112,6 +112,13 @@ export function AdminSettingsPage() {
   const [resetTarget, setResetTarget] = useState<UserRecord | null>(null)
   const [resetPassword, setResetPassword] = useState('')
 
+  // OAuth2 providers
+  const [oauthProviders, setOauthProviders] = useState<OAuthProviderConfig[]>([])
+  const [isLoadingOAuth, setIsLoadingOAuth] = useState(true)
+  const [editingProvider, setEditingProvider] = useState<string | null>(null)
+  const [providerClientId, setProviderClientId] = useState('')
+  const [providerClientSecret, setProviderClientSecret] = useState('')
+
   const availableRoles = ['admin', 'user']
 
   // -------------------------------------------------------------------------
@@ -143,10 +150,35 @@ export function AdminSettingsPage() {
     setIsLoadingUsers(false)
   }, [authService])
 
+  const loadOAuthProviders = useCallback(async () => {
+    setIsLoadingOAuth(true)
+    try {
+      const settings = await pb.settings.getAll()
+      const providers: OAuthProviderConfig[] = []
+      for (const key of KNOWN_OAUTH_PROVIDERS) {
+        const authKey = `${key.id}Auth`
+        const config = settings[authKey] as Record<string, unknown> | undefined
+        providers.push({
+          id: key.id,
+          displayName: key.displayName,
+          enabled: (config?.['enabled'] as boolean) ?? false,
+          clientId: (config?.['clientId'] as string) ?? '',
+          hasSecret: !!config?.['clientSecret'],
+        })
+      }
+      setOauthProviders(providers)
+    } catch {
+      // May fail if not superadmin
+      setOauthProviders([])
+    }
+    setIsLoadingOAuth(false)
+  }, [])
+
   useEffect(() => {
     loadApps()
     loadUsers()
-  }, [loadApps, loadUsers])
+    loadOAuthProviders()
+  }, [loadApps, loadUsers, loadOAuthProviders])
 
   // -------------------------------------------------------------------------
   // Handlers
@@ -170,6 +202,41 @@ export function AdminSettingsPage() {
     toast.success('PocketBase URL updated. Reloading...')
     setShowPbDialog(false)
     setTimeout(() => window.location.reload(), 500)
+  }
+
+  // OAuth2 handlers
+  async function handleSaveOAuthProvider() {
+    if (!editingProvider) return
+    try {
+      const authKey = `${editingProvider}Auth`
+      await pb.settings.update({
+        [authKey]: {
+          enabled: true,
+          clientId: providerClientId,
+          clientSecret: providerClientSecret || undefined,
+        },
+      })
+      toast.success(`${editingProvider} provider configured`)
+      setEditingProvider(null)
+      setProviderClientId('')
+      setProviderClientSecret('')
+      await loadOAuthProviders()
+    } catch (e) {
+      toast.error(`Failed to configure provider: ${e instanceof Error ? e.message : e}`)
+    }
+  }
+
+  async function handleToggleOAuthProvider(providerId: string, enabled: boolean) {
+    try {
+      const authKey = `${providerId}Auth`
+      await pb.settings.update({
+        [authKey]: { enabled },
+      })
+      toast.success(`${providerId} ${enabled ? 'enabled' : 'disabled'}`)
+      await loadOAuthProviders()
+    } catch (e) {
+      toast.error(`Failed to update provider: ${e instanceof Error ? e.message : e}`)
+    }
   }
 
   // User management handlers
@@ -381,6 +448,73 @@ export function AdminSettingsPage() {
               <ExternalLink className="size-4" />
               Open PocketBase Admin
             </a>
+          </CardContent>
+        </Card>
+
+        {/* ---- OAuth2 Providers ---- */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Authentication Providers</CardTitle>
+            <CardDescription>Configure OAuth2 sign-in options for app users</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingOAuth ? (
+              <div className="flex items-center justify-center gap-2 py-6 text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                Loading providers...
+              </div>
+            ) : oauthProviders.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">
+                Could not load OAuth2 settings. Ensure you are logged in as PocketBase superadmin.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {oauthProviders.map((provider) => (
+                  <div key={provider.id} className="flex items-center justify-between gap-4 rounded-lg border px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={provider.enabled}
+                        onChange={(e) => handleToggleOAuthProvider(provider.id, e.target.checked)}
+                        className="h-4 w-4 rounded border-input accent-primary"
+                        disabled={!provider.clientId && !provider.enabled}
+                        title={!provider.clientId ? 'Configure credentials first' : ''}
+                      />
+                      <div>
+                        <div className="text-sm font-medium">{provider.displayName}</div>
+                        {provider.clientId ? (
+                          <div className="text-xs text-muted-foreground font-mono truncate max-w-48">
+                            {provider.clientId.slice(0, 20)}...
+                          </div>
+                        ) : (
+                          <div className="text-xs text-muted-foreground">Not configured</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {provider.enabled && (
+                        <Badge variant="default" className="bg-green-600 hover:bg-green-600 text-xs">Active</Badge>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditingProvider(provider.id)
+                          setProviderClientId(provider.clientId)
+                          setProviderClientSecret('')
+                        }}
+                      >
+                        Configure
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                <p className="text-xs text-muted-foreground pt-2">
+                  Get OAuth2 credentials from each provider's developer console. Redirect URI:
+                  <code className="ml-1 rounded bg-muted px-1 py-0.5">{pbUrl}/api/oauth2-redirect</code>
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -645,6 +779,72 @@ export function AdminSettingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ---- Configure OAuth Provider Dialog ---- */}
+      <Dialog open={!!editingProvider} onOpenChange={(v) => { if (!v) setEditingProvider(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Configure {KNOWN_OAUTH_PROVIDERS.find((p) => p.id === editingProvider)?.displayName ?? editingProvider}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="oauth-client-id">Client ID</Label>
+              <Input
+                id="oauth-client-id"
+                value={providerClientId}
+                onChange={(e) => setProviderClientId(e.target.value)}
+                placeholder="Enter client ID"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="oauth-client-secret">Client Secret</Label>
+              <Input
+                id="oauth-client-secret"
+                type="password"
+                value={providerClientSecret}
+                onChange={(e) => setProviderClientSecret(e.target.value)}
+                placeholder={oauthProviders.find((p) => p.id === editingProvider)?.hasSecret ? '(unchanged — enter new to replace)' : 'Enter client secret'}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Redirect URI for your provider's developer console:
+              <code className="ml-1 block mt-1 rounded bg-muted px-2 py-1 text-xs break-all">{pbUrl}/api/oauth2-redirect</code>
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingProvider(null)}>Cancel</Button>
+            <Button onClick={handleSaveOAuthProvider} disabled={!providerClientId.trim()}>
+              Save &amp; Enable
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
+
+// ---------------------------------------------------------------------------
+// OAuth2 provider types and known providers
+// ---------------------------------------------------------------------------
+
+interface OAuthProviderConfig {
+  id: string
+  displayName: string
+  enabled: boolean
+  clientId: string
+  hasSecret: boolean
+}
+
+const KNOWN_OAUTH_PROVIDERS = [
+  { id: 'google', displayName: 'Google' },
+  { id: 'microsoft', displayName: 'Microsoft' },
+  { id: 'github', displayName: 'GitHub' },
+  { id: 'apple', displayName: 'Apple' },
+  { id: 'facebook', displayName: 'Facebook' },
+  { id: 'discord', displayName: 'Discord' },
+  { id: 'gitlab', displayName: 'GitLab' },
+  { id: 'twitter', displayName: 'Twitter / X' },
+]
