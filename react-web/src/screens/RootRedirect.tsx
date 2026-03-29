@@ -52,15 +52,25 @@ export function RootRedirect() {
 
   const defaultSlug = getDefaultAppSlug()
 
-  // Try to auto-restore admin session
+  // Try to auto-restore admin session, or redirect to /admin on fresh install
   const tryAutoAuth = useCallback(async () => {
     const ds = new DataService(pb)
     const restored = await ds.tryRestoreAdminAuth()
     if (restored) {
       navigate('/admin', { replace: true })
-    } else {
-      setStatus('login')
+      return
     }
+
+    // Fresh install: no saved admin credentials and no default app →
+    // send to /admin for PocketBase setup instead of showing user login
+    const hasAdminCreds = !!localStorage.getItem('ods_pb_admin_email')
+    const hasDefaultApp = !!getDefaultAppSlug()
+    if (!hasAdminCreds && !hasDefaultApp) {
+      navigate('/admin', { replace: true })
+      return
+    }
+
+    setStatus('login')
   }, [navigate])
 
   useEffect(() => {
