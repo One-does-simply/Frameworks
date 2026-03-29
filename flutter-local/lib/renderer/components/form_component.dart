@@ -266,20 +266,19 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
     final upper = defaultValue.toUpperCase();
 
     // User-context magic defaults: CURRENT_USER.NAME, CURRENT_USER.EMAIL, etc.
-    if (upper.startsWith('CURRENT_USER.') && engine.isMultiUser && engine.authService.isLoggedIn) {
+    // For logged-in users: resolve to their info. For guests: return empty string.
+    if (upper.startsWith('CURRENT_USER.') || upper == 'CURRENT_USER') {
+      if (!engine.isMultiUser || !engine.authService.isLoggedIn) return '';
+      if (upper == 'CURRENT_USER') return engine.authService.currentDisplayName;
       final prop = upper.substring('CURRENT_USER.'.length);
       switch (prop) {
         case 'NAME':
           return engine.authService.currentDisplayName;
         case 'USERNAME':
           return engine.authService.currentUsername;
-        // EMAIL is not supported in Flutter Local (no email on local user
-        // accounts) — falls through to return the literal string.
+        default:
+          return '';
       }
-    }
-    // Legacy: bare CURRENT_USER still resolves to display name.
-    if (upper == 'CURRENT_USER' && engine.isMultiUser && engine.authService.isLoggedIn) {
-      return engine.authService.currentDisplayName;
     }
 
     if (upper == 'NOW' || upper == 'CURRENTDATE') {

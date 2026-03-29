@@ -24,18 +24,17 @@ function resolveMagicDefault(defaultValue: string, fieldType: string, authServic
   const upper = defaultValue.toUpperCase()
 
   // User-context magic defaults: CURRENT_USER.NAME, CURRENT_USER.EMAIL, etc.
-  if (upper.startsWith('CURRENT_USER.') && authService?.isLoggedIn) {
+  // For logged-in users: resolve to their info. For guests: return empty string.
+  if (upper.startsWith('CURRENT_USER.') || upper === 'CURRENT_USER') {
+    if (!authService?.isLoggedIn) return ''
+    if (upper === 'CURRENT_USER') return authService.currentDisplayName
     const prop = upper.slice('CURRENT_USER.'.length)
     switch (prop) {
       case 'NAME': return authService.currentDisplayName
       case 'EMAIL': return authService.currentEmail
       case 'USERNAME': return authService.currentUsername
-      default: return defaultValue // unknown property — return literal
+      default: return ''
     }
-  }
-  // Legacy: bare CURRENT_USER still resolves to display name
-  if (upper === 'CURRENT_USER' && authService?.isLoggedIn) {
-    return authService.currentDisplayName
   }
 
   if (upper === 'NOW' || upper === 'CURRENTDATE') {
