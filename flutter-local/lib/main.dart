@@ -55,24 +55,25 @@ void main() {
 // Color palette — a refined indigo/slate palette for a premium feel
 // ---------------------------------------------------------------------------
 
-const _seedColor = Color(0xFF4F46E5); // Indigo 600
+const _defaultSeedColor = Color(0xFF4F46E5); // Indigo 600
 
-ColorScheme _lightScheme() => ColorScheme.fromSeed(
-      seedColor: _seedColor,
+ColorScheme _lightScheme([Color? seed]) => ColorScheme.fromSeed(
+      seedColor: seed ?? _defaultSeedColor,
       brightness: Brightness.light,
     );
 
-ColorScheme _darkScheme() => ColorScheme.fromSeed(
-      seedColor: _seedColor,
+ColorScheme _darkScheme([Color? seed]) => ColorScheme.fromSeed(
+      seedColor: seed ?? _defaultSeedColor,
       brightness: Brightness.dark,
     );
 
-ThemeData _buildTheme(ColorScheme colorScheme) {
+ThemeData _buildTheme(ColorScheme colorScheme, {String? fontFamily, double borderRadius = 12}) {
   final isDark = colorScheme.brightness == Brightness.dark;
+  final radius = borderRadius;
   return ThemeData(
     colorScheme: colorScheme,
     useMaterial3: true,
-    fontFamily: 'Segoe UI',
+    fontFamily: fontFamily ?? 'Segoe UI',
     scaffoldBackgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
     appBarTheme: AppBarTheme(
       centerTitle: false,
@@ -84,7 +85,7 @@ ThemeData _buildTheme(ColorScheme colorScheme) {
     cardTheme: CardThemeData(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(radius),
         side: BorderSide(
           color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
         ),
@@ -94,13 +95,13 @@ ThemeData _buildTheme(ColorScheme colorScheme) {
       style: ElevatedButton.styleFrom(
         elevation: 0,
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius - 2)),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius - 2)),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
@@ -179,11 +180,17 @@ class _OdsFrameworkAppState extends State<OdsFrameworkApp> {
       );
     }
 
+    // Derive theme from app branding (if loaded) or defaults
+    final branding = engine.app?.branding;
+    final seedColor = branding?.primaryColorValue;
+    final fontFamily = branding?.fontFamily;
+    final borderRadius = branding?.borderRadiusValue ?? 12.0;
+
     return MaterialApp(
       title: appName,
       debugShowCheckedModeBanner: false,
-      theme: _buildTheme(_lightScheme()),
-      darkTheme: _buildTheme(_darkScheme()),
+      theme: _buildTheme(_lightScheme(seedColor), fontFamily: fontFamily, borderRadius: borderRadius),
+      darkTheme: _buildTheme(_darkScheme(seedColor), fontFamily: fontFamily, borderRadius: borderRadius),
       themeMode: settings.themeMode,
       home: engine.app == null ? const WelcomeScreen() : const AppShell(),
     );
@@ -2425,6 +2432,17 @@ class _AppShellState extends State<AppShell> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  if (app.branding.logo != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Image.network(
+                        app.branding.logo!,
+                        height: 32,
+                        fit: BoxFit.contain,
+                        alignment: Alignment.centerLeft,
+                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                      ),
+                    ),
                   Text(
                     app.appName,
                     style: const TextStyle(

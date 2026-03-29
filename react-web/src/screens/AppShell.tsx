@@ -182,8 +182,14 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      {/* Top bar */}
-      <header className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b bg-background/95 px-4 supports-backdrop-filter:backdrop-blur-sm">
+      {/* Top bar — respects branding.headerStyle */}
+      <header className={`sticky top-0 z-40 flex h-14 items-center gap-2 px-4 ${
+        app.branding.headerStyle === 'solid'
+          ? 'bg-primary text-primary-foreground border-b border-primary/20'
+          : app.branding.headerStyle === 'transparent'
+            ? ''
+            : 'border-b bg-background/95 supports-backdrop-filter:backdrop-blur-sm'
+      }`}>
         {/* Menu button */}
         <Button
           variant="ghost"
@@ -273,11 +279,14 @@ export function AppShell() {
       {/* Navigation drawer (Sheet from left) */}
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <SheetContent side="left">
-          {/* Gradient header — matches Flutter's drawer header */}
-          <div className="-mx-6 -mt-6 mb-2 rounded-b-xl bg-gradient-to-br from-indigo-600 to-violet-600 px-6 py-5">
-            <SheetTitle className="text-lg font-bold text-white">{app.appName}</SheetTitle>
+          {/* Drawer header — branded with primaryColor or gradient */}
+          <div className="-mx-6 -mt-6 mb-2 rounded-b-xl bg-primary px-6 py-5">
+            {app.branding.logo ? (
+              <img src={app.branding.logo} alt={app.appName} className="mb-2 h-8 object-contain object-left" />
+            ) : null}
+            <SheetTitle className="text-lg font-bold text-primary-foreground">{app.appName}</SheetTitle>
             {app.help && (
-              <SheetDescription className="mt-1 line-clamp-2 text-white/75">
+              <SheetDescription className="mt-1 line-clamp-2 text-primary-foreground/75">
                 {app.help.overview}
               </SheetDescription>
             )}

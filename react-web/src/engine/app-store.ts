@@ -10,6 +10,7 @@ import { executeAction, type ActionResult } from './action-handler.ts'
 import type { AuthService } from './auth-service.ts'
 import type { DataService } from './data-service.ts'
 import { runAutoBackup } from './backup-service.ts'
+import { applyBranding, resetBranding } from './branding-service.ts'
 
 // ---------------------------------------------------------------------------
 // Record cursor — step-through navigation for forms with recordSource
@@ -219,6 +220,9 @@ export const useAppStore = create<AppState>()((set, get) => ({
         needsAdminSetup: app.auth.multiUser && !pbSuperAdminAvailable && !authService.isAdminSetUp,
         needsLogin: app.auth.multiUser && !authService.isLoggedIn,
       })
+
+      // Apply branding from the spec
+      applyBranding(app.branding)
 
       // Run auto-backup in background (best-effort, non-blocking)
       runAutoBackup(app, dataService).catch(() => {})
@@ -679,6 +683,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   // -------------------------------------------------------------------------
 
   reset: () => {
+    resetBranding()
     set({ ...initialState })
   },
 

@@ -1,5 +1,6 @@
 import 'ods_app_setting.dart';
 import 'ods_auth.dart';
+import 'ods_branding.dart';
 import 'ods_data_source.dart';
 import 'ods_help.dart';
 import 'ods_menu_item.dart';
@@ -48,6 +49,9 @@ class OdsApp {
   /// When absent or `multiUser: false`, the app runs in single-user mode.
   final OdsAuth auth;
 
+  /// Visual branding and theming configuration.
+  final OdsBranding branding;
+
   const OdsApp({
     required this.appName,
     required this.startPage,
@@ -58,6 +62,7 @@ class OdsApp {
     this.tour = const [],
     this.settings = const {},
     this.auth = const OdsAuth(),
+    this.branding = const OdsBranding(),
   });
 
   factory OdsApp.fromJson(Map<String, dynamic> json) {
@@ -91,6 +96,7 @@ class OdsApp {
           ) ??
           {},
       auth: OdsAuth.fromJson(json['auth'] as Map<String, dynamic>?),
+      branding: OdsBranding.fromJson(json['branding'] as Map<String, dynamic>?),
     );
   }
 }

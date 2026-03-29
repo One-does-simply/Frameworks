@@ -1,4 +1,5 @@
 import { parseAuth, type OdsAuth } from './ods-auth.ts'
+import { parseBranding, type OdsBranding } from './ods-branding.ts'
 import { parseAppSetting, type OdsAppSetting } from './ods-app-setting.ts'
 import { parseDataSource, type OdsDataSource } from './ods-data-source.ts'
 import { parseHelp, parseTourStep, type OdsHelp, type OdsTourStep } from './ods-help.ts'
@@ -16,6 +17,7 @@ export interface OdsApp {
   tour: OdsTourStep[]
   settings: Record<string, OdsAppSetting>
   auth: OdsAuth
+  branding: OdsBranding
 }
 
 export function parseApp(json: unknown): OdsApp {
@@ -50,5 +52,6 @@ export function parseApp(json: unknown): OdsApp {
         )
       : {},
     auth: parseAuth(j['auth']),
+    branding: parseBranding(j['branding']),
   }
 }
