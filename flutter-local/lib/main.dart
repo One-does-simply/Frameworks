@@ -25,6 +25,7 @@ import 'screens/app_help_screen.dart';
 import 'screens/app_tour_dialog.dart';
 import 'screens/login_screen.dart';
 import 'screens/ods_about_screen.dart';
+import 'screens/framework_settings_screen.dart';
 import 'screens/quick_build_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/user_management_screen.dart';
@@ -696,13 +697,24 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Top bar with settings
+                      // Top bar with theme toggle and settings
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           _ThemeToggle(
                             themeMode: settings.themeMode,
                             onChanged: (mode) => settings.setThemeMode(mode),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.settings, color: Colors.white70),
+                            tooltip: 'Framework Settings',
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => FrameworkSettingsScreen(settings: settings),
+                              ),
+                            ),
                           ),
                         ],
                       ),
