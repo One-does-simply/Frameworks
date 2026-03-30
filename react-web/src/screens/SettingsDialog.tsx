@@ -58,14 +58,15 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   })() as Partial<OdsBranding>
   const [selectedTheme, setSelectedTheme] = useState(savedOverrides.theme ?? app.branding.theme)
   const [customizeOpen, setCustomizeOpen] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [themeDefaults, setThemeDefaults] = useState<Record<string, string>>({})
   const [tokenOverrides, setTokenOverrides] = useState<Record<string, string>>(
     savedOverrides.overrides ?? app.branding.overrides ?? {}
   )
 
-  // Load theme default colors for the color pickers
+  // Load theme default colors for color pickers and preview
   useEffect(() => {
-    if (!customizeOpen) return
+    if (!customizeOpen && !previewOpen) return
     loadTheme(selectedTheme).then((data) => {
       if (!data) return
       const mode = document.documentElement.classList.contains('dark') ? 'dark' : 'light'
@@ -73,7 +74,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       const colors = variant?.['colors'] as Record<string, string> | undefined
       if (colors) setThemeDefaults(colors)
     }).catch(() => {})
-  }, [customizeOpen, selectedTheme])
+  }, [customizeOpen, previewOpen, selectedTheme])
 
   function applyThemeOverride(themeName: string) {
     setSelectedTheme(themeName)
@@ -147,6 +148,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -275,14 +277,23 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             </Select>
           </div>
 
-          {/* Customize theme */}
-          <button
-            onClick={() => setCustomizeOpen(!customizeOpen)}
-            className="flex w-full items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {customizeOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-            Customize Theme
-          </button>
+          {/* Preview / Customize links */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setPreviewOpen(true)}
+              className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              Preview Theme
+            </button>
+            <span className="text-muted-foreground text-xs">|</span>
+            <button
+              onClick={() => setCustomizeOpen(!customizeOpen)}
+              className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {customizeOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+              Customize
+            </button>
+          </div>
 
           {customizeOpen && (
             <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
@@ -435,6 +446,179 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
         <DialogFooter showCloseButton />
       </DialogContent>
     </Dialog>
+
+    {/* Theme Preview Popup */}
+    <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Theme Preview: {selectedTheme.charAt(0).toUpperCase() + selectedTheme.slice(1)}</DialogTitle>
+          <DialogDescription>Every design token labeled so you can see what each one controls.</DialogDescription>
+        </DialogHeader>
+        <ThemePreviewPanel colors={{...themeDefaults, ...tokenOverrides}} />
+      </DialogContent>
+    </Dialog>
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Theme Preview Panel — mock app page showing every token
+// ---------------------------------------------------------------------------
+
+function ThemePreviewPanel({ colors }: { colors: Record<string, string> }) {
+  const c = (token: string, fallback: string) => colors[token] || fallback
+
+  const primary = c('primary', 'oklch(45% .24 277)')
+  const primaryContent = c('primaryContent', 'oklch(93% .034 273)')
+  const secondary = c('secondary', 'oklch(65% .241 354)')
+  const secondaryContent = c('secondaryContent', 'oklch(94% .028 342)')
+  const accent = c('accent', 'oklch(77% .152 182)')
+  const accentContent = c('accentContent', 'oklch(38% .063 188)')
+  const neutral = c('neutral', 'oklch(14% .005 286)')
+  const neutralContent = c('neutralContent', 'oklch(92% .004 286)')
+  const base100 = c('base100', 'oklch(100% 0 0)')
+  const base200 = c('base200', 'oklch(98% 0 0)')
+  const base300 = c('base300', 'oklch(95% 0 0)')
+  const baseContent = c('baseContent', 'oklch(21% .006 286)')
+  const info = c('info', 'oklch(74% .16 233)')
+  const infoContent = c('infoContent', 'oklch(29% .066 243)')
+  const success = c('success', 'oklch(76% .177 163)')
+  const successContent = c('successContent', 'oklch(37% .077 169)')
+  const warning = c('warning', 'oklch(82% .189 84)')
+  const warningContent = c('warningContent', 'oklch(41% .112 46)')
+  const error = c('error', 'oklch(71% .194 13)')
+  const errorContent = c('errorContent', 'oklch(27% .105 12)')
+
+  const label = (text: string) => (
+    <span className="absolute -top-2 left-2 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-mono text-white leading-none z-10">
+      {text}
+    </span>
+  )
+
+  return (
+    <div className="space-y-4 text-sm" style={{ color: baseContent }}>
+      {/* App bar */}
+      <div className="relative">
+        {label('primary + primaryContent')}
+        <div className="flex items-center gap-3 rounded-lg px-4 py-3" style={{ background: primary, color: primaryContent }}>
+          <span className="text-lg">☰</span>
+          <span className="font-semibold">My App</span>
+          <span className="flex-1" />
+          <span className="text-xs opacity-80">Admin</span>
+        </div>
+      </div>
+
+      {/* Page background */}
+      <div className="relative rounded-lg p-4 space-y-4" style={{ background: base100, border: `1px solid ${base300}` }}>
+        {label('base100 (background)')}
+
+        {/* Card on surface */}
+        <div className="relative rounded-lg p-4 space-y-3" style={{ background: base200, border: `1px solid ${base300}` }}>
+          {label('base200 (surface) + base300 (border)')}
+
+          {/* Text */}
+          <div className="relative">
+            {label('baseContent (text)')}
+            <div style={{ color: baseContent }}>
+              <div className="font-semibold text-base">Page Heading</div>
+              <div className="text-xs opacity-70">This is how body text appears on the surface.</div>
+            </div>
+          </div>
+
+          {/* Input */}
+          <div className="relative">
+            {label('base300 (input border)')}
+            <div className="rounded px-3 py-2 text-xs" style={{ background: base100, border: `1px solid ${base300}`, color: baseContent }}>
+              Form input field...
+            </div>
+          </div>
+
+          {/* Buttons row */}
+          <div className="flex flex-wrap gap-2">
+            <div className="relative">
+              {label('primary')}
+              <div className="rounded px-3 py-1.5 text-xs font-medium" style={{ background: primary, color: primaryContent }}>
+                Primary Button
+              </div>
+            </div>
+            <div className="relative">
+              {label('secondary')}
+              <div className="rounded px-3 py-1.5 text-xs font-medium" style={{ background: secondary, color: secondaryContent }}>
+                Secondary
+              </div>
+            </div>
+            <div className="relative">
+              {label('accent')}
+              <div className="rounded px-3 py-1.5 text-xs font-medium" style={{ background: accent, color: accentContent }}>
+                Accent
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Neutral area */}
+        <div className="relative rounded-lg p-3" style={{ background: neutral, color: neutralContent }}>
+          {label('neutral + neutralContent')}
+          <div className="text-xs">Neutral surface — sidebar, muted areas, disabled states</div>
+        </div>
+
+        {/* Status badges */}
+        <div className="space-y-2">
+          <div className="text-xs font-semibold" style={{ color: baseContent }}>Status Colors</div>
+          <div className="flex flex-wrap gap-2">
+            <div className="relative">
+              {label('info')}
+              <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ background: info, color: infoContent }}>
+                ℹ Info message
+              </span>
+            </div>
+            <div className="relative">
+              {label('success')}
+              <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ background: success, color: successContent }}>
+                ✓ Success
+              </span>
+            </div>
+            <div className="relative">
+              {label('warning')}
+              <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ background: warning, color: warningContent }}>
+                ⚠ Warning
+              </span>
+            </div>
+            <div className="relative">
+              {label('error')}
+              <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ background: error, color: errorContent }}>
+                ✕ Error
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Table preview */}
+        <div className="space-y-1">
+          <div className="text-xs font-semibold" style={{ color: baseContent }}>Table / List</div>
+          <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${base300}` }}>
+            <div className="flex text-[11px] font-medium px-3 py-1.5" style={{ background: base200, color: baseContent, borderBottom: `1px solid ${base300}` }}>
+              <span className="flex-1">Name</span>
+              <span className="w-20">Status</span>
+              <span className="w-16 text-right">Rating</span>
+            </div>
+            {[
+              { name: 'Alice Johnson', status: 'Active', statusColor: success, statusText: successContent, rating: '5 ★' },
+              { name: 'Bob Martinez', status: 'Pending', statusColor: warning, statusText: warningContent, rating: '4 ★' },
+              { name: 'Carol Chen', status: 'Inactive', statusColor: error, statusText: errorContent, rating: '3 ★' },
+            ].map((row, i) => (
+              <div key={i} className="flex items-center text-[11px] px-3 py-1.5" style={{ background: base100, color: baseContent, borderBottom: `1px solid ${base300}` }}>
+                <span className="flex-1">{row.name}</span>
+                <span className="w-20">
+                  <span className="rounded-full px-1.5 py-0.5 text-[9px]" style={{ background: row.statusColor, color: row.statusText }}>{row.status}</span>
+                </span>
+                <span className="w-16 text-right" style={{ color: accent }}>{row.rating}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 

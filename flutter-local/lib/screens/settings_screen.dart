@@ -952,6 +952,122 @@ class _BrandingSectionState extends State<_BrandingSection> {
     return 'oklch(${(L * 100).toStringAsFixed(1)}% ${C.toStringAsFixed(3)} ${H.toStringAsFixed(1)})';
   }
 
+  void _showThemePreview(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420, maxHeight: 600),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Theme Preview', style: Theme.of(ctx).textTheme.titleLarge),
+                const SizedBox(height: 4),
+                Text('Every design token labeled', style: Theme.of(ctx).textTheme.bodySmall),
+                const SizedBox(height: 16),
+
+                // App bar
+                _previewLabel('primary + onPrimary'),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(color: cs.primary, borderRadius: BorderRadius.circular(8)),
+                  child: Row(children: [
+                    Icon(Icons.menu, color: cs.onPrimary, size: 20),
+                    const SizedBox(width: 12),
+                    Text('My App', style: TextStyle(color: cs.onPrimary, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+                const SizedBox(height: 12),
+
+                // Surface card
+                _previewLabel('surface + onSurface'),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: cs.surface,
+                    border: Border.all(color: cs.outline),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Page Heading', style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600, fontSize: 16)),
+                    Text('Body text on the surface.', style: TextStyle(color: cs.onSurface, fontSize: 12)),
+                    const SizedBox(height: 12),
+
+                    // Input
+                    _previewLabel('outline (border)'),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: cs.outline),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text('Form input...', style: TextStyle(color: cs.onSurface.withValues(alpha: 0.5), fontSize: 12)),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Buttons
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      _previewButton('primary', cs.primary, cs.onPrimary),
+                      _previewButton('secondary', cs.secondary, cs.onSecondary),
+                      _previewButton('tertiary (accent)', cs.tertiary, cs.onTertiary),
+                    ]),
+                    const SizedBox(height: 12),
+
+                    // Neutral
+                    _previewLabel('surfaceContainerHighest (neutral)'),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(6)),
+                      child: Text('Neutral surface — sidebar, muted areas', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 11)),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Status
+                    _previewLabel('error + onError'),
+                    Wrap(spacing: 6, runSpacing: 6, children: [
+                      _statusBadge('Error', cs.error, cs.onError),
+                      _statusBadge('Surface', cs.surfaceContainer, cs.onSurface),
+                    ]),
+                  ]),
+                ),
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _previewLabel(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(3)),
+      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 9, fontFamily: 'monospace')),
+    ),
+  );
+
+  Widget _previewButton(String label, Color bg, Color fg) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+    decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
+    child: Text(label, style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.w600)),
+  );
+
+  Widget _statusBadge(String label, Color bg, Color fg) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(12)),
+    child: Text(label, style: TextStyle(color: fg, fontSize: 10, fontWeight: FontWeight.w500)),
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -983,32 +1099,52 @@ class _BrandingSectionState extends State<_BrandingSection> {
         // Customize toggle
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: InkWell(
-              onTap: () => setState(() => _customizeOpen = !_customizeOpen),
-              borderRadius: BorderRadius.circular(4),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _customizeOpen ? Icons.expand_less : Icons.chevron_right,
-                      size: 16,
-                      color: theme.colorScheme.onSurfaceVariant,
+          child: Row(
+            children: [
+              // Preview Theme link
+              InkWell(
+                onTap: () => _showThemePreview(context),
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    'Preview Theme',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.primary,
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Customize Theme',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text('|', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12)),
+              ),
+              // Customize toggle
+              InkWell(
+                onTap: () => setState(() => _customizeOpen = !_customizeOpen),
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _customizeOpen ? Icons.expand_less : Icons.chevron_right,
+                        size: 16,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Customize',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         // Customize tokens
