@@ -94,7 +94,7 @@ export async function applyBranding(branding: OdsBranding): Promise<void> {
   if (!variant) return
 
   const colors = variant['colors'] as Record<string, string> | undefined
-  const design = variant['design'] as Record<string, string> | undefined
+  const design = themeData['design'] as Record<string, string> | undefined  // design is at theme level
   if (!colors) return
 
   // Apply token overrides from spec
