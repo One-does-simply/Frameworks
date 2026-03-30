@@ -783,6 +783,7 @@ class _BrandingSection extends StatefulWidget {
 
 class _BrandingSectionState extends State<_BrandingSection> {
   late String _theme;
+  bool _customizeOpen = false;
 
   static const _themeNames = [
     'light','dark','cupcake','bumblebee','emerald','corporate','synthwave','retro',
@@ -790,6 +791,16 @@ class _BrandingSectionState extends State<_BrandingSection> {
     'fantasy','wireframe','black','luxury','dracula','cmyk','autumn','business',
     'acid','lemonade','night','coffee','winter','dim','nord','sunset',
     'caramellatte','abyss','silk',
+  ];
+
+  static const _customizableTokens = [
+    ('primary', 'Primary', 'Main action color — buttons, links, active states.'),
+    ('secondary', 'Secondary', 'Supporting color — secondary buttons, tags.'),
+    ('accent', 'Accent', 'Highlight color — badges, notifications, emphasis.'),
+    ('base100', 'Background', 'Main page background color.'),
+    ('baseContent', 'Text', 'Default text color on backgrounds.'),
+    ('error', 'Error', 'Danger states — delete buttons, validation errors.'),
+    ('success', 'Success', 'Success states — confirmations, positive indicators.'),
   ];
 
   @override
@@ -810,13 +821,66 @@ class _BrandingSectionState extends State<_BrandingSection> {
     await widget.settings.setBrandingOverrides(widget.app.appName, {});
     setState(() {
       _theme = widget.app.branding.theme;
+      _customizeOpen = false;
     });
     widget.onChanged();
   }
 
+  Future<void> _editToken(String token, String label, String description) async {
+    final overrides = widget.settings.getBrandingOverrides(widget.app.appName);
+    final currentValue = overrides[token] ?? '';
+    final controller = TextEditingController(text: currentValue);
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(label),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(description, style: Theme.of(ctx).textTheme.bodySmall),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'oklch value',
+                hintText: 'e.g., oklch(58% .158 242)',
+                border: OutlineInputBorder(),
+                helperText: 'Use oklch(L% C H) format. Leave blank to use theme default.',
+                helperMaxLines: 2,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          if (currentValue.isNotEmpty)
+            TextButton(onPressed: () => Navigator.pop(ctx, ''), child: const Text('Reset')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Apply')),
+        ],
+      ),
+    );
+
+    if (result == null) return;
+    final newOverrides = Map<String, String>.from(overrides);
+    if (result.isEmpty) {
+      newOverrides.remove(token);
+    } else {
+      newOverrides[token] = result;
+    }
+    newOverrides['theme'] = _theme;
+    await widget.settings.setBrandingOverrides(widget.app.appName, newOverrides);
+    widget.onChanged();
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
-    final hasOverrides = widget.settings.getBrandingOverrides(widget.app.appName).isNotEmpty;
+    final theme = Theme.of(context);
+    final overrides = widget.settings.getBrandingOverrides(widget.app.appName);
+    final hasOverrides = overrides.isNotEmpty;
 
     return Column(
       children: [
@@ -840,6 +904,78 @@ class _BrandingSectionState extends State<_BrandingSection> {
             },
           ),
         ),
+        // Customize toggle
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: InkWell(
+              onTap: () => setState(() => _customizeOpen = !_customizeOpen),
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _customizeOpen ? Icons.expand_less : Icons.chevron_right,
+                      size: 16,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Customize Theme',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        // Customize tokens
+        if (_customizeOpen) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Text(
+              'Override individual design tokens. Tap a token to set a custom value.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          ..._customizableTokens.map((t) {
+            final (token, label, desc) = t;
+            final hasValue = overrides.containsKey(token);
+            return ListTile(
+              dense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              title: Row(
+                children: [
+                  Text(label, style: const TextStyle(fontSize: 13)),
+                  if (hasValue) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      child: Text('custom', style: TextStyle(fontSize: 9, color: theme.colorScheme.primary)),
+                    ),
+                  ],
+                ],
+              ),
+              subtitle: Text(desc, style: const TextStyle(fontSize: 10)),
+              trailing: const Icon(Icons.edit_outlined, size: 16),
+              onTap: () => _editToken(token, label, desc),
+            );
+          }),
+        ],
         // Reset
         if (hasOverrides)
           Padding(

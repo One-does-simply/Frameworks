@@ -26,6 +26,7 @@ import { Label } from '@/components/ui/label'
 // Using native checkbox input styled with Tailwind — the base-ui Checkbox
 // has rendering issues in some dialog contexts.
 import { Separator } from '@/components/ui/separator'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -56,17 +57,36 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     try { return JSON.parse(localStorage.getItem(brandingKey) ?? '{}') } catch { return {} }
   })() as Partial<OdsBranding>
   const [selectedTheme, setSelectedTheme] = useState(savedOverrides.theme ?? app.branding.theme)
+  const [customizeOpen, setCustomizeOpen] = useState(false)
+  const [tokenOverrides, setTokenOverrides] = useState<Record<string, string>>(
+    savedOverrides.overrides ?? app.branding.overrides ?? {}
+  )
 
   function applyThemeOverride(themeName: string) {
     setSelectedTheme(themeName)
-    const overrides = { theme: themeName }
-    localStorage.setItem(brandingKey, JSON.stringify(overrides))
-    applyBranding({ ...app.branding, ...overrides }).catch(() => {})
+    const saved = { theme: themeName, ...(Object.keys(tokenOverrides).length > 0 ? { overrides: tokenOverrides } : {}) }
+    localStorage.setItem(brandingKey, JSON.stringify(saved))
+    applyBranding({ ...app.branding, theme: themeName, overrides: tokenOverrides }).catch(() => {})
+  }
+
+  function applyTokenOverride(token: string, value: string) {
+    const updated = { ...tokenOverrides }
+    if (value) {
+      updated[token] = value
+    } else {
+      delete updated[token]
+    }
+    setTokenOverrides(updated)
+    const saved = { theme: selectedTheme, ...(Object.keys(updated).length > 0 ? { overrides: updated } : {}) }
+    localStorage.setItem(brandingKey, JSON.stringify(saved))
+    applyBranding({ ...app.branding, theme: selectedTheme, overrides: updated }).catch(() => {})
   }
 
   function resetBrandingOverride() {
     localStorage.removeItem(brandingKey)
     setSelectedTheme(app.branding.theme)
+    setTokenOverrides({})
+    setCustomizeOpen(false)
     applyBranding(app.branding).catch(() => {})
   }
 
@@ -242,8 +262,65 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             </Select>
           </div>
 
+          {/* Customize theme */}
+          <button
+            onClick={() => setCustomizeOpen(!customizeOpen)}
+            className="flex w-full items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {customizeOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+            Customize Theme
+          </button>
+
+          {customizeOpen && (
+            <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+              <p className="text-[11px] text-muted-foreground">
+                Override individual design tokens on top of the selected theme. Leave blank to use the theme default.
+              </p>
+
+              {CUSTOMIZABLE_TOKENS.map(({ token, label, description, example, type }) => (
+                <div key={token} className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    {type === 'color' ? (
+                      <input
+                        type="color"
+                        title={`Pick ${label} color`}
+                        value={tokenOverrides[token] ? oklchToHexApprox(tokenOverrides[token]) : '#888888'}
+                        onChange={(e) => applyTokenOverride(token, hexToOklchApprox(e.target.value))}
+                        className="h-6 w-8 cursor-pointer rounded border border-input bg-transparent"
+                      />
+                    ) : (
+                      <div className="w-8" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium">{label}</span>
+                        {tokenOverrides[token] && (
+                          <button
+                            onClick={() => applyTokenOverride(token, '')}
+                            className="text-[10px] text-muted-foreground hover:text-foreground"
+                          >
+                            reset
+                          </button>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">{description}</div>
+                    </div>
+                  </div>
+                  {type === 'size' && (
+                    <Input
+                      value={tokenOverrides[token] ?? ''}
+                      onChange={(e) => applyTokenOverride(token, e.target.value)}
+                      placeholder={example}
+                      className="h-7 text-xs font-mono"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Reset branding */}
-          {savedOverrides.theme && (
+          {(savedOverrides.theme || Object.keys(tokenOverrides).length > 0) && (
             <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={resetBrandingOverride}>
               Reset to spec defaults
             </Button>
@@ -346,4 +423,75 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       </DialogContent>
     </Dialog>
   )
+}
+
+// ---------------------------------------------------------------------------
+// Customizable theme tokens — descriptive list for the customize panel
+// ---------------------------------------------------------------------------
+
+const CUSTOMIZABLE_TOKENS: {
+  token: string
+  label: string
+  description: string
+  example: string
+  type: 'color' | 'size'
+}[] = [
+  { token: 'primary', label: 'Primary', description: 'Main action color — buttons, links, active states.', example: 'oklch(58% .158 242)', type: 'color' },
+  { token: 'secondary', label: 'Secondary', description: 'Supporting color — secondary buttons, tags, accents.', example: 'oklch(65% .241 354)', type: 'color' },
+  { token: 'accent', label: 'Accent', description: 'Highlight color — badges, notifications, emphasis.', example: 'oklch(77% .152 182)', type: 'color' },
+  { token: 'neutral', label: 'Neutral', description: 'Muted surfaces — sidebar backgrounds, disabled states.', example: 'oklch(14% .005 286)', type: 'color' },
+  { token: 'base100', label: 'Background', description: 'Main page background color.', example: 'oklch(100% 0 0)', type: 'color' },
+  { token: 'base200', label: 'Surface', description: 'Slightly darker — cards, popovers, elevated areas.', example: 'oklch(98% 0 0)', type: 'color' },
+  { token: 'base300', label: 'Border', description: 'Borders, dividers, and input outlines.', example: 'oklch(95% 0 0)', type: 'color' },
+  { token: 'baseContent', label: 'Text', description: 'Default text color on backgrounds.', example: 'oklch(21% .006 286)', type: 'color' },
+  { token: 'error', label: 'Error', description: 'Danger/error states — delete buttons, validation errors.', example: 'oklch(71% .194 13)', type: 'color' },
+  { token: 'success', label: 'Success', description: 'Success states — confirmations, positive indicators.', example: 'oklch(76% .177 163)', type: 'color' },
+  { token: 'warning', label: 'Warning', description: 'Warning states — caution indicators, alerts.', example: 'oklch(82% .189 84)', type: 'color' },
+  { token: 'info', label: 'Info', description: 'Informational states — help text, tips.', example: 'oklch(74% .16 233)', type: 'color' },
+  { token: 'radiusBox', label: 'Corner Radius', description: 'Border radius for cards, modals, and containers. Use CSS units.', example: '.5rem', type: 'size' },
+  { token: 'radiusField', label: 'Input Radius', description: 'Border radius for inputs, selects, and form controls.', example: '.25rem', type: 'size' },
+]
+
+// ---------------------------------------------------------------------------
+// Approximate color conversion helpers (for the color picker)
+// ---------------------------------------------------------------------------
+
+function hexToOklchApprox(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16) / 255
+  const g = parseInt(hex.slice(3, 5), 16) / 255
+  const b = parseInt(hex.slice(5, 7), 16) / 255
+  const toLinear = (c: number) => c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  const lr = toLinear(r), lg = toLinear(g), lb = toLinear(b)
+  const l_ = Math.cbrt(0.4122 * lr + 0.5363 * lg + 0.0514 * lb)
+  const m_ = Math.cbrt(0.2119 * lr + 0.6807 * lg + 0.1074 * lb)
+  const s_ = Math.cbrt(0.0883 * lr + 0.2817 * lg + 0.6300 * lb)
+  const L = 0.2105 * l_ + 0.7936 * m_ - 0.0041 * s_
+  const a = 1.9780 * l_ - 2.4286 * m_ + 0.4506 * s_
+  const bOk = 0.0259 * l_ + 0.7828 * m_ - 0.8087 * s_
+  const C = Math.sqrt(a * a + bOk * bOk)
+  let H = (Math.atan2(bOk, a) * 180) / Math.PI
+  if (H < 0) H += 360
+  return `oklch(${(L * 100).toFixed(1)}% ${C.toFixed(3)} ${H.toFixed(1)})`
+}
+
+function oklchToHexApprox(oklch: string): string {
+  const m = /oklch\(([\d.]+)%?\s+([\d.]+)\s+([\d.]+)\)/.exec(oklch)
+  if (!m) return '#888888'
+  let L = parseFloat(m[1]); if (L > 1) L /= 100
+  const C = parseFloat(m[2])
+  const H = parseFloat(m[3]) * Math.PI / 180
+  const a = C * Math.cos(H), b = C * Math.sin(H)
+  const l_ = L + 0.3963 * a + 0.2158 * b
+  const m_ = L - 0.1056 * a - 0.0639 * b
+  const s_ = L - 0.0895 * a - 1.2915 * b
+  const l = l_ ** 3, ml = m_ ** 3, s = s_ ** 3
+  const r = 4.0767 * l - 3.3077 * ml + 0.2310 * s
+  const g = -1.2684 * l + 2.6098 * ml - 0.3413 * s
+  const bl = -0.0042 * l - 0.7034 * ml + 1.7076 * s
+  const toSrgb = (c: number) => {
+    const clamped = Math.max(0, Math.min(1, c))
+    return clamped <= 0.0031308 ? clamped * 12.92 : 1.055 * clamped ** (1 / 2.4) - 0.055
+  }
+  const toHex = (c: number) => Math.round(toSrgb(c) * 255).toString(16).padStart(2, '0')
+  return `#${toHex(r)}${toHex(g)}${toHex(bl)}`
 }
