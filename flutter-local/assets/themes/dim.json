@@ -1,0 +1,66 @@
+{
+  "name": "dim",
+  "displayName": "Dim",
+  "author": "daisyui",
+  "nativeScheme": "dark",
+  "design": {
+    "radiusSelector": "1rem",
+    "radiusField": ".5rem",
+    "radiusBox": "1rem",
+    "sizeSelector": ".25rem",
+    "sizeField": ".25rem",
+    "border": "1px",
+    "depth": 0,
+    "noise": 0
+  },
+  "light": {
+    "colorScheme": "light",
+    "colors": {
+      "primary": "oklch(61.132999999999996% .141 139.549)",
+      "primaryContent": "oklch(82.774% .028 139.549)",
+      "secondary": "oklch(73.375% .165 35.353)",
+      "secondaryContent": "oklch(85.325% .033 35.353)",
+      "accent": "oklch(74.229% .133 311.379)",
+      "accentContent": "oklch(85.155% .026 311.379)",
+      "neutral": "oklch(24.731% .02 264.094)",
+      "neutralContent": "oklch(17.099000000000004% .031 222.959)",
+      "base100": "oklch(69.143% .023 264.149)",
+      "base200": "oklch(71.964% .019 264.182)",
+      "base300": "oklch(73.654% .018 262.177)",
+      "baseContent": "oklch(17.099000000000004% .031 222.959)",
+      "info": "oklch(61.078% .142 206.182)",
+      "infoContent": "oklch(82.785% .028 206.182)",
+      "success": "oklch(61.17100000000001% .142 166.534)",
+      "successContent": "oklch(82.76599999999999% .028 166.534)",
+      "warning": "oklch(61.163% .142 94.818)",
+      "warningContent": "oklch(82.768% .028 94.818)",
+      "error": "oklch(57.418000000000006% .099 33.756)",
+      "errorContent": "oklch(83.517% .019 33.756)"
+    }
+  },
+  "dark": {
+    "colorScheme": "dark",
+    "colors": {
+      "primary": "oklch(86.133% .141 139.549)",
+      "primaryContent": "oklch(17.226% .028 139.549)",
+      "secondary": "oklch(73.375% .165 35.353)",
+      "secondaryContent": "oklch(14.675% .033 35.353)",
+      "accent": "oklch(74.229% .133 311.379)",
+      "accentContent": "oklch(14.845% .026 311.379)",
+      "neutral": "oklch(24.731% .02 264.094)",
+      "neutralContent": "oklch(82.901% .031 222.959)",
+      "base100": "oklch(30.857% .023 264.149)",
+      "base200": "oklch(28.036% .019 264.182)",
+      "base300": "oklch(26.346% .018 262.177)",
+      "baseContent": "oklch(82.901% .031 222.959)",
+      "info": "oklch(86.078% .142 206.182)",
+      "infoContent": "oklch(17.215% .028 206.182)",
+      "success": "oklch(86.171% .142 166.534)",
+      "successContent": "oklch(17.234% .028 166.534)",
+      "warning": "oklch(86.163% .142 94.818)",
+      "warningContent": "oklch(17.232% .028 94.818)",
+      "error": "oklch(82.418% .099 33.756)",
+      "errorContent": "oklch(16.483% .019 33.756)"
+    }
+  }
+}

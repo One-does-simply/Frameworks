@@ -10,6 +10,7 @@ import 'debug/debug_panel.dart';
 import 'engine/app_engine.dart';
 import 'engine/backup_manager.dart';
 import 'engine/framework_auth_service.dart';
+import 'engine/theme_resolver.dart';
 import 'engine/code_generator.dart';
 import 'engine/data_exporter.dart';
 import 'engine/data_store.dart';
@@ -158,11 +159,28 @@ class OdsFrameworkApp extends StatefulWidget {
 
 class _OdsFrameworkAppState extends State<OdsFrameworkApp> {
   bool _settingsReady = false;
+  ColorScheme? _resolvedLightScheme;
+  ColorScheme? _resolvedDarkScheme;
+  double _resolvedRadius = 12.0;
+  String? _resolvedThemeName;
 
   @override
   void initState() {
     super.initState();
     _initSettings();
+  }
+
+  Future<void> _resolveTheme(String themeName) async {
+    final light = await ThemeResolver.resolveColorScheme(themeName, Brightness.light);
+    final dark = await ThemeResolver.resolveColorScheme(themeName, Brightness.dark);
+    final radius = await ThemeResolver.resolveRadius(themeName);
+    if (mounted) {
+      setState(() {
+        _resolvedLightScheme = light;
+        _resolvedDarkScheme = dark;
+        _resolvedRadius = radius;
+      });
+    }
   }
 
   Future<void> _initSettings() async {
@@ -192,25 +210,29 @@ class _OdsFrameworkAppState extends State<OdsFrameworkApp> {
       );
     }
 
-    // Derive theme from app branding (if loaded) with user overrides
-    // TODO: Full theme resolver (Phase 3) will replace this seed-color approach
+    // Derive theme from app branding with user overrides
     final branding = engine.app?.branding;
     final userOverrides = engine.app != null
         ? settings.getBrandingOverrides(engine.app!.appName)
         : <String, String>{};
-    final primaryOverride = userOverrides['theme'] ?? branding?.overrides['primary'];
-    Color? seedColor;
-    if (primaryOverride != null && primaryOverride.startsWith('#')) {
-      try { seedColor = Color(int.parse('FF${primaryOverride.replaceFirst('#', '')}', radix: 16)); } catch (_) {}
-    }
+    final themeName = userOverrides['theme'] ?? branding?.theme ?? 'light';
     final fontFamily = branding?.fontFamily;
-    final borderRadius = 12.0; // Will be resolved from theme tokens in Phase 3
+
+    // Resolve theme asynchronously (cached after first load)
+    if (themeName != _resolvedThemeName) {
+      _resolvedThemeName = themeName;
+      _resolveTheme(themeName);
+    }
+
+    final lightScheme = _resolvedLightScheme ?? _lightScheme();
+    final darkScheme = _resolvedDarkScheme ?? _darkScheme();
+    final borderRadius = _resolvedRadius;
 
     return MaterialApp(
       title: appName,
       debugShowCheckedModeBanner: false,
-      theme: _buildTheme(_lightScheme(seedColor), fontFamily: fontFamily, borderRadius: borderRadius),
-      darkTheme: _buildTheme(_darkScheme(seedColor), fontFamily: fontFamily, borderRadius: borderRadius),
+      theme: _buildTheme(lightScheme, fontFamily: fontFamily, borderRadius: borderRadius),
+      darkTheme: _buildTheme(darkScheme, fontFamily: fontFamily, borderRadius: borderRadius),
       themeMode: settings.themeMode,
       home: _buildHome(engine, settings),
     );
