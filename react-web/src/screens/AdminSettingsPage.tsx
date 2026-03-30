@@ -359,9 +359,9 @@ export function AdminSettingsPage() {
             <CardDescription>ODS React Web Framework preferences</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Theme */}
+            {/* Light/Dark Mode */}
             <div className="flex items-center justify-between gap-4">
-              <Label>Theme</Label>
+              <Label>Mode</Label>
               <div className="flex gap-1 rounded-lg border p-0.5">
                 {([
                   { mode: 'light' as ThemeMode, icon: Sun, label: 'Light' },

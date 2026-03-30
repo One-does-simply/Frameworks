@@ -258,9 +258,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             </span>
           </div>
 
-          {/* Theme mode */}
+          {/* Light/Dark mode */}
           <div className="flex items-center justify-between gap-4">
-            <Label>Theme</Label>
+            <Label>Mode</Label>
             <div className="flex gap-1 rounded-lg border p-0.5">
               {(['light', 'system', 'dark'] as ThemeMode[]).map((mode) => (
                 <button

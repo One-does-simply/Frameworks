@@ -1,5 +1,5 @@
 /**
- * Theme mode store — persists light/dark/system preference in localStorage
+ * Mode store — persists light/dark/system mode preference in localStorage
  * and applies the `dark` class to <html> for Tailwind dark mode.
  */
 

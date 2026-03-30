@@ -325,7 +325,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ? Icons.light_mode
                             : Icons.auto_mode,
                   ),
-                  title: const Text('Theme'),
+                  title: const Text('Mode'),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 24),
                   trailing: SegmentedButton<ThemeMode>(
                     segments: const [

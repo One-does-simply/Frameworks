@@ -1809,7 +1809,7 @@ class _MathParser {
     buf.writeln('          crossAxisAlignment: CrossAxisAlignment.start,');
     buf.writeln('          children: [');
     // Theme toggle
-    buf.writeln("            const Text('Theme', style: TextStyle(fontWeight: FontWeight.w600)),");
+    buf.writeln("            const Text('Mode', style: TextStyle(fontWeight: FontWeight.w600)),");
     buf.writeln('            DropdownButton<ThemeMode>(');
     buf.writeln('              value: _themeMode,');
     buf.writeln('              isExpanded: true,');
