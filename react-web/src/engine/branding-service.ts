@@ -43,7 +43,7 @@ const COLOR_MAP: Record<string, string[]> = {
 // ---------------------------------------------------------------------------
 
 /** Load a theme JSON from the catalog (cached). */
-async function loadTheme(themeName: string): Promise<Record<string, unknown> | null> {
+export async function loadTheme(themeName: string): Promise<Record<string, unknown> | null> {
   if (themeCache.has(themeName)) return themeCache.get(themeName)!
   try {
     const resp = await fetch(`${THEMES_BASE}/${themeName}.json`)

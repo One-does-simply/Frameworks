@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAppStore } from '@/engine/app-store.ts'
 import {
   getThemeMode,
@@ -10,7 +10,7 @@ import {
   setBackupSettings,
   type BackupSettings,
 } from '@/engine/backup-service.ts'
-import { applyBranding } from '@/engine/branding-service.ts'
+import { applyBranding, loadTheme } from '@/engine/branding-service.ts'
 import type { OdsBranding } from '@/models/ods-branding.ts'
 import {
   Dialog,
@@ -58,9 +58,22 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   })() as Partial<OdsBranding>
   const [selectedTheme, setSelectedTheme] = useState(savedOverrides.theme ?? app.branding.theme)
   const [customizeOpen, setCustomizeOpen] = useState(false)
+  const [themeDefaults, setThemeDefaults] = useState<Record<string, string>>({})
   const [tokenOverrides, setTokenOverrides] = useState<Record<string, string>>(
     savedOverrides.overrides ?? app.branding.overrides ?? {}
   )
+
+  // Load theme default colors for the color pickers
+  useEffect(() => {
+    if (!customizeOpen) return
+    loadTheme(selectedTheme).then((data) => {
+      if (!data) return
+      const mode = document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+      const variant = data[mode] as Record<string, unknown> | undefined
+      const colors = variant?.['colors'] as Record<string, string> | undefined
+      if (colors) setThemeDefaults(colors)
+    }).catch(() => {})
+  }, [customizeOpen, selectedTheme])
 
   function applyThemeOverride(themeName: string) {
     setSelectedTheme(themeName)
@@ -284,7 +297,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       <input
                         type="color"
                         title={`Pick ${label} color`}
-                        value={tokenOverrides[token] ? oklchToHexApprox(tokenOverrides[token]) : '#888888'}
+                        value={oklchToHexApprox(tokenOverrides[token] || themeDefaults[token] || '')}
                         onChange={(e) => applyTokenOverride(token, hexToOklchApprox(e.target.value))}
                         className="h-6 w-8 cursor-pointer rounded border border-input bg-transparent"
                       />

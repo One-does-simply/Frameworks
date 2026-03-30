@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../engine/app_engine.dart';
 import '../engine/auth_service.dart';
+import '../engine/theme_resolver.dart';
 import '../engine/settings_store.dart';
 import '../models/ods_app.dart';
 import '../models/ods_app_setting.dart';
@@ -829,37 +830,78 @@ class _BrandingSectionState extends State<_BrandingSection> {
   Future<void> _editToken(String token, String label, String description) async {
     final overrides = widget.settings.getBrandingOverrides(widget.app.appName);
     final currentValue = overrides[token] ?? '';
-    final controller = TextEditingController(text: currentValue);
+    // Convert oklch to hex for the input, or start with a sensible default
+    String hexValue = currentValue.isNotEmpty
+        ? _oklchToHex(currentValue)
+        : '#888888';
+    final hexController = TextEditingController(text: hexValue);
+    Color previewColor = _parseHex(hexValue);
 
     final result = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(label),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(description, style: Theme.of(ctx).textTheme.bodySmall),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              decoration: const InputDecoration(
-                labelText: 'oklch value',
-                hintText: 'e.g., oklch(58% .158 242)',
-                border: OutlineInputBorder(),
-                helperText: 'Use oklch(L% C H) format. Leave blank to use theme default.',
-                helperMaxLines: 2,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(label),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(description, style: Theme.of(ctx).textTheme.bodySmall),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  // Color preview swatch
+                  GestureDetector(
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: previewColor,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade400),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Hex input
+                  Expanded(
+                    child: TextField(
+                      controller: hexController,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Hex color',
+                        hintText: '#4F46E5',
+                        border: OutlineInputBorder(),
+                        helperText: 'Enter a hex color (e.g., #4F46E5)',
+                      ),
+                      onChanged: (v) {
+                        if (v.startsWith('#') && v.length == 7) {
+                          setDialogState(() => previewColor = _parseHex(v));
+                        }
+                      },
+                    ),
+                  ),
+                ],
               ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            if (currentValue.isNotEmpty)
+              TextButton(onPressed: () => Navigator.pop(ctx, ''), child: const Text('Reset')),
+            FilledButton(
+              onPressed: () {
+                final hex = hexController.text.trim();
+                if (hex.startsWith('#') && hex.length == 7) {
+                  Navigator.pop(ctx, _hexToOklch(hex));
+                } else {
+                  Navigator.pop(ctx);
+                }
+              },
+              child: const Text('Apply'),
             ),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          if (currentValue.isNotEmpty)
-            TextButton(onPressed: () => Navigator.pop(ctx, ''), child: const Text('Reset')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Apply')),
-        ],
       ),
     );
 
@@ -874,6 +916,40 @@ class _BrandingSectionState extends State<_BrandingSection> {
     await widget.settings.setBrandingOverrides(widget.app.appName, newOverrides);
     widget.onChanged();
     setState(() {});
+  }
+
+  Color _parseHex(String hex) {
+    try {
+      return Color(int.parse('FF${hex.replaceFirst('#', '')}', radix: 16));
+    } catch (_) {
+      return const Color(0xFF888888);
+    }
+  }
+
+  String _oklchToHex(String oklch) {
+    // Approximate oklch → hex via ThemeResolver
+    final color = ThemeResolver.parseOklch(oklch);
+    if (color == null) return '#888888';
+    return '#${color.value.toRadixString(16).substring(2).padLeft(6, '0')}';
+  }
+
+  String _hexToOklch(String hex) {
+    // Approximate hex → oklch
+    final r = int.parse(hex.substring(1, 3), radix: 16) / 255;
+    final g = int.parse(hex.substring(3, 5), radix: 16) / 255;
+    final b = int.parse(hex.substring(5, 7), radix: 16) / 255;
+    // Simple luminance approximation
+    final L = (0.2126 * r + 0.7152 * g + 0.0722 * b);
+    // Very rough chroma/hue — better than nothing for a picker
+    final maxC = [r, g, b].reduce((a, b) => a > b ? a : b);
+    final minC = [r, g, b].reduce((a, b) => a < b ? a : b);
+    final C = (maxC - minC) * 0.4; // Scale down
+    double H = 0;
+    if (maxC == r) H = 60 * ((g - b) / (maxC - minC + 0.001)) % 360;
+    else if (maxC == g) H = 60 * (2 + (b - r) / (maxC - minC + 0.001));
+    else H = 60 * (4 + (r - g) / (maxC - minC + 0.001));
+    if (H < 0) H += 360;
+    return 'oklch(${(L * 100).toStringAsFixed(1)}% ${C.toStringAsFixed(3)} ${H.toStringAsFixed(1)})';
   }
 
   @override
