@@ -10,6 +10,8 @@ import {
   setBackupSettings,
   type BackupSettings,
 } from '@/engine/backup-service.ts'
+import { applyBranding } from '@/engine/branding-service.ts'
+import type { OdsBranding } from '@/models/ods-branding.ts'
 import {
   Dialog,
   DialogContent,
@@ -47,6 +49,27 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const toggleDebugMode = useAppStore((s) => s.toggleDebugMode)
   const appSettings = useAppStore((s) => s.appSettings)
   const dataService = useAppStore((s) => s.dataService)
+
+  // Branding overrides (persisted per-app in localStorage)
+  const brandingKey = `ods_branding_${app.appName.replace(/[^\w]/g, '_').toLowerCase()}`
+  const savedOverrides = (() => {
+    try { return JSON.parse(localStorage.getItem(brandingKey) ?? '{}') } catch { return {} }
+  })() as Partial<OdsBranding>
+  const [brandColor, setBrandColor] = useState(savedOverrides.primaryColor ?? app.branding.primaryColor)
+  const [brandCorner, setBrandCorner] = useState(savedOverrides.cornerStyle ?? app.branding.cornerStyle)
+
+  function applyBrandingOverride(color: string, corner: string) {
+    const overrides = { primaryColor: color, cornerStyle: corner as OdsBranding['cornerStyle'] }
+    localStorage.setItem(brandingKey, JSON.stringify(overrides))
+    applyBranding({ ...app.branding, ...overrides })
+  }
+
+  function resetBrandingOverride() {
+    localStorage.removeItem(brandingKey)
+    setBrandColor(app.branding.primaryColor)
+    setBrandCorner(app.branding.cornerStyle)
+    applyBranding(app.branding)
+  }
 
   // Theme mode
   const [theme, setTheme] = useState<ThemeMode>(getThemeMode)
@@ -195,6 +218,60 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               <Separator />
             </>
           )}
+
+          {/* ---- Branding ---- */}
+          <div>
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Branding
+            </span>
+          </div>
+
+          {/* Primary color */}
+          <div className="flex items-center justify-between gap-4">
+            <Label>Primary Color</Label>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={brandColor}
+                onChange={(e) => {
+                  setBrandColor(e.target.value)
+                  applyBrandingOverride(e.target.value, brandCorner)
+                }}
+                className="h-8 w-10 cursor-pointer rounded border border-input bg-transparent"
+              />
+              <span className="text-xs font-mono text-muted-foreground w-16">{brandColor}</span>
+            </div>
+          </div>
+
+          {/* Corner style */}
+          <div className="flex items-center justify-between gap-4">
+            <Label>Corner Style</Label>
+            <Select
+              value={brandCorner}
+              onValueChange={(v) => {
+                setBrandCorner(v)
+                applyBrandingOverride(brandColor, v)
+              }}
+            >
+              <SelectTrigger className="w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="rounded">Rounded</SelectItem>
+                <SelectItem value="sharp">Sharp</SelectItem>
+                <SelectItem value="pill">Pill</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Reset branding */}
+          {(savedOverrides.primaryColor || savedOverrides.cornerStyle) && (
+            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={resetBrandingOverride}>
+              Reset to spec defaults
+            </Button>
+          )}
+
+          <Separator />
 
           {/* ---- Framework Settings ---- */}
           <div>

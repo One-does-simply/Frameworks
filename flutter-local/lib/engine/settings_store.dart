@@ -20,6 +20,9 @@ class SettingsStore extends ChangeNotifier {
   int _backupRetention = 5;
   String? _backupFolder;
 
+  /// Per-app branding overrides: appName -> {primaryColor, cornerStyle}
+  final Map<String, Map<String, String>> _brandingOverrides = {};
+
   ThemeMode get themeMode => _themeMode;
   bool get isInitialized => _initialized;
   bool get autoBackup => _autoBackup;
@@ -64,6 +67,24 @@ class SettingsStore extends ChangeNotifier {
     await _save();
   }
 
+  /// Get branding overrides for a specific app.
+  Map<String, String> getBrandingOverrides(String appName) {
+    final key = appName.replaceAll(RegExp(r'[^\w]'), '_').toLowerCase();
+    return _brandingOverrides[key] ?? {};
+  }
+
+  /// Set branding overrides for a specific app.
+  Future<void> setBrandingOverrides(String appName, Map<String, String> overrides) async {
+    final key = appName.replaceAll(RegExp(r'[^\w]'), '_').toLowerCase();
+    if (overrides.isEmpty) {
+      _brandingOverrides.remove(key);
+    } else {
+      _brandingOverrides[key] = overrides;
+    }
+    notifyListeners();
+    await _save();
+  }
+
   Future<File> _getFile() async {
     final dir = await getApplicationDocumentsDirectory();
     return File(p.join(dir.path, _fileName));
@@ -88,6 +109,12 @@ class SettingsStore extends ChangeNotifier {
         _autoBackup = data['autoBackup'] as bool? ?? false;
         _backupRetention = data['backupRetention'] as int? ?? 5;
         _backupFolder = data['backupFolder'] as String?;
+        final brandOverrides = data['brandingOverrides'] as Map<String, dynamic>?;
+        if (brandOverrides != null) {
+          for (final entry in brandOverrides.entries) {
+            _brandingOverrides[entry.key] = Map<String, String>.from(entry.value as Map);
+          }
+        }
       } catch (_) {}
     }
     _initialized = true;
@@ -106,6 +133,7 @@ class SettingsStore extends ChangeNotifier {
       'autoBackup': _autoBackup,
       'backupRetention': _backupRetention,
       if (_backupFolder != null) 'backupFolder': _backupFolder,
+      if (_brandingOverrides.isNotEmpty) 'brandingOverrides': _brandingOverrides,
     }));
   }
 }

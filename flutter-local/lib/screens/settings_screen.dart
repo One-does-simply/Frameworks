@@ -9,6 +9,7 @@ import '../engine/app_engine.dart';
 import '../engine/settings_store.dart';
 import '../models/ods_app.dart';
 import '../models/ods_app_setting.dart';
+import '../models/ods_branding.dart';
 import '../renderer/snackbar_helper.dart';
 import '../screens/app_tour_dialog.dart';
 import '../screens/user_management_screen.dart';
@@ -281,6 +282,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const Divider(),
                 ],
+
+                // -- Branding --
+                _SectionHeader(label: 'BRANDING'),
+                _BrandingSection(
+                  app: app,
+                  settings: widget.settings,
+                  onChanged: () => setState(() {}),
+                ),
+                const Divider(),
 
                 // -- Data (admin-only in multi-user mode) --
                 if (!engine.isMultiUser || engine.authService.isAdmin) ...[
@@ -558,6 +568,153 @@ class _AppSettingsSectionState extends State<_AppSettingsSection> {
         );
       }).toList(),
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Import target dialog
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Branding section — color picker and corner style
+// ---------------------------------------------------------------------------
+
+class _BrandingSection extends StatefulWidget {
+  final OdsApp app;
+  final SettingsStore settings;
+  final VoidCallback onChanged;
+  const _BrandingSection({required this.app, required this.settings, required this.onChanged});
+
+  @override
+  State<_BrandingSection> createState() => _BrandingSectionState();
+}
+
+class _BrandingSectionState extends State<_BrandingSection> {
+  late String _color;
+  late String _corner;
+
+  @override
+  void initState() {
+    super.initState();
+    final overrides = widget.settings.getBrandingOverrides(widget.app.appName);
+    _color = overrides['primaryColor'] ?? widget.app.branding.primaryColor;
+    _corner = overrides['cornerStyle'] ?? widget.app.branding.cornerStyle;
+  }
+
+  Future<void> _save() async {
+    await widget.settings.setBrandingOverrides(widget.app.appName, {
+      'primaryColor': _color,
+      'cornerStyle': _corner,
+    });
+    widget.onChanged();
+  }
+
+  Future<void> _reset() async {
+    await widget.settings.setBrandingOverrides(widget.app.appName, {});
+    setState(() {
+      _color = widget.app.branding.primaryColor;
+      _corner = widget.app.branding.cornerStyle;
+    });
+    widget.onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasOverrides = widget.settings.getBrandingOverrides(widget.app.appName).isNotEmpty;
+
+    return Column(
+      children: [
+        // Primary color
+        ListTile(
+          leading: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: _parseColor(_color),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.grey.shade400),
+            ),
+          ),
+          title: const Text('Primary Color'),
+          subtitle: Text(_color),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+          onTap: () async {
+            final controller = TextEditingController(text: _color);
+            final newColor = await showDialog<String>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Primary Color'),
+                content: TextField(
+                  controller: controller,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: '#4F46E5',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx, controller.text),
+                    child: const Text('Apply'),
+                  ),
+                ],
+              ),
+            );
+            if (newColor != null && newColor.startsWith('#') && newColor.length == 7) {
+              setState(() => _color = newColor);
+              _save();
+            }
+          },
+        ),
+        // Corner style
+        ListTile(
+          leading: const Icon(Icons.rounded_corner),
+          title: const Text('Corner Style'),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+          trailing: SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'sharp', label: Text('Sharp', style: TextStyle(fontSize: 11))),
+              ButtonSegment(value: 'rounded', label: Text('Round', style: TextStyle(fontSize: 11))),
+              ButtonSegment(value: 'pill', label: Text('Pill', style: TextStyle(fontSize: 11))),
+            ],
+            selected: {_corner},
+            onSelectionChanged: (s) {
+              setState(() => _corner = s.first);
+              _save();
+            },
+            showSelectedIcon: false,
+            style: const ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+        ),
+        // Reset
+        if (hasOverrides)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: _reset,
+                child: const Text('Reset to spec defaults', style: TextStyle(fontSize: 12)),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Color _parseColor(String hex) {
+    try {
+      return Color(int.parse('FF${hex.replaceFirst('#', '')}', radix: 16));
+    } catch (_) {
+      return const Color(0xFF4F46E5);
+    }
   }
 }
 

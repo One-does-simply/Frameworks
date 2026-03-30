@@ -221,8 +221,16 @@ export const useAppStore = create<AppState>()((set, get) => ({
         needsLogin: app.auth.multiUser && !authService.isLoggedIn,
       })
 
-      // Apply branding from the spec
-      applyBranding(app.branding)
+      // Apply branding — merge spec defaults with any saved user overrides
+      const brandingKey = `ods_branding_${app.appName.replace(/[^\w]/g, '_').toLowerCase()}`
+      let effectiveBranding = app.branding
+      try {
+        const saved = JSON.parse(localStorage.getItem(brandingKey) ?? '{}')
+        if (saved.primaryColor || saved.cornerStyle) {
+          effectiveBranding = { ...app.branding, ...saved }
+        }
+      } catch { /* ignore */ }
+      applyBranding(effectiveBranding)
 
       // Run auto-backup in background (best-effort, non-blocking)
       runAutoBackup(app, dataService).catch(() => {})
