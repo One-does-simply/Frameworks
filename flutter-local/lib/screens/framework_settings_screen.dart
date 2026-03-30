@@ -1,7 +1,10 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../engine/framework_auth_service.dart';
 import '../engine/settings_store.dart';
+import 'framework_admin_setup_screen.dart';
 
 /// Framework-level settings screen, accessible from the Welcome/Home screen.
 ///
@@ -120,6 +123,80 @@ class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
                   settings.setBackupFolder(picked);
                   setState(() {});
                 }
+              },
+            ),
+          ],
+          const Divider(),
+
+          // -- Multi-User --
+          _SectionHeader(label: 'MULTI-USER'),
+          SwitchListTile(
+            secondary: const Icon(Icons.people_outline),
+            title: const Text('Multi-User Mode'),
+            subtitle: Text(
+              settings.isMultiUserEnabled
+                  ? 'Enabled — requires login on every launch'
+                  : 'Not needed for most apps. Requires managing users and logging in.',
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+            value: settings.isMultiUserEnabled,
+            onChanged: settings.isMultiUserEnabled
+                ? null // Can't disable once enabled
+                : (v) async {
+                    if (!v) return;
+                    // Confirm
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Enable Multi-User Mode'),
+                        content: const Text(
+                          'This will require a login on every launch. '
+                          'You\'ll create an admin account next.\n\n'
+                          'Multi-user mode cannot be disabled once users exist.\n\n'
+                          'Continue?',
+                        ),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Enable')),
+                        ],
+                      ),
+                    );
+                    if (confirmed != true || !mounted) return;
+
+                    // Enable and initialize auth
+                    await settings.setMultiUserEnabled(true);
+                    final fwAuth = context.read<FrameworkAuthService>();
+                    await fwAuth.initialize();
+
+                    if (!mounted) return;
+                    // Navigate to admin setup
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => FrameworkAdminSetupScreen(
+                          authService: fwAuth,
+                          onSetupComplete: () => Navigator.pop(context),
+                          onCancel: () {
+                            // Revert if they cancel
+                            settings.setMultiUserEnabled(false);
+                            Navigator.pop(context);
+                          },
+                        ),
+                      ),
+                    );
+                    setState(() {});
+                  },
+          ),
+          if (settings.isMultiUserEnabled) ...[
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Logout'),
+              subtitle: const Text('Sign out and return to login screen'),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              onTap: () {
+                final fwAuth = context.read<FrameworkAuthService>();
+                fwAuth.logout();
+                Navigator.pop(context);
               },
             ),
           ],

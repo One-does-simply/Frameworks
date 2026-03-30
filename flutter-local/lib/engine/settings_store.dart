@@ -19,6 +19,8 @@ class SettingsStore extends ChangeNotifier {
   bool _autoBackup = false;
   int _backupRetention = 5;
   String? _backupFolder;
+  bool _isMultiUserEnabled = false;
+  String? _defaultAppId;
 
   /// Per-app branding overrides: appName -> {primaryColor, cornerStyle}
   final Map<String, Map<String, String>> _brandingOverrides = {};
@@ -28,6 +30,8 @@ class SettingsStore extends ChangeNotifier {
   bool get autoBackup => _autoBackup;
   int get backupRetention => _backupRetention;
   String? get backupFolder => _backupFolder;
+  bool get isMultiUserEnabled => _isMultiUserEnabled;
+  String? get defaultAppId => _defaultAppId;
 
   /// Returns true if the tour has already been shown for this app ID.
   bool hasSeenTour(String appId) => _touredAppIds.contains(appId);
@@ -85,6 +89,29 @@ class SettingsStore extends ChangeNotifier {
     await _save();
   }
 
+  /// Enable multi-user mode. Cannot be undone once users exist.
+  Future<void> setMultiUserEnabled(bool enabled) async {
+    if (_isMultiUserEnabled == enabled) return;
+    _isMultiUserEnabled = enabled;
+    notifyListeners();
+    await _save();
+  }
+
+  /// Set the default app for regular users in multi-user mode.
+  Future<void> setDefaultAppId(String? appId) async {
+    if (_defaultAppId == appId) return;
+    _defaultAppId = appId;
+    notifyListeners();
+    await _save();
+  }
+
+  /// Ensure a default app is set. If none configured, sets the given ID.
+  Future<void> ensureDefaultApp(String appId) async {
+    if (_defaultAppId == null) {
+      await setDefaultAppId(appId);
+    }
+  }
+
   Future<File> _getFile() async {
     final dir = await getApplicationDocumentsDirectory();
     return File(p.join(dir.path, _fileName));
@@ -109,6 +136,8 @@ class SettingsStore extends ChangeNotifier {
         _autoBackup = data['autoBackup'] as bool? ?? false;
         _backupRetention = data['backupRetention'] as int? ?? 5;
         _backupFolder = data['backupFolder'] as String?;
+        _isMultiUserEnabled = data['isMultiUserEnabled'] as bool? ?? false;
+        _defaultAppId = data['defaultAppId'] as String?;
         final brandOverrides = data['brandingOverrides'] as Map<String, dynamic>?;
         if (brandOverrides != null) {
           for (final entry in brandOverrides.entries) {
@@ -133,6 +162,8 @@ class SettingsStore extends ChangeNotifier {
       'autoBackup': _autoBackup,
       'backupRetention': _backupRetention,
       if (_backupFolder != null) 'backupFolder': _backupFolder,
+      'isMultiUserEnabled': _isMultiUserEnabled,
+      if (_defaultAppId != null) 'defaultAppId': _defaultAppId,
       if (_brandingOverrides.isNotEmpty) 'brandingOverrides': _brandingOverrides,
     }));
   }

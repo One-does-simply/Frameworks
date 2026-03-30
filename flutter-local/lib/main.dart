@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'debug/debug_panel.dart';
 import 'engine/app_engine.dart';
 import 'engine/backup_manager.dart';
+import 'engine/framework_auth_service.dart';
 import 'engine/code_generator.dart';
 import 'engine/data_exporter.dart';
 import 'engine/data_store.dart';
@@ -25,6 +26,8 @@ import 'screens/app_help_screen.dart';
 import 'screens/app_tour_dialog.dart';
 import 'screens/login_screen.dart';
 import 'screens/ods_about_screen.dart';
+import 'screens/framework_admin_setup_screen.dart';
+import 'screens/framework_login_screen.dart';
 import 'screens/framework_settings_screen.dart';
 import 'screens/quick_build_screen.dart';
 import 'screens/settings_screen.dart';
@@ -46,6 +49,7 @@ void main() {
       providers: [
         ChangeNotifierProvider(create: (_) => AppEngine()),
         ChangeNotifierProvider(create: (_) => SettingsStore()),
+        ChangeNotifierProvider(create: (_) => FrameworkAuthService()),
       ],
       child: const OdsFrameworkApp(),
     ),
@@ -164,6 +168,13 @@ class _OdsFrameworkAppState extends State<OdsFrameworkApp> {
   Future<void> _initSettings() async {
     final settings = context.read<SettingsStore>();
     await settings.initialize();
+
+    // Initialize framework auth if multi-user is enabled
+    if (settings.isMultiUserEnabled) {
+      final fwAuth = context.read<FrameworkAuthService>();
+      await fwAuth.initialize();
+    }
+
     if (mounted) setState(() => _settingsReady = true);
   }
 
@@ -202,8 +213,42 @@ class _OdsFrameworkAppState extends State<OdsFrameworkApp> {
       theme: _buildTheme(_lightScheme(seedColor), fontFamily: fontFamily, borderRadius: borderRadius),
       darkTheme: _buildTheme(_darkScheme(seedColor), fontFamily: fontFamily, borderRadius: borderRadius),
       themeMode: settings.themeMode,
-      home: engine.app == null ? const WelcomeScreen() : const AppShell(),
+      home: _buildHome(engine, settings),
     );
+  }
+
+  Widget _buildHome(AppEngine engine, SettingsStore settings) {
+    // If an app is loaded, show it
+    if (engine.app != null) return const AppShell();
+
+    // Single-user mode: go straight to WelcomeScreen (My Apps)
+    if (!settings.isMultiUserEnabled) return const WelcomeScreen();
+
+    // Multi-user mode: check framework auth state
+    final fwAuth = context.watch<FrameworkAuthService>();
+
+    // Admin not set up yet: show setup screen
+    if (!fwAuth.isAdminSetUp) {
+      return FrameworkAdminSetupScreen(
+        authService: fwAuth,
+        onSetupComplete: () => setState(() {}),
+      );
+    }
+
+    // Not logged in: show login screen
+    if (!fwAuth.isLoggedIn) {
+      return FrameworkLoginScreen(
+        authService: fwAuth,
+        onLoginSuccess: () => setState(() {}),
+      );
+    }
+
+    // Admin logged in: show WelcomeScreen (admin home)
+    if (fwAuth.isAdmin) return const WelcomeScreen();
+
+    // Regular user logged in: auto-load default app
+    // (handled by WelcomeScreen which will auto-launch)
+    return const WelcomeScreen();
   }
 }
 
@@ -876,6 +921,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     return _AppListTile(
                       app: app,
                       isLoading: _isLoading,
+                      isDefault: settings.defaultAppId == app.id,
                       onRun: () => _runSpec(app.specJson),
                       onEditSpec: () => _editApp(app),
                       onEditWithAi: () => _editWithAi(app),
@@ -883,6 +929,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                       onExportData: () => _exportAppData(app),
                       onGenerateCode: () => _generateAppCode(app),
                       onRemove: app.isBundled ? null : () => _removeApp(app),
+                      onSetDefault: settings.isMultiUserEnabled
+                          ? () {
+                              settings.setDefaultAppId(app.id);
+                              setState(() {});
+                            }
+                          : null,
                     );
                   },
                   childCount: _loadedAppsStore.activeApps.length,
@@ -1447,6 +1499,7 @@ class _AddAppButton extends StatelessWidget {
 class _AppListTile extends StatelessWidget {
   final LoadedAppEntry app;
   final bool isLoading;
+  final bool isDefault;
   final VoidCallback onRun;
   final VoidCallback onEditSpec;
   final VoidCallback onEditWithAi;
@@ -1454,10 +1507,12 @@ class _AppListTile extends StatelessWidget {
   final VoidCallback? onRemove;
   final VoidCallback onExportData;
   final VoidCallback onGenerateCode;
+  final VoidCallback? onSetDefault;
 
   const _AppListTile({
     required this.app,
     required this.isLoading,
+    this.isDefault = false,
     required this.onRun,
     required this.onEditSpec,
     required this.onEditWithAi,
@@ -1465,6 +1520,7 @@ class _AppListTile extends StatelessWidget {
     required this.onExportData,
     required this.onGenerateCode,
     this.onRemove,
+    this.onSetDefault,
   });
 
   @override
@@ -1502,11 +1558,32 @@ class _AppListTile extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        app.name,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              app.name,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (isDefault) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.shade700,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                'Default',
+                                style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       if (app.description.isNotEmpty) ...[
                         const SizedBox(height: 2),
@@ -1547,6 +1624,8 @@ class _AppListTile extends StatelessWidget {
                         onExportData();
                       case 'generateCode':
                         onGenerateCode();
+                      case 'setDefault':
+                        onSetDefault?.call();
                       case 'archive':
                         onArchive();
                       case 'remove':
@@ -1592,6 +1671,16 @@ class _AppListTile extends StatelessWidget {
                         contentPadding: EdgeInsets.zero,
                       ),
                     ),
+                    if (onSetDefault != null && !isDefault)
+                      const PopupMenuItem(
+                        value: 'setDefault',
+                        child: ListTile(
+                          leading: Icon(Icons.star_outline),
+                          title: Text('Set as Default'),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
                     const PopupMenuDivider(),
                     const PopupMenuItem(
                       value: 'archive',
@@ -2610,15 +2699,30 @@ class _AppShellState extends State<AppShell> {
               ],
             ],
             const Divider(),
-            ListTile(
-              leading: const Icon(Icons.close),
-              title: const Text('Close App'),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-              onTap: () async {
-                Navigator.pop(context);
-                await engine.reset();
-              },
-            ),
+            // In multi-user mode with framework auth: show Logout instead of Close App for regular users
+            if (settings.isMultiUserEnabled) ...[
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text('Logout'),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await engine.reset();
+                  final fwAuth = context.read<FrameworkAuthService>();
+                  fwAuth.logout();
+                },
+              ),
+            ] else ...[
+              ListTile(
+                leading: const Icon(Icons.close),
+                title: const Text('Close App'),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await engine.reset();
+                },
+              ),
+            ],
           ],
         ),
       ),
