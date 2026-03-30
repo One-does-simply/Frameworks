@@ -21,6 +21,7 @@ class SettingsStore extends ChangeNotifier {
   String? _backupFolder;
   bool _isMultiUserEnabled = false;
   String? _defaultAppId;
+  String _defaultTheme = 'light';
 
   /// Per-app branding overrides: appName -> {primaryColor, cornerStyle}
   final Map<String, Map<String, String>> _brandingOverrides = {};
@@ -32,6 +33,7 @@ class SettingsStore extends ChangeNotifier {
   String? get backupFolder => _backupFolder;
   bool get isMultiUserEnabled => _isMultiUserEnabled;
   String? get defaultAppId => _defaultAppId;
+  String get defaultTheme => _defaultTheme;
 
   /// Returns true if the tour has already been shown for this app ID.
   bool hasSeenTour(String appId) => _touredAppIds.contains(appId);
@@ -112,6 +114,13 @@ class SettingsStore extends ChangeNotifier {
     }
   }
 
+  Future<void> setDefaultTheme(String theme) async {
+    if (_defaultTheme == theme) return;
+    _defaultTheme = theme;
+    notifyListeners();
+    await _save();
+  }
+
   Future<File> _getFile() async {
     final dir = await getApplicationDocumentsDirectory();
     return File(p.join(dir.path, _fileName));
@@ -138,6 +147,7 @@ class SettingsStore extends ChangeNotifier {
         _backupFolder = data['backupFolder'] as String?;
         _isMultiUserEnabled = data['isMultiUserEnabled'] as bool? ?? false;
         _defaultAppId = data['defaultAppId'] as String?;
+        _defaultTheme = data['defaultTheme'] as String? ?? 'light';
         final brandOverrides = data['brandingOverrides'] as Map<String, dynamic>?;
         if (brandOverrides != null) {
           for (final entry in brandOverrides.entries) {
@@ -164,6 +174,7 @@ class SettingsStore extends ChangeNotifier {
       if (_backupFolder != null) 'backupFolder': _backupFolder,
       'isMultiUserEnabled': _isMultiUserEnabled,
       if (_defaultAppId != null) 'defaultAppId': _defaultAppId,
+      'defaultTheme': _defaultTheme,
       if (_brandingOverrides.isNotEmpty) 'brandingOverrides': _brandingOverrides,
     }));
   }

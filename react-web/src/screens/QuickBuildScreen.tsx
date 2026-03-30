@@ -153,6 +153,9 @@ export function QuickBuildScreen() {
         initialAnswers[q.id] = q.default === true
       } else if (q.type === 'field-list') {
         initialFieldLists[q.id] = []
+      } else if (q.id === 'theme') {
+        // Use framework default theme, falling back to template default
+        initialAnswers[q.id] = localStorage.getItem('ods_default_theme') ?? q.default ?? 'light'
       } else if (q.default != null) {
         initialAnswers[q.id] = q.default
       }
@@ -558,21 +561,28 @@ function QuestionField({
       )}
 
       {question.type === 'select' && question.options && (
-        <Select
-          value={(value as string) ?? ''}
-          onValueChange={(v) => onValueChange(v)}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder={question.placeholder ?? 'Select...'} />
-          </SelectTrigger>
-          <SelectContent>
-            {question.options.map((opt) => (
-              <SelectItem key={opt} value={opt}>
-                {opt}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <>
+          <Select
+            value={(value as string) ?? ''}
+            onValueChange={(v) => onValueChange(v)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={question.placeholder ?? 'Select...'} />
+            </SelectTrigger>
+            <SelectContent className="max-h-60">
+              {question.options.map((opt) => (
+                <SelectItem key={opt} value={opt}>
+                  {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Live theme preview for the theme question */}
+          {question.id === 'theme' && value && (
+            <ThemePreview themeName={value as string} />
+          )}
+        </>
       )}
 
       {question.type === 'checkbox' && (
@@ -1213,4 +1223,110 @@ function toCamelCase(input: string): string {
     return w[0].toUpperCase() + w.substring(1).toLowerCase()
   })
   return first + rest.join('')
+}
+
+// ---------------------------------------------------------------------------
+// ThemePreview — shows sample UI elements styled with the selected theme
+// ---------------------------------------------------------------------------
+
+const THEMES_BASE = 'https://one-does-simply.github.io/Specification/Themes'
+
+function ThemePreview({ themeName }: { themeName: string }) {
+  const [colors, setColors] = useState<Record<string, string> | null>(null)
+  const [design, setDesign] = useState<Record<string, string> | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`${THEMES_BASE}/${themeName}.json`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return
+        // Use light variant for the preview
+        const variant = data.light ?? data.dark
+        setColors(variant?.colors ?? null)
+        setDesign(variant?.design ?? null)
+      })
+      .catch(() => {
+        if (!cancelled) { setColors(null); setDesign(null) }
+      })
+    return () => { cancelled = true }
+  }, [themeName])
+
+  if (!colors) return null
+
+  const radius = design?.radiusBox ?? '.5rem'
+  const primary = colors.primary ?? 'oklch(45% .24 277)'
+  const primaryContent = colors.primaryContent ?? 'oklch(93% .034 273)'
+  const secondary = colors.secondary ?? 'oklch(65% .241 354)'
+  const secondaryContent = colors.secondaryContent ?? 'oklch(94% .028 342)'
+  const accent = colors.accent ?? 'oklch(77% .152 182)'
+  const base100 = colors.base100 ?? 'oklch(100% 0 0)'
+  const base200 = colors.base200 ?? 'oklch(98% 0 0)'
+  const base300 = colors.base300 ?? 'oklch(95% 0 0)'
+  const baseContent = colors.baseContent ?? 'oklch(21% .006 286)'
+  const success = colors.success ?? 'oklch(76% .177 163)'
+  const error = colors.error ?? 'oklch(71% .194 13)'
+
+  return (
+    <div
+      className="mt-3 overflow-hidden border"
+      style={{ background: base100, color: baseContent, borderRadius: radius, borderColor: base300 }}
+    >
+      {/* Mini app bar */}
+      <div className="flex items-center gap-2 px-4 py-2" style={{ background: base200, borderBottom: `1px solid ${base300}` }}>
+        <div className="h-2 w-2 rounded-full" style={{ background: primary }} />
+        <span className="text-xs font-semibold" style={{ color: baseContent }}>Preview</span>
+        <span className="flex-1" />
+        <span className="text-[10px]" style={{ color: accent }}>
+          {themeName.charAt(0).toUpperCase() + themeName.slice(1)}
+        </span>
+      </div>
+
+      {/* Content */}
+      <div className="space-y-3 p-4">
+        {/* Sample text */}
+        <div>
+          <div className="text-sm font-semibold" style={{ color: baseContent }}>Sample Heading</div>
+          <div className="text-xs" style={{ color: baseContent, opacity: 0.7 }}>This is how body text will look.</div>
+        </div>
+
+        {/* Sample input */}
+        <div
+          className="px-3 py-1.5 text-xs"
+          style={{ background: base200, border: `1px solid ${base300}`, borderRadius: radius, color: baseContent, opacity: 0.6 }}
+        >
+          Input field...
+        </div>
+
+        {/* Buttons */}
+        <div className="flex gap-2">
+          <div
+            className="px-3 py-1 text-xs font-medium"
+            style={{ background: primary, color: primaryContent, borderRadius: radius }}
+          >
+            Primary
+          </div>
+          <div
+            className="px-3 py-1 text-xs font-medium"
+            style={{ background: secondary, color: secondaryContent, borderRadius: radius }}
+          >
+            Secondary
+          </div>
+          <div
+            className="px-3 py-1 text-xs font-medium"
+            style={{ background: accent, color: colors.accentContent, borderRadius: radius }}
+          >
+            Accent
+          </div>
+        </div>
+
+        {/* Status badges */}
+        <div className="flex gap-2">
+          <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: success, color: colors.successContent }}>Success</span>
+          <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: error, color: colors.errorContent }}>Error</span>
+          <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: colors.warning, color: colors.warningContent }}>Warning</span>
+        </div>
+      </div>
+    </div>
+  )
 }
