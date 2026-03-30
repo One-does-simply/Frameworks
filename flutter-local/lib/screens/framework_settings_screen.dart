@@ -199,6 +199,11 @@ class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
                 Navigator.pop(context);
               },
             ),
+            const Divider(),
+
+            // -- User Management --
+            _SectionHeader(label: 'USERS'),
+            _FrameworkUserList(authService: context.read<FrameworkAuthService>()),
           ],
           const Divider(),
 
@@ -216,6 +221,251 @@ class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Framework user management — inline user list with add/edit/delete
+// ---------------------------------------------------------------------------
+
+class _FrameworkUserList extends StatefulWidget {
+  final FrameworkAuthService authService;
+  const _FrameworkUserList({required this.authService});
+
+  @override
+  State<_FrameworkUserList> createState() => _FrameworkUserListState();
+}
+
+class _FrameworkUserListState extends State<_FrameworkUserList> {
+  List<Map<String, dynamic>> _users = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUsers();
+  }
+
+  Future<void> _loadUsers() async {
+    setState(() => _isLoading = true);
+    final users = await widget.authService.listUsers();
+    if (mounted) setState(() { _users = users; _isLoading = false; });
+  }
+
+  Future<void> _addUser() async {
+    final usernameCtrl = TextEditingController();
+    final displayNameCtrl = TextEditingController();
+    final passwordCtrl = TextEditingController();
+    String selectedRole = 'user';
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Add User'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: usernameCtrl,
+                decoration: const InputDecoration(labelText: 'Username', border: OutlineInputBorder()),
+                autofocus: true,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: displayNameCtrl,
+                decoration: const InputDecoration(labelText: 'Display Name (optional)', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: passwordCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: selectedRole,
+                decoration: const InputDecoration(labelText: 'Role', border: OutlineInputBorder()),
+                items: ['admin', 'user']
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                    .toList(),
+                onChanged: (v) => setDialogState(() => selectedRole = v ?? 'user'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Add')),
+          ],
+        ),
+      ),
+    );
+
+    if (result == true && usernameCtrl.text.trim().isNotEmpty && passwordCtrl.text.isNotEmpty) {
+      await widget.authService.registerUser(
+        username: usernameCtrl.text.trim(),
+        password: passwordCtrl.text,
+        role: selectedRole,
+        displayName: displayNameCtrl.text.trim().isNotEmpty ? displayNameCtrl.text.trim() : null,
+      );
+      _loadUsers();
+    }
+  }
+
+  Future<void> _editUser(Map<String, dynamic> user) async {
+    final displayNameCtrl = TextEditingController(text: user['display_name'] as String? ?? '');
+
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Edit ${user['username']}'),
+        content: TextField(
+          controller: displayNameCtrl,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Display Name', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, displayNameCtrl.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+
+    // Display name editing requires a DB update — currently FrameworkAuthService
+    // doesn't expose updateDisplayName, but we can add a lightweight reset-password
+    // style flow. For now, just show the password reset dialog.
+    if (newName != null) {
+      // TODO: Add updateDisplayName to FrameworkAuthService
+    }
+  }
+
+  Future<void> _resetPassword(Map<String, dynamic> user) async {
+    final controller = TextEditingController();
+    final newPassword = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Reset Password — ${user['username']}'),
+        content: TextField(
+          controller: controller,
+          obscureText: true,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'New Password', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Reset')),
+        ],
+      ),
+    );
+    if (newPassword != null && newPassword.isNotEmpty) {
+      await widget.authService.changePassword(user['_id'] as int, newPassword);
+    }
+  }
+
+  Future<void> _deleteUser(Map<String, dynamic> user) async {
+    if (user['_id'] == widget.authService.currentUserId) return; // Can't delete yourself
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete User'),
+        content: Text('Delete "${user['username']}"? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await widget.authService.deleteUser(user['_id'] as int);
+      _loadUsers();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    if (_isLoading) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return Column(
+      children: [
+        // Add user
+        ListTile(
+          leading: const Icon(Icons.person_add_outlined),
+          title: const Text('Add User'),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+          onTap: _addUser,
+        ),
+        // User list
+        ..._users.map((user) {
+          final username = user['username'] as String? ?? '?';
+          final displayName = user['display_name'] as String? ?? username;
+          final roles = (user['roles'] as List<dynamic>?)?.cast<String>() ?? [];
+          final isAdmin = roles.contains('admin');
+          final isSelf = user['_id'] == widget.authService.currentUserId;
+
+          return ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+            leading: CircleAvatar(
+              radius: 16,
+              backgroundColor: isAdmin ? colorScheme.primary : colorScheme.surfaceContainerHighest,
+              child: Text(
+                displayName[0].toUpperCase(),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: isAdmin ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            title: Row(
+              children: [
+                Text(displayName, style: const TextStyle(fontSize: 14)),
+                if (isSelf) ...[
+                  const SizedBox(width: 6),
+                  Text('(you)', style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant)),
+                ],
+              ],
+            ),
+            subtitle: Text(
+              roles.join(', '),
+              style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.key, size: 18),
+                  tooltip: 'Reset Password',
+                  onPressed: () => _resetPassword(user),
+                ),
+                if (!isSelf)
+                  IconButton(
+                    icon: Icon(Icons.delete_outline, size: 18, color: colorScheme.error),
+                    tooltip: 'Delete',
+                    onPressed: () => _deleteUser(user),
+                  ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Section header
+// ---------------------------------------------------------------------------
 
 class _SectionHeader extends StatelessWidget {
   final String label;
