@@ -204,6 +204,31 @@ class FrameworkAuthService extends ChangeNotifier {
     await db.delete('_ods_fw_users', where: '_id = ?', whereArgs: [userId]);
   }
 
+  /// Update a user's display name and/or roles.
+  Future<bool> updateUser(int userId, {String? displayName, List<String>? roles}) async {
+    final db = _db!;
+    try {
+      if (displayName != null) {
+        await db.update(
+          '_ods_fw_users',
+          {'display_name': displayName},
+          where: '_id = ?',
+          whereArgs: [userId],
+        );
+      }
+      if (roles != null) {
+        await db.delete('_ods_fw_user_roles', where: 'user_id = ?', whereArgs: [userId]);
+        for (final role in roles) {
+          await db.insert('_ods_fw_user_roles', {'user_id': userId, 'role': role});
+        }
+      }
+      return true;
+    } catch (e) {
+      debugPrint('FrameworkAuthService: updateUser failed: $e');
+      return false;
+    }
+  }
+
   /// Change a user's password.
   Future<bool> changePassword(int userId, String newPassword) async {
     final db = _db!;

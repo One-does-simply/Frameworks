@@ -128,23 +128,22 @@ class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
           ],
           const Divider(),
 
-          // -- Multi-User --
-          _SectionHeader(label: 'MULTI-USER'),
+          // -- Users & Multi-User --
+          _SectionHeader(label: 'USERS'),
           SwitchListTile(
             secondary: const Icon(Icons.people_outline),
             title: const Text('Multi-User Mode'),
             subtitle: Text(
               settings.isMultiUserEnabled
                   ? 'Enabled — requires login on every launch'
-                  : 'Not needed for most apps. Requires managing users and logging in.',
+                  : 'Enable to require login, manage users, and restrict access.',
             ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 24),
             value: settings.isMultiUserEnabled,
             onChanged: settings.isMultiUserEnabled
-                ? null // Can't disable once enabled
+                ? null
                 : (v) async {
                     if (!v) return;
-                    // Confirm
                     final confirmed = await showDialog<bool>(
                       context: context,
                       builder: (ctx) => AlertDialog(
@@ -163,13 +162,11 @@ class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
                     );
                     if (confirmed != true || !mounted) return;
 
-                    // Enable and initialize auth
                     await settings.setMultiUserEnabled(true);
                     final fwAuth = context.read<FrameworkAuthService>();
                     await fwAuth.initialize();
 
                     if (!mounted) return;
-                    // Navigate to admin setup
                     await Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -177,7 +174,6 @@ class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
                           authService: fwAuth,
                           onSetupComplete: () => Navigator.pop(context),
                           onCancel: () {
-                            // Revert if they cancel
                             settings.setMultiUserEnabled(false);
                             Navigator.pop(context);
                           },
@@ -188,10 +184,10 @@ class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
                   },
           ),
           if (settings.isMultiUserEnabled) ...[
+            _FrameworkUserList(authService: context.read<FrameworkAuthService>()),
             ListTile(
               leading: const Icon(Icons.logout),
               title: const Text('Logout'),
-              subtitle: const Text('Sign out and return to login screen'),
               contentPadding: const EdgeInsets.symmetric(horizontal: 24),
               onTap: () {
                 final fwAuth = context.read<FrameworkAuthService>();
@@ -199,11 +195,6 @@ class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
                 Navigator.pop(context);
               },
             ),
-            const Divider(),
-
-            // -- User Management --
-            _SectionHeader(label: 'USERS'),
-            _FrameworkUserList(authService: context.read<FrameworkAuthService>()),
           ],
           const Divider(),
 
@@ -214,6 +205,21 @@ class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
             title: const Text('ODS Flutter Local Framework'),
             subtitle: const Text('Vibe Coding with Guardrails'),
             contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+            onTap: () {
+              showAboutDialog(
+                context: context,
+                applicationName: 'One Does Simply',
+                applicationVersion: 'Flutter Local Framework',
+                applicationLegalese: 'Open source — github.com/One-does-simply',
+                children: [
+                  const SizedBox(height: 16),
+                  const Text(
+                    'A local implementation that runs completely on-device. '
+                    'No internet or cloud required. Your data stays on your device.',
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 24),
         ],
@@ -312,28 +318,49 @@ class _FrameworkUserListState extends State<_FrameworkUserList> {
 
   Future<void> _editUser(Map<String, dynamic> user) async {
     final displayNameCtrl = TextEditingController(text: user['display_name'] as String? ?? '');
+    final roles = (user['roles'] as List<dynamic>?)?.cast<String>() ?? [];
+    String selectedRole = roles.contains('admin') ? 'admin' : 'user';
 
-    final newName = await showDialog<String>(
+    final result = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Edit ${user['username']}'),
-        content: TextField(
-          controller: displayNameCtrl,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Display Name', border: OutlineInputBorder()),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text('Edit ${user['username']}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: displayNameCtrl,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Display Name', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: selectedRole,
+                decoration: const InputDecoration(labelText: 'Role', border: OutlineInputBorder()),
+                items: ['admin', 'user']
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                    .toList(),
+                onChanged: (v) => setDialogState(() => selectedRole = v ?? 'user'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, displayNameCtrl.text.trim()), child: const Text('Save')),
-        ],
       ),
     );
 
-    // Display name editing requires a DB update — currently FrameworkAuthService
-    // doesn't expose updateDisplayName, but we can add a lightweight reset-password
-    // style flow. For now, just show the password reset dialog.
-    if (newName != null) {
-      // TODO: Add updateDisplayName to FrameworkAuthService
+    if (result == true) {
+      final newRoles = selectedRole == 'admin' ? ['admin', 'user'] : ['user'];
+      await widget.authService.updateUser(
+        user['_id'] as int,
+        displayName: displayNameCtrl.text.trim().isNotEmpty ? displayNameCtrl.text.trim() : null,
+        roles: newRoles,
+      );
+      _loadUsers();
     }
   }
 
@@ -443,6 +470,11 @@ class _FrameworkUserListState extends State<_FrameworkUserList> {
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  tooltip: 'Edit',
+                  onPressed: () => _editUser(user),
+                ),
                 IconButton(
                   icon: const Icon(Icons.key, size: 18),
                   tooltip: 'Reset Password',
