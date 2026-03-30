@@ -226,11 +226,11 @@ export const useAppStore = create<AppState>()((set, get) => ({
       let effectiveBranding = app.branding
       try {
         const saved = JSON.parse(localStorage.getItem(brandingKey) ?? '{}')
-        if (saved.primaryColor || saved.cornerStyle) {
+        if (saved.theme || saved.mode) {
           effectiveBranding = { ...app.branding, ...saved }
         }
       } catch { /* ignore */ }
-      applyBranding(effectiveBranding)
+      applyBranding(effectiveBranding).catch(() => {})
 
       // Run auto-backup in background (best-effort, non-blocking)
       runAutoBackup(app, dataService).catch(() => {})

@@ -1,124 +1,131 @@
 import type { OdsBranding } from '../models/ods-branding.ts'
 
 /**
- * Applies ODS branding to the document by overriding CSS custom properties.
+ * Applies ODS branding to the document by loading a theme from the catalog
+ * and mapping its design tokens to CSS custom properties.
  *
- * ODS Ethos: The builder provides a single hex color and a couple of style
- * hints. This service derives a full light/dark palette, sets border-radius,
- * loads fonts, and configures the favicon — all from those simple inputs.
+ * ODS Ethos: The builder picks a theme name. This service does everything else.
  */
 
-const DEFAULT_PRIMARY = '#4F46E5'
+// Theme catalog URL — fetched from the ODS GitHub Pages site
+const THEMES_BASE = 'https://one-does-simply.github.io/Specification/Themes'
 
-// ---------------------------------------------------------------------------
-// Hex → OKLCH conversion (simplified, suitable for CSS custom property values)
-// ---------------------------------------------------------------------------
-
-function hexToRgb(hex: string): [number, number, number] {
-  const h = hex.replace('#', '')
-  return [
-    parseInt(h.slice(0, 2), 16) / 255,
-    parseInt(h.slice(2, 4), 16) / 255,
-    parseInt(h.slice(4, 6), 16) / 255,
-  ]
-}
-
-/** Convert linear sRGB to OKLCH (approximate). */
-function rgbToOklch(r: number, g: number, b: number): [number, number, number] {
-  // sRGB → linear
-  const toLinear = (c: number) => c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
-  const lr = toLinear(r)
-  const lg = toLinear(g)
-  const lb = toLinear(b)
-
-  // Linear sRGB → OKLab
-  const l_ = 0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb
-  const m_ = 0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb
-  const s_ = 0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb
-  const l = Math.cbrt(l_)
-  const m = Math.cbrt(m_)
-  const s = Math.cbrt(s_)
-  const L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s
-  const a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s
-  const bOk = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
-
-  // OKLab → OKLCH
-  const C = Math.sqrt(a * a + bOk * bOk)
-  let H = (Math.atan2(bOk, a) * 180) / Math.PI
-  if (H < 0) H += 360
-
-  return [L, C, H]
-}
-
-function hexToOklch(hex: string): string {
-  const [r, g, b] = hexToRgb(hex)
-  const [L, C, H] = rgbToOklch(r, g, b)
-  return `oklch(${L.toFixed(3)} ${C.toFixed(3)} ${H.toFixed(1)})`
-}
-
-/** Generate a lighter variant (for backgrounds, accents). */
-function lighten(hex: string, amount: number): string {
-  const [r, g, b] = hexToRgb(hex)
-  const [L, C, H] = rgbToOklch(r, g, b)
-  return `oklch(${Math.min(1, L + amount).toFixed(3)} ${(C * 0.3).toFixed(3)} ${H.toFixed(1)})`
-}
-
-/** Generate a darker variant. */
-function darken(hex: string, amount: number): string {
-  const [r, g, b] = hexToRgb(hex)
-  const [L, C, H] = rgbToOklch(r, g, b)
-  return `oklch(${Math.max(0, L - amount).toFixed(3)} ${(C * 0.5).toFixed(3)} ${H.toFixed(1)})`
-}
-
-// ---------------------------------------------------------------------------
-// Apply / reset branding
-// ---------------------------------------------------------------------------
+/** Cached theme data to avoid refetching. */
+const themeCache = new Map<string, Record<string, unknown>>()
 
 /** Saved original CSS variable values for restoration on reset. */
 let savedOriginals: Map<string, string> | null = null
 
+// ---------------------------------------------------------------------------
+// Token → CSS variable mapping (DaisyUI → shadcn)
+// ---------------------------------------------------------------------------
+
+const COLOR_MAP: Record<string, string[]> = {
+  primary:          ['--primary', '--ring', '--sidebar-primary', '--sidebar-ring', '--chart-1'],
+  primaryContent:   ['--primary-foreground', '--sidebar-primary-foreground'],
+  secondary:        ['--secondary', '--chart-2'],
+  secondaryContent: ['--secondary-foreground'],
+  accent:           ['--accent', '--sidebar-accent', '--chart-3'],
+  accentContent:    ['--accent-foreground', '--sidebar-accent-foreground'],
+  neutral:          ['--muted'],
+  neutralContent:   ['--muted-foreground'],
+  base100:          ['--background', '--card', '--sidebar'],
+  base200:          ['--popover'],
+  base300:          ['--border', '--input', '--sidebar-border'],
+  baseContent:      ['--foreground', '--card-foreground', '--popover-foreground', '--sidebar-foreground'],
+  info:             ['--chart-4'],
+  success:          ['--chart-5'],
+  error:            ['--destructive'],
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/** Load a theme JSON from the catalog (cached). */
+async function loadTheme(themeName: string): Promise<Record<string, unknown> | null> {
+  if (themeCache.has(themeName)) return themeCache.get(themeName)!
+  try {
+    const resp = await fetch(`${THEMES_BASE}/${themeName}.json`)
+    if (!resp.ok) return null
+    const data = await resp.json()
+    themeCache.set(themeName, data)
+    return data
+  } catch {
+    return null
+  }
+}
+
+/** Resolve which mode to use (light/dark/system → light or dark). */
+function resolveMode(mode: string): 'light' | 'dark' {
+  if (mode === 'light' || mode === 'dark') return mode
+  // system — check OS preference
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
 /**
- * Apply branding from an ODS spec to the document. Overrides CSS custom
- * properties for colors, radius, and font. Sets favicon if provided.
+ * Apply branding from an ODS spec to the document.
+ * Loads the theme, resolves the mode, maps tokens to CSS variables.
  */
-export function applyBranding(branding: OdsBranding): void {
+export async function applyBranding(branding: OdsBranding): Promise<void> {
   const root = document.documentElement
   const style = root.style
 
-  // Save originals on first call so we can restore them later
+  // Save originals on first call
   if (!savedOriginals) {
     savedOriginals = new Map()
     const computed = getComputedStyle(root)
-    for (const prop of CSS_PROPS_TO_OVERRIDE) {
-      savedOriginals.set(prop, computed.getPropertyValue(prop))
+    for (const props of Object.values(COLOR_MAP)) {
+      for (const prop of props) {
+        savedOriginals.set(prop, computed.getPropertyValue(prop))
+      }
+    }
+    savedOriginals.set('--radius', getComputedStyle(root).getPropertyValue('--radius'))
+    savedOriginals.set('--font-sans', getComputedStyle(root).getPropertyValue('--font-sans'))
+  }
+
+  // Load theme
+  const themeData = await loadTheme(branding.theme || 'light')
+  if (!themeData) return
+
+  // Resolve mode
+  const mode = resolveMode(branding.mode)
+  const variant = themeData[mode] as Record<string, unknown> | undefined
+  if (!variant) return
+
+  const colors = variant['colors'] as Record<string, string> | undefined
+  const design = variant['design'] as Record<string, string> | undefined
+  if (!colors) return
+
+  // Apply token overrides from spec
+  const mergedColors = { ...colors, ...(branding.overrides ?? {}) }
+
+  // Map color tokens to CSS variables
+  for (const [token, cssProps] of Object.entries(COLOR_MAP)) {
+    const value = mergedColors[token]
+    if (value) {
+      for (const prop of cssProps) {
+        style.setProperty(prop, value)
+      }
     }
   }
 
-  const primary = branding.primaryColor || DEFAULT_PRIMARY
-  const accent = branding.accentColor || primary
+  // Apply dark class based on mode
+  if (mode === 'dark') {
+    root.classList.add('dark')
+  } else {
+    root.classList.remove('dark')
+  }
 
-  // Primary color
-  const primaryOklch = hexToOklch(primary)
-  style.setProperty('--primary', primaryOklch)
-  style.setProperty('--ring', primaryOklch)
-  style.setProperty('--sidebar-primary', primaryOklch)
-  style.setProperty('--sidebar-ring', primaryOklch)
-  style.setProperty('--chart-1', primaryOklch)
-
-  // Accent (derived from accent color or primary)
-  style.setProperty('--accent', lighten(accent, 0.55))
-  style.setProperty('--accent-foreground', darken(accent, 0.15))
-  style.setProperty('--sidebar-accent', lighten(accent, 0.55))
-  style.setProperty('--sidebar-accent-foreground', darken(accent, 0.15))
-
-  // Corner style → radius
-  const radiusMap = { sharp: '0.25rem', rounded: '0.625rem', pill: '1.5rem' }
-  style.setProperty('--radius', radiusMap[branding.cornerStyle] ?? '0.625rem')
+  // Design tokens
+  if (design) {
+    const radiusBox = branding.overrides?.radiusBox ?? design['radiusBox']
+    if (radiusBox) style.setProperty('--radius', radiusBox)
+  }
 
   // Font family
   if (branding.fontFamily) {
     style.setProperty('--font-sans', `'${branding.fontFamily}', sans-serif`)
-    style.setProperty('--font-heading', `'${branding.fontFamily}', sans-serif`)
     root.style.fontFamily = `'${branding.fontFamily}', system-ui, sans-serif`
   }
 
@@ -132,8 +139,6 @@ export function applyBranding(branding: OdsBranding): void {
     }
     link.href = branding.favicon
   }
-
-  // Header style is handled by the AppShell component reading branding.headerStyle
 }
 
 /** Reset all branding overrides back to the original CSS values. */
@@ -143,13 +148,19 @@ export function resetBranding(): void {
   for (const [prop, value] of savedOriginals) {
     style.setProperty(prop, value)
   }
-  // Reset font
   document.documentElement.style.fontFamily = ''
+  document.documentElement.classList.remove('dark')
   savedOriginals = null
 }
 
-const CSS_PROPS_TO_OVERRIDE = [
-  '--primary', '--ring', '--sidebar-primary', '--sidebar-ring',
-  '--accent', '--accent-foreground', '--sidebar-accent', '--sidebar-accent-foreground',
-  '--radius', '--font-sans', '--font-heading', '--chart-1',
-]
+/** Get the list of available themes from the catalog. */
+export async function loadThemeCatalog(): Promise<Array<{ name: string; displayName: string; nativeScheme: string; tags: string[] }>> {
+  try {
+    const resp = await fetch(`${THEMES_BASE}/catalog.json`)
+    if (!resp.ok) return []
+    const data = await resp.json()
+    return data.themes ?? []
+  } catch {
+    return []
+  }
+}

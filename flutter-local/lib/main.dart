@@ -193,19 +193,18 @@ class _OdsFrameworkAppState extends State<OdsFrameworkApp> {
     }
 
     // Derive theme from app branding (if loaded) with user overrides
+    // TODO: Full theme resolver (Phase 3) will replace this seed-color approach
     final branding = engine.app?.branding;
-    final overrides = engine.app != null
+    final userOverrides = engine.app != null
         ? settings.getBrandingOverrides(engine.app!.appName)
         : <String, String>{};
-    final overrideColor = overrides['primaryColor'];
-    final overrideCorner = overrides['cornerStyle'];
-    final seedColor = overrideColor != null
-        ? Color(int.parse('FF${overrideColor.replaceFirst('#', '')}', radix: 16))
-        : branding?.primaryColorValue;
+    final primaryOverride = userOverrides['theme'] ?? branding?.overrides['primary'];
+    Color? seedColor;
+    if (primaryOverride != null && primaryOverride.startsWith('#')) {
+      try { seedColor = Color(int.parse('FF${primaryOverride.replaceFirst('#', '')}', radix: 16)); } catch (_) {}
+    }
     final fontFamily = branding?.fontFamily;
-    final borderRadius = overrideCorner != null
-        ? (overrideCorner == 'sharp' ? 4.0 : overrideCorner == 'pill' ? 24.0 : 12.0)
-        : branding?.borderRadiusValue ?? 12.0;
+    final borderRadius = 12.0; // Will be resolved from theme tokens in Phase 3
 
     return MaterialApp(
       title: appName,

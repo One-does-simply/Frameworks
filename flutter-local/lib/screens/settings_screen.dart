@@ -782,21 +782,26 @@ class _BrandingSection extends StatefulWidget {
 }
 
 class _BrandingSectionState extends State<_BrandingSection> {
-  late String _color;
-  late String _corner;
+  late String _theme;
+
+  static const _themeNames = [
+    'light','dark','cupcake','bumblebee','emerald','corporate','synthwave','retro',
+    'cyberpunk','valentine','halloween','garden','forest','aqua','lofi','pastel',
+    'fantasy','wireframe','black','luxury','dracula','cmyk','autumn','business',
+    'acid','lemonade','night','coffee','winter','dim','nord','sunset',
+    'caramellatte','abyss','silk',
+  ];
 
   @override
   void initState() {
     super.initState();
     final overrides = widget.settings.getBrandingOverrides(widget.app.appName);
-    _color = overrides['primaryColor'] ?? widget.app.branding.primaryColor;
-    _corner = overrides['cornerStyle'] ?? widget.app.branding.cornerStyle;
+    _theme = overrides['theme'] ?? widget.app.branding.theme;
   }
 
   Future<void> _save() async {
     await widget.settings.setBrandingOverrides(widget.app.appName, {
-      'primaryColor': _color,
-      'cornerStyle': _corner,
+      'theme': _theme,
     });
     widget.onChanged();
   }
@@ -804,8 +809,7 @@ class _BrandingSectionState extends State<_BrandingSection> {
   Future<void> _reset() async {
     await widget.settings.setBrandingOverrides(widget.app.appName, {});
     setState(() {
-      _color = widget.app.branding.primaryColor;
-      _corner = widget.app.branding.cornerStyle;
+      _theme = widget.app.branding.theme;
     });
     widget.onChanged();
   }
@@ -816,73 +820,24 @@ class _BrandingSectionState extends State<_BrandingSection> {
 
     return Column(
       children: [
-        // Primary color
+        // Theme selector
         ListTile(
-          leading: Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: _parseColor(_color),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.grey.shade400),
-            ),
-          ),
-          title: const Text('Primary Color'),
-          subtitle: Text(_color),
+          leading: const Icon(Icons.palette_outlined),
+          title: const Text('Theme'),
           contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-          onTap: () async {
-            final controller = TextEditingController(text: _color);
-            final newColor = await showDialog<String>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Primary Color'),
-                content: TextField(
-                  controller: controller,
-                  autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: '#4F46E5',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Cancel'),
-                  ),
-                  FilledButton(
-                    onPressed: () => Navigator.pop(ctx, controller.text),
-                    child: const Text('Apply'),
-                  ),
-                ],
-              ),
-            );
-            if (newColor != null && newColor.startsWith('#') && newColor.length == 7) {
-              setState(() => _color = newColor);
-              _save();
-            }
-          },
-        ),
-        // Corner style
-        ListTile(
-          leading: const Icon(Icons.rounded_corner),
-          title: const Text('Corner Style'),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-          trailing: SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'sharp', label: Text('Sharp', style: TextStyle(fontSize: 11))),
-              ButtonSegment(value: 'rounded', label: Text('Round', style: TextStyle(fontSize: 11))),
-              ButtonSegment(value: 'pill', label: Text('Pill', style: TextStyle(fontSize: 11))),
-            ],
-            selected: {_corner},
-            onSelectionChanged: (s) {
-              setState(() => _corner = s.first);
-              _save();
+          trailing: DropdownButton<String>(
+            value: _themeNames.contains(_theme) ? _theme : 'light',
+            underline: const SizedBox.shrink(),
+            items: _themeNames.map((t) => DropdownMenuItem(
+              value: t,
+              child: Text(t[0].toUpperCase() + t.substring(1), style: const TextStyle(fontSize: 13)),
+            )).toList(),
+            onChanged: (v) {
+              if (v != null) {
+                setState(() => _theme = v);
+                _save();
+              }
             },
-            showSelectedIcon: false,
-            style: const ButtonStyle(
-              visualDensity: VisualDensity.compact,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
           ),
         ),
         // Reset
@@ -899,14 +854,6 @@ class _BrandingSectionState extends State<_BrandingSection> {
           ),
       ],
     );
-  }
-
-  Color _parseColor(String hex) {
-    try {
-      return Color(int.parse('FF${hex.replaceFirst('#', '')}', radix: 16));
-    } catch (_) {
-      return const Color(0xFF4F46E5);
-    }
   }
 }
 

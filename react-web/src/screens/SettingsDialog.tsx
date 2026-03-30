@@ -55,20 +55,19 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const savedOverrides = (() => {
     try { return JSON.parse(localStorage.getItem(brandingKey) ?? '{}') } catch { return {} }
   })() as Partial<OdsBranding>
-  const [brandColor, setBrandColor] = useState(savedOverrides.primaryColor ?? app.branding.primaryColor)
-  const [brandCorner, setBrandCorner] = useState(savedOverrides.cornerStyle ?? app.branding.cornerStyle)
+  const [selectedTheme, setSelectedTheme] = useState(savedOverrides.theme ?? app.branding.theme)
 
-  function applyBrandingOverride(color: string, corner: string) {
-    const overrides = { primaryColor: color, cornerStyle: corner as OdsBranding['cornerStyle'] }
+  function applyThemeOverride(themeName: string) {
+    setSelectedTheme(themeName)
+    const overrides = { theme: themeName }
     localStorage.setItem(brandingKey, JSON.stringify(overrides))
-    applyBranding({ ...app.branding, ...overrides })
+    applyBranding({ ...app.branding, ...overrides }).catch(() => {})
   }
 
   function resetBrandingOverride() {
     localStorage.removeItem(brandingKey)
-    setBrandColor(app.branding.primaryColor)
-    setBrandCorner(app.branding.cornerStyle)
-    applyBranding(app.branding)
+    setSelectedTheme(app.branding.theme)
+    applyBranding(app.branding).catch(() => {})
   }
 
   // Theme mode
@@ -226,46 +225,25 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             </span>
           </div>
 
-          {/* Primary color */}
+          {/* Theme selector */}
           <div className="flex items-center justify-between gap-4">
-            <Label>Primary Color</Label>
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={brandColor}
-                onChange={(e) => {
-                  setBrandColor(e.target.value)
-                  applyBrandingOverride(e.target.value, brandCorner)
-                }}
-                className="h-8 w-10 cursor-pointer rounded border border-input bg-transparent"
-              />
-              <span className="text-xs font-mono text-muted-foreground w-16">{brandColor}</span>
-            </div>
-          </div>
-
-          {/* Corner style */}
-          <div className="flex items-center justify-between gap-4">
-            <Label>Corner Style</Label>
-            <Select
-              value={brandCorner}
-              onValueChange={(v) => {
-                setBrandCorner(v)
-                applyBrandingOverride(brandColor, v)
-              }}
-            >
-              <SelectTrigger className="w-28">
+            <Label>Theme</Label>
+            <Select value={selectedTheme} onValueChange={applyThemeOverride}>
+              <SelectTrigger className="w-40">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="rounded">Rounded</SelectItem>
-                <SelectItem value="sharp">Sharp</SelectItem>
-                <SelectItem value="pill">Pill</SelectItem>
+              <SelectContent className="max-h-60">
+                {['light','dark','cupcake','bumblebee','emerald','corporate','synthwave','retro','cyberpunk','valentine','halloween','garden','forest','aqua','lofi','pastel','fantasy','wireframe','black','luxury','dracula','cmyk','autumn','business','acid','lemonade','night','coffee','winter','dim','nord','sunset','caramellatte','abyss','silk'].map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
           {/* Reset branding */}
-          {(savedOverrides.primaryColor || savedOverrides.cornerStyle) && (
+          {savedOverrides.theme && (
             <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={resetBrandingOverride}>
               Reset to spec defaults
             </Button>
