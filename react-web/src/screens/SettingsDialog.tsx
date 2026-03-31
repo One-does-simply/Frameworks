@@ -59,6 +59,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [selectedTheme, setSelectedTheme] = useState(savedOverrides.theme ?? app.branding.theme)
   const [customizeOpen, setCustomizeOpen] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewMode, setPreviewMode] = useState<'light' | 'dark'>('light')
   const [themeDefaults, setThemeDefaults] = useState<Record<string, string>>({})
   const [tokenOverrides, setTokenOverrides] = useState<Record<string, string>>(
     savedOverrides.overrides ?? app.branding.overrides ?? {}
@@ -452,9 +453,24 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Theme Preview: {selectedTheme.charAt(0).toUpperCase() + selectedTheme.slice(1)}</DialogTitle>
-          <DialogDescription>Every design token labeled so you can see what each one controls.</DialogDescription>
+          <DialogDescription>Every design token labeled. Toggle light/dark to see both variants.</DialogDescription>
         </DialogHeader>
-        <ThemePreviewPanel colors={{...themeDefaults, ...tokenOverrides}} />
+        <div className="flex gap-1 rounded-lg border p-0.5 w-fit">
+          {(['light', 'dark'] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setPreviewMode(m)}
+              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                previewMode === m
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {m.charAt(0).toUpperCase() + m.slice(1)}
+            </button>
+          ))}
+        </div>
+        <ThemePreviewPanel themeName={selectedTheme} mode={previewMode} overrides={tokenOverrides} />
       </DialogContent>
     </Dialog>
     </>
@@ -465,7 +481,18 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 // Theme Preview Panel — mock app page showing every token
 // ---------------------------------------------------------------------------
 
-function ThemePreviewPanel({ colors }: { colors: Record<string, string> }) {
+function ThemePreviewPanel({ themeName, mode, overrides }: { themeName: string; mode: 'light' | 'dark'; overrides: Record<string, string> }) {
+  const [colors, setColors] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    loadTheme(themeName).then((data) => {
+      if (!data) return
+      const variant = data[mode] as Record<string, unknown> | undefined
+      const themeColors = variant?.['colors'] as Record<string, string> | undefined
+      if (themeColors) setColors({ ...themeColors, ...overrides })
+    }).catch(() => {})
+  }, [themeName, mode, overrides])
+
   const c = (token: string, fallback: string) => colors[token] || fallback
 
   const primary = c('primary', 'oklch(45% .24 277)')
