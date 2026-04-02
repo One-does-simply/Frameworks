@@ -39,7 +39,9 @@ import {
   GripVertical,
   Pencil,
   Check,
+  Palette,
 } from 'lucide-react'
+import { loadThemeCatalog } from '@/engine/branding-service.ts'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -105,6 +107,12 @@ export function QuickBuildScreen() {
   const [renderedSpec, setRenderedSpec] = useState<Record<string, unknown> | null>(null)
   const [reviewTexts, setReviewTexts] = useState<ReviewableText[] | null>(null)
   const [reviewValues, setReviewValues] = useState<Record<string, string>>({})
+
+  // Phase 2.5: Theme selection
+  const [inThemePhase, setInThemePhase] = useState(false)
+  const [selectedTheme, setSelectedTheme] = useState('light')
+  const [colorOverrides, setColorOverrides] = useState<Record<string, string>>({})
+  const [themeCatalog, setThemeCatalog] = useState<Array<{ name: string; displayName: string }> | null>(null)
 
   // Saving
   const [saving, setSaving] = useState(false)
@@ -187,34 +195,6 @@ export function QuickBuildScreen() {
     return true
   }
 
-  function renderTemplate() {
-    setRendering(true)
-    setRenderError(null)
-
-    try {
-      const context: Record<string, unknown> = { ...answers }
-      for (const [key, value] of Object.entries(fieldLists)) {
-        context[key] = value
-      }
-
-      const templateBody = templateJson!['template']
-      const rendered = render(templateBody, context) as Record<string, unknown>
-
-      // Extract reviewable texts and move to Phase 3.
-      const texts = extractReviewableTexts(rendered)
-      const initialValues: Record<string, string> = {}
-      texts.forEach((t, i) => { initialValues[String(i)] = t.value })
-
-      setRenderedSpec(rendered)
-      setReviewTexts(texts)
-      setReviewValues(initialValues)
-      setRendering(false)
-    } catch (e) {
-      setRendering(false)
-      setRenderError(`Failed to build app: ${e instanceof Error ? e.message : String(e)}`)
-    }
-  }
-
   // -------------------------------------------------------------------------
   // Phase 3: Finish
   // -------------------------------------------------------------------------
@@ -257,11 +237,6 @@ export function QuickBuildScreen() {
     }
   }
 
-  function backToWizard() {
-    setRenderedSpec(null)
-    setReviewTexts(null)
-  }
-
   // -------------------------------------------------------------------------
   // Answer updaters
   // -------------------------------------------------------------------------
@@ -278,12 +253,77 @@ export function QuickBuildScreen() {
   }
 
   // -------------------------------------------------------------------------
+  // Phase 2.5: Theme selection
+  // -------------------------------------------------------------------------
+
+  async function goToThemePhase() {
+    const catalog = await loadThemeCatalog()
+    const themeFromAnswers = (answers['theme'] as string) ?? localStorage.getItem('ods_default_theme') ?? 'light'
+    setThemeCatalog(catalog)
+    setSelectedTheme(themeFromAnswers)
+    setColorOverrides({})
+    setInThemePhase(true)
+  }
+
+  function backToWizardFromTheme() {
+    setInThemePhase(false)
+    setThemeCatalog(null)
+    setColorOverrides({})
+  }
+
+  function backToTheme() {
+    setRenderedSpec(null)
+    setReviewTexts(null)
+    setInThemePhase(true)
+  }
+
+  function continueFromTheme() {
+    // Inject theme into answers
+    setAnswers((prev) => ({ ...prev, theme: selectedTheme }))
+
+    // Render the template then inject branding
+    setRendering(true)
+    setRenderError(null)
+    try {
+      const context: Record<string, unknown> = { ...answers, theme: selectedTheme }
+      for (const [key, value] of Object.entries(fieldLists)) {
+        context[key] = value
+      }
+      const templateBody = templateJson!['template']
+      const rendered = render(templateBody, context) as Record<string, unknown>
+
+      // Inject branding
+      const branding = (rendered['branding'] as Record<string, unknown>) ?? {}
+      branding['theme'] = selectedTheme
+      branding['mode'] = 'system'
+      if (Object.keys(colorOverrides).length > 0) {
+        branding['overrides'] = { ...colorOverrides }
+      }
+      rendered['branding'] = branding
+
+      const texts = extractReviewableTexts(rendered)
+      const initialValues: Record<string, string> = {}
+      texts.forEach((t, i) => { initialValues[String(i)] = t.value })
+
+      setRenderedSpec(rendered)
+      setReviewTexts(texts)
+      setReviewValues(initialValues)
+      setInThemePhase(false)
+      setRendering(false)
+    } catch (e) {
+      setRendering(false)
+      setRenderError(`Failed to build app: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // Determine phase
   // -------------------------------------------------------------------------
 
   const inTextReview = reviewTexts != null
-  const inWizard = questions != null && !inTextReview
-  const title = inTextReview ? 'Review & Customize' : templateName ?? 'Quick Build'
+  const inTheme = inThemePhase && !inTextReview
+  const inWizard = questions != null && !inTextReview && !inTheme
+  const title = inTextReview ? 'Review & Customize' : inTheme ? 'Choose a Theme' : templateName ?? 'Quick Build'
 
   // -------------------------------------------------------------------------
   // Render
@@ -297,7 +337,8 @@ export function QuickBuildScreen() {
           variant="ghost"
           size="icon-sm"
           onClick={() => {
-            if (inTextReview) backToWizard()
+            if (inTextReview) backToTheme()
+            else if (inTheme) backToWizardFromTheme()
             else if (inWizard) { setQuestions(null); setTemplateJson(null) }
             else navigate('/admin')
           }}
@@ -317,27 +358,39 @@ export function QuickBuildScreen() {
               onFinish={finishWithSpec}
               saving={saving}
             />
-          : inWizard
-            ? <WizardPhase
-                questions={questions}
-                answers={answers}
-                fieldLists={fieldLists}
-                onSetAnswer={setAnswer}
-                onUpdateFieldList={updateFieldList}
-                onBuild={renderTemplate}
-                canBuild={validateRequired()}
+          : inTheme
+            ? <ThemePhase
+                catalog={themeCatalog}
+                selectedTheme={selectedTheme}
+                colorOverrides={colorOverrides}
+                onSelectTheme={setSelectedTheme}
+                onOverrideChange={(token: string, value: string) => setColorOverrides(prev => ({ ...prev, [token]: value }))}
+                onResetOverride={(token: string) => setColorOverrides(prev => { const next = { ...prev }; delete next[token]; return next })}
+                onContinue={continueFromTheme}
                 rendering={rendering}
                 renderError={renderError}
-                onAddField={setAddFieldFor}
-                onEditField={setEditFieldFor}
               />
-            : <CatalogPhase
-                catalog={catalog}
-                loading={loadingCatalog}
-                error={catalogError}
-                onSelect={selectTemplate}
-                onRetry={loadCatalog}
-              />
+            : inWizard
+              ? <WizardPhase
+                  questions={questions}
+                  answers={answers}
+                  fieldLists={fieldLists}
+                  onSetAnswer={setAnswer}
+                  onUpdateFieldList={updateFieldList}
+                  onBuild={goToThemePhase}
+                  canBuild={validateRequired()}
+                  rendering={rendering}
+                  renderError={renderError}
+                  onAddField={setAddFieldFor}
+                  onEditField={setEditFieldFor}
+                />
+              : <CatalogPhase
+                  catalog={catalog}
+                  loading={loadingCatalog}
+                  error={catalogError}
+                  onSelect={selectTemplate}
+                  onRetry={loadCatalog}
+                />
         }
       </div>
 
@@ -483,7 +536,7 @@ function WizardPhase({
   return (
     <div className="mx-auto flex max-w-2xl flex-col p-6">
       <div className="flex-1 space-y-6">
-        {questions.map((q) => (
+        {questions.filter((q) => q.id !== 'theme').map((q) => (
           <QuestionField
             key={q.id}
             question={q}
@@ -838,6 +891,305 @@ function TextReviewPhase({
           Looks Good — Launch App
         </Button>
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2.5: Theme Selection
+// ---------------------------------------------------------------------------
+
+function ThemePhase({
+  catalog,
+  selectedTheme,
+  colorOverrides,
+  onSelectTheme,
+  onOverrideChange,
+  onResetOverride,
+  onContinue,
+  rendering,
+  renderError,
+}: {
+  catalog: Array<{ name: string; displayName: string }> | null
+  selectedTheme: string
+  colorOverrides: Record<string, string>
+  onSelectTheme: (theme: string) => void
+  onOverrideChange: (token: string, value: string) => void
+  onResetOverride: (token: string) => void
+  onContinue: () => void
+  rendering: boolean
+  renderError: string | null
+}) {
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex min-h-0 flex-1">
+        {/* Left pane — scrollable theme list */}
+        <div className="flex w-52 shrink-0 flex-col border-r">
+          <div className="px-3 pt-3 pb-2 text-sm font-semibold">Themes</div>
+          <div className="flex-1 space-y-1 overflow-y-auto px-2 pb-2">
+            {(catalog ?? []).map((entry) => (
+              <ThemeCard
+                key={entry.name}
+                themeName={entry.name}
+                displayName={entry.displayName}
+                isSelected={entry.name === selectedTheme}
+                onSelect={() => onSelectTheme(entry.name)}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Right pane — preview + color customization */}
+        <div className="flex-1 overflow-y-auto p-4">
+          <ThemePreviewDual themeName={selectedTheme} overrides={colorOverrides} />
+
+          <h3 className="mt-4 mb-2 text-sm font-semibold">Customize Colors</h3>
+          <div className="space-y-1.5">
+            <ColorRow label="Primary" token="primary" themeName={selectedTheme} override={colorOverrides['primary']} onChange={(v) => onOverrideChange('primary', v)} onReset={() => onResetOverride('primary')} />
+            <ColorRow label="Secondary" token="secondary" themeName={selectedTheme} override={colorOverrides['secondary']} onChange={(v) => onOverrideChange('secondary', v)} onReset={() => onResetOverride('secondary')} />
+            <ColorRow label="Accent" token="accent" themeName={selectedTheme} override={colorOverrides['accent']} onChange={(v) => onOverrideChange('accent', v)} onReset={() => onResetOverride('accent')} />
+            <ColorRow label="Background" token="base100" themeName={selectedTheme} override={colorOverrides['base100']} onChange={(v) => onOverrideChange('base100', v)} onReset={() => onResetOverride('base100')} />
+            <ColorRow label="Text" token="baseContent" themeName={selectedTheme} override={colorOverrides['baseContent']} onChange={(v) => onOverrideChange('baseContent', v)} onReset={() => onResetOverride('baseContent')} />
+            <ColorRow label="Error" token="error" themeName={selectedTheme} override={colorOverrides['error']} onChange={(v) => onOverrideChange('error', v)} onReset={() => onResetOverride('error')} />
+          </div>
+
+          {renderError && (
+            <div className="mt-3 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {renderError}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="border-t px-4 py-3">
+        <Button className="w-full" onClick={onContinue} disabled={rendering}>
+          {rendering ? (
+            <Loader2 className="mr-2 size-4 animate-spin" />
+          ) : (
+            <ChevronRight className="mr-2 size-4" />
+          )}
+          {rendering ? 'Building...' : 'Continue'}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function ThemeCard({
+  themeName,
+  displayName,
+  isSelected,
+  onSelect,
+}: {
+  themeName: string
+  displayName: string
+  isSelected: boolean
+  onSelect: () => void
+}) {
+  const [colors, setColors] = useState<Record<string, string> | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`${THEMES_BASE}/${themeName}.json`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return
+        const variant = data.light ?? data.dark
+        setColors(variant?.colors ?? null)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [themeName])
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
+        isSelected
+          ? 'border-primary bg-primary/5 font-semibold ring-1 ring-primary'
+          : 'border-border hover:border-primary/50 hover:bg-muted/50'
+      }`}
+    >
+      {colors && (
+        <div className="flex gap-0.5">
+          <span className="size-3 rounded-full border border-black/10" style={{ background: colors.primary }} />
+          <span className="size-3 rounded-full border border-black/10" style={{ background: colors.secondary }} />
+          <span className="size-3 rounded-full border border-black/10" style={{ background: colors.accent }} />
+        </div>
+      )}
+      <span className="flex-1 truncate">{displayName}</span>
+      {isSelected && <Check className="size-3.5 shrink-0 text-primary" />}
+    </button>
+  )
+}
+
+function ThemePreviewDual({ themeName, overrides }: { themeName: string; overrides: Record<string, string> }) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <div>
+        <div className="mb-1 text-xs font-medium text-muted-foreground">Light</div>
+        <ThemePreviewFull themeName={themeName} overrides={overrides} mode="light" />
+      </div>
+      <div>
+        <div className="mb-1 text-xs font-medium text-muted-foreground">Dark</div>
+        <ThemePreviewFull themeName={themeName} overrides={overrides} mode="dark" />
+      </div>
+    </div>
+  )
+}
+
+function ThemePreviewFull({ themeName, overrides, mode }: { themeName: string; overrides: Record<string, string>; mode: 'light' | 'dark' }) {
+  const [themeData, setThemeData] = useState<Record<string, unknown> | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`${THEMES_BASE}/${themeName}.json`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) setThemeData(data)
+      })
+      .catch(() => { if (!cancelled) setThemeData(null) })
+    return () => { cancelled = true }
+  }, [themeName])
+
+  if (!themeData) return null
+
+  const variant = (themeData[mode] ?? themeData.light ?? themeData.dark) as Record<string, unknown> | undefined
+  const colors = (variant?.['colors'] as Record<string, string>) ?? null
+  const design = (variant?.['design'] ?? (themeData['design'] as Record<string, string>)) as Record<string, string> | null
+
+  if (!colors) return null
+
+  // Merge overrides
+  const c = { ...colors, ...overrides }
+
+  const radius = design?.radiusBox ?? '.5rem'
+  const primary = c.primary ?? 'oklch(45% .24 277)'
+  const primaryContent = c.primaryContent ?? 'oklch(93% .034 273)'
+  const secondary = c.secondary ?? 'oklch(65% .241 354)'
+  const secondaryContent = c.secondaryContent ?? 'oklch(94% .028 342)'
+  const accent = c.accent ?? 'oklch(77% .152 182)'
+  const base100 = c.base100 ?? 'oklch(100% 0 0)'
+  const base200 = c.base200 ?? 'oklch(98% 0 0)'
+  const base300 = c.base300 ?? 'oklch(95% 0 0)'
+  const baseContent = c.baseContent ?? 'oklch(21% .006 286)'
+  const success = c.success ?? 'oklch(76% .177 163)'
+  const error = c.error ?? 'oklch(71% .194 13)'
+
+  return (
+    <div className="overflow-hidden border" style={{ background: base100, color: baseContent, borderRadius: radius, borderColor: base300 }}>
+      {/* Mini app bar */}
+      <div className="flex items-center gap-2 px-4 py-2" style={{ background: base200, borderBottom: `1px solid ${base300}` }}>
+        <div className="h-2 w-2 rounded-full" style={{ background: primary }} />
+        <span className="text-xs font-semibold" style={{ color: baseContent }}>Preview</span>
+        <span className="flex-1" />
+        <span className="text-[10px]" style={{ color: accent }}>
+          {themeName.charAt(0).toUpperCase() + themeName.slice(1)}
+        </span>
+      </div>
+
+      {/* Content */}
+      <div className="space-y-3 p-4">
+        <div>
+          <div className="text-sm font-semibold" style={{ color: baseContent }}>Sample Heading</div>
+          <div className="text-xs" style={{ color: baseContent, opacity: 0.7 }}>This is how body text will look.</div>
+        </div>
+        <div className="px-3 py-1.5 text-xs" style={{ background: base200, border: `1px solid ${base300}`, borderRadius: radius, color: baseContent, opacity: 0.6 }}>
+          Input field...
+        </div>
+        <div className="flex gap-2">
+          <div className="px-3 py-1 text-xs font-medium" style={{ background: primary, color: primaryContent, borderRadius: radius }}>Primary</div>
+          <div className="px-3 py-1 text-xs font-medium" style={{ background: secondary, color: secondaryContent, borderRadius: radius }}>Secondary</div>
+          <div className="px-3 py-1 text-xs font-medium" style={{ background: accent, color: c.accentContent, borderRadius: radius }}>Accent</div>
+        </div>
+        <div className="flex gap-2">
+          <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: success, color: c.successContent }}>Success</span>
+          <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: error, color: c.errorContent }}>Error</span>
+          <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: c.warning, color: c.warningContent }}>Warning</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ColorRow({
+  label,
+  token,
+  themeName,
+  override,
+  onChange,
+  onReset,
+}: {
+  label: string
+  token: string
+  themeName: string
+  override?: string
+  onChange: (hex: string) => void
+  onReset: () => void
+}) {
+  const [baseColor, setBaseColor] = useState<string>('#888888')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`${THEMES_BASE}/${themeName}.json`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return
+        const variant = data.light ?? data.dark
+        const colors = variant?.colors
+        if (colors?.[token]) {
+          // Convert oklch to hex for the input by rendering it
+          const el = document.createElement('div')
+          el.style.color = colors[token]
+          document.body.appendChild(el)
+          const computed = getComputedStyle(el).color
+          document.body.removeChild(el)
+          // Parse rgb(r, g, b) to hex
+          const match = computed.match(/(\d+)/g)
+          if (match && match.length >= 3) {
+            const hex = '#' + match.slice(0, 3).map((n: string) => parseInt(n).toString(16).padStart(2, '0')).join('')
+            setBaseColor(hex)
+          }
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [themeName, token])
+
+  const displayColor = override ?? baseColor
+
+  return (
+    <div className="flex items-center gap-3">
+      <button
+        type="button"
+        className="size-8 shrink-0 rounded-lg border border-border shadow-sm transition-shadow hover:shadow-md"
+        style={{ background: displayColor }}
+        title={`Pick ${label} color`}
+        onClick={() => inputRef.current?.click()}
+      />
+      <input
+        ref={inputRef}
+        type="color"
+        value={displayColor.startsWith('#') ? displayColor : '#888888'}
+        onChange={(e) => onChange(e.target.value)}
+        className="sr-only"
+        aria-label={`${label} color picker`}
+      />
+      <div className="flex-1">
+        <div className="text-sm font-medium">{label}</div>
+        {override && <div className="text-xs text-primary">Custom</div>}
+      </div>
+      {override && (
+        <button
+          type="button"
+          onClick={onReset}
+          className="text-xs text-muted-foreground hover:text-foreground"
+        >
+          Reset
+        </button>
+      )}
     </div>
   )
 }

@@ -1140,8 +1140,6 @@ class _ThemePreviewDialogState extends State<_ThemePreviewDialog> {
   @override
   void initState() {
     super.initState();
-    _mode = Theme.of(context).brightness;
-    _loadScheme();
   }
 
   @override
