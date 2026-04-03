@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import '../engine/color_helpers.dart';
 import '../engine/template_engine.dart';
 import '../engine/theme_resolver.dart';
 
@@ -2056,48 +2057,6 @@ const _colorGrid = <List<int>>[
   [0xFFFFFFFF, 0xFFE0E0E0, 0xFFBDBDBD, 0xFF9E9E9E, 0xFF757575, 0xFF616161, 0xFF424242, 0xFF212121],
 ];
 
-double _wcagLuminance(Color c) {
-  // Color.r/.g/.b are 0.0-1.0 doubles in modern Flutter
-  double linearize(double s) {
-    if (s <= 0.04045) return s / 12.92;
-    return math.pow((s + 0.055) / 1.055, 2.4).toDouble();
-  }
-  return 0.2126 * linearize(c.r) + 0.7152 * linearize(c.g) + 0.0722 * linearize(c.b);
-}
-
-double _contrastRatio(Color c1, Color c2) {
-  final l1 = _wcagLuminance(c1);
-  final l2 = _wcagLuminance(c2);
-  final lighter = l1 > l2 ? l1 : l2;
-  final darker = l1 > l2 ? l2 : l1;
-  return (lighter + 0.05) / (darker + 0.05);
-}
-
-String _colorToHex(Color c) => '#${c.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
-
-/// Adjust [color] toward white or black until it achieves 4.5:1 contrast against [paired].
-Color _fixContrast(Color color, Color paired) {
-  final pairedLum = _wcagLuminance(paired);
-  final goLighter = pairedLum < 0.2;
-  final r = color.r, g = color.g, b = color.b; // 0.0-1.0
-
-  double lo = 0, hi = 1;
-  Color best = color;
-  for (int i = 0; i < 30; i++) {
-    final mid = (lo + hi) / 2;
-    final nr = goLighter ? r + (1.0 - r) * mid : r * (1 - mid);
-    final ng = goLighter ? g + (1.0 - g) * mid : g * (1 - mid);
-    final nb = goLighter ? b + (1.0 - b) * mid : b * (1 - mid);
-    final candidate = Color.fromARGB(255, (nr * 255).round(), (ng * 255).round(), (nb * 255).round());
-    if (_contrastRatio(candidate, paired) >= 4.5) {
-      best = candidate;
-      hi = mid;
-    } else {
-      lo = mid;
-    }
-  }
-  return best;
-}
 
 class _GridColorPickerDialog extends StatefulWidget {
   final Color initialColor;
@@ -2118,7 +2077,7 @@ class _GridColorPickerDialogState extends State<_GridColorPickerDialog> {
   void initState() {
     super.initState();
     _selected = widget.initialColor;
-    _hexController = TextEditingController(text: _colorToHex(widget.initialColor));
+    _hexController = TextEditingController(text: colorToHex(widget.initialColor));
   }
 
   @override
@@ -2130,7 +2089,7 @@ class _GridColorPickerDialogState extends State<_GridColorPickerDialog> {
   void _setColor(Color c) {
     setState(() {
       _selected = c;
-      _hexController.text = _colorToHex(c);
+      _hexController.text = colorToHex(c);
     });
   }
 
@@ -2181,7 +2140,7 @@ class _GridColorPickerDialogState extends State<_GridColorPickerDialog> {
     if (paired != null) {
       final seen = <int>{};
       for (final c in allColors) {
-        if (_contrastRatio(Color(c), paired) >= 4.5) {
+        if (contrastRatio(Color(c), paired) >= 4.5) {
           recommended.add(c);
           seen.add(c);
         } else {
@@ -2190,7 +2149,7 @@ class _GridColorPickerDialogState extends State<_GridColorPickerDialog> {
       }
       // Add fixed versions of failing colors (deduplicated)
       for (final c in other) {
-        final fixed = _fixContrast(Color(c), paired);
+        final fixed = fixContrast(Color(c), paired);
         final fixedArgb = fixed.toARGB32();
         if (!seen.contains(fixedArgb)) {
           recommended.add(fixedArgb);
@@ -2276,7 +2235,7 @@ class _GridColorPickerDialogState extends State<_GridColorPickerDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final ratio = widget.pairedColor != null ? _contrastRatio(_selected, widget.pairedColor!) : null;
+    final ratio = widget.pairedColor != null ? contrastRatio(_selected, widget.pairedColor!) : null;
     final passesAA = ratio != null && ratio >= 4.5;
 
     return AlertDialog(
@@ -2378,7 +2337,7 @@ class _GridColorPickerDialogState extends State<_GridColorPickerDialog> {
                       if (widget.pairedColor != null) ...[
                         const SizedBox(height: 4),
                         GestureDetector(
-                          onTap: () => _setColor(_fixContrast(_selected, widget.pairedColor!)),
+                          onTap: () => _setColor(fixContrast(_selected, widget.pairedColor!)),
                           child: Text(
                             'Fix for me',
                             style: TextStyle(
