@@ -215,7 +215,7 @@ class _OdsFrameworkAppState extends State<OdsFrameworkApp> {
     final userOverrides = engine.app != null
         ? settings.getBrandingOverrides(engine.app!.appName)
         : <String, String>{};
-    final themeName = userOverrides['theme'] ?? branding?.theme ?? 'light';
+    final themeName = userOverrides['theme'] ?? branding?.theme ?? 'indigo';
     final fontFamily = branding?.fontFamily;
 
     // Resolve theme asynchronously (cached after first load)

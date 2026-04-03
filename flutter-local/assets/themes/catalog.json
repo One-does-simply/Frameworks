@@ -1,358 +1,285 @@
 {
   "themes": [
     {
-      "name": "light",
-      "displayName": "Light",
-      "file": "light.json",
+      "name": "indigo",
+      "displayName": "Indigo",
+      "file": "indigo.json",
       "nativeScheme": "light",
-      "tags": [
-        "minimal",
-        "default"
-      ]
+      "tags": { "style": "minimal", "palette": "cool" }
     },
     {
-      "name": "dark",
-      "displayName": "Dark",
-      "file": "dark.json",
+      "name": "slate",
+      "displayName": "Slate",
+      "file": "slate.json",
       "nativeScheme": "dark",
-      "tags": [
-        "minimal",
-        "default"
-      ]
+      "tags": { "style": "minimal", "palette": "cool" }
     },
     {
       "name": "cupcake",
       "displayName": "Cupcake",
       "file": "cupcake.json",
       "nativeScheme": "light",
-      "tags": [
-        "cute",
-        "playful"
-      ]
+      "tags": { "style": "playful", "palette": "muted" }
     },
     {
       "name": "bumblebee",
       "displayName": "Bumblebee",
       "file": "bumblebee.json",
       "nativeScheme": "light",
-      "tags": [
-        "warm",
-        "yellow"
-      ]
+      "tags": { "style": "bold", "palette": "warm" }
     },
     {
       "name": "emerald",
       "displayName": "Emerald",
       "file": "emerald.json",
       "nativeScheme": "light",
-      "tags": [
-        "green",
-        "nature"
-      ]
+      "tags": { "style": "minimal", "palette": "cool" }
     },
     {
       "name": "corporate",
       "displayName": "Corporate",
       "file": "corporate.json",
       "nativeScheme": "light",
-      "tags": [
-        "professional",
-        "clean"
-      ]
+      "tags": { "style": "professional", "palette": "cool" }
     },
     {
       "name": "synthwave",
       "displayName": "Synthwave",
       "file": "synthwave.json",
       "nativeScheme": "dark",
-      "tags": [
-        "retro",
-        "neon",
-        "80s"
-      ]
+      "tags": { "style": "retro", "palette": "vibrant" }
     },
     {
       "name": "retro",
       "displayName": "Retro",
       "file": "retro.json",
       "nativeScheme": "light",
-      "tags": [
-        "vintage",
-        "warm"
-      ]
+      "tags": { "style": "retro", "palette": "warm" }
     },
     {
       "name": "cyberpunk",
       "displayName": "Cyberpunk",
       "file": "cyberpunk.json",
       "nativeScheme": "light",
-      "tags": [
-        "futuristic",
-        "bold"
-      ]
+      "tags": { "style": "bold", "palette": "vibrant" }
     },
     {
       "name": "valentine",
       "displayName": "Valentine",
       "file": "valentine.json",
       "nativeScheme": "light",
-      "tags": [
-        "pink",
-        "romantic"
-      ]
+      "tags": { "style": "whimsical", "palette": "muted" }
     },
     {
       "name": "halloween",
       "displayName": "Halloween",
       "file": "halloween.json",
       "nativeScheme": "dark",
-      "tags": [
-        "spooky",
-        "orange"
-      ]
+      "tags": { "style": "whimsical", "palette": "warm" }
     },
     {
       "name": "garden",
       "displayName": "Garden",
       "file": "garden.json",
       "nativeScheme": "light",
-      "tags": [
-        "floral",
-        "nature"
-      ]
+      "tags": { "style": "cozy", "palette": "muted" }
     },
     {
       "name": "forest",
       "displayName": "Forest",
       "file": "forest.json",
       "nativeScheme": "dark",
-      "tags": [
-        "green",
-        "nature",
-        "dark"
-      ]
+      "tags": { "style": "cozy", "palette": "earthy" }
     },
     {
       "name": "aqua",
       "displayName": "Aqua",
       "file": "aqua.json",
       "nativeScheme": "dark",
-      "tags": [
-        "ocean",
-        "blue"
-      ]
+      "tags": { "style": "minimal", "palette": "cool" }
     },
     {
       "name": "lofi",
       "displayName": "Lo-Fi",
       "file": "lofi.json",
       "nativeScheme": "light",
-      "tags": [
-        "minimal",
-        "monochrome"
-      ]
+      "tags": { "style": "minimal", "palette": "monochrome" }
     },
     {
       "name": "pastel",
       "displayName": "Pastel",
       "file": "pastel.json",
       "nativeScheme": "light",
-      "tags": [
-        "soft",
-        "light"
-      ]
+      "tags": { "style": "playful", "palette": "muted" }
     },
     {
       "name": "fantasy",
       "displayName": "Fantasy",
       "file": "fantasy.json",
       "nativeScheme": "light",
-      "tags": [
-        "magical",
-        "purple"
-      ]
+      "tags": { "style": "whimsical", "palette": "vibrant" }
     },
     {
       "name": "wireframe",
       "displayName": "Wireframe",
       "file": "wireframe.json",
       "nativeScheme": "light",
-      "tags": [
-        "minimal",
-        "prototype"
-      ]
+      "tags": { "style": "minimal", "palette": "monochrome" }
     },
     {
       "name": "black",
       "displayName": "Black",
       "file": "black.json",
       "nativeScheme": "dark",
-      "tags": [
-        "minimal",
-        "monochrome",
-        "dark"
-      ]
+      "tags": { "style": "bold", "palette": "monochrome" }
     },
     {
       "name": "luxury",
       "displayName": "Luxury",
       "file": "luxury.json",
       "nativeScheme": "dark",
-      "tags": [
-        "elegant",
-        "gold"
-      ]
+      "tags": { "style": "elegant", "palette": "warm" }
     },
     {
       "name": "dracula",
       "displayName": "Dracula",
       "file": "dracula.json",
       "nativeScheme": "dark",
-      "tags": [
-        "popular",
-        "purple"
-      ]
+      "tags": { "style": "bold", "palette": "cool" }
     },
     {
       "name": "cmyk",
       "displayName": "CMYK",
       "file": "cmyk.json",
       "nativeScheme": "light",
-      "tags": [
-        "colorful",
-        "print"
-      ]
+      "tags": { "style": "bold", "palette": "vibrant" }
     },
     {
       "name": "autumn",
       "displayName": "Autumn",
       "file": "autumn.json",
       "nativeScheme": "light",
-      "tags": [
-        "warm",
-        "seasonal"
-      ]
+      "tags": { "style": "cozy", "palette": "earthy" }
     },
     {
       "name": "business",
       "displayName": "Business",
       "file": "business.json",
       "nativeScheme": "dark",
-      "tags": [
-        "professional",
-        "corporate"
-      ]
+      "tags": { "style": "professional", "palette": "cool" }
     },
     {
       "name": "acid",
       "displayName": "Acid",
       "file": "acid.json",
       "nativeScheme": "light",
-      "tags": [
-        "bold",
-        "vibrant"
-      ]
+      "tags": { "style": "bold", "palette": "vibrant" }
     },
     {
       "name": "lemonade",
       "displayName": "Lemonade",
       "file": "lemonade.json",
       "nativeScheme": "light",
-      "tags": [
-        "fresh",
-        "green"
-      ]
+      "tags": { "style": "playful", "palette": "cool" }
     },
     {
       "name": "night",
       "displayName": "Night",
       "file": "night.json",
       "nativeScheme": "dark",
-      "tags": [
-        "blue",
-        "deep"
-      ]
+      "tags": { "style": "elegant", "palette": "cool" }
     },
     {
       "name": "coffee",
       "displayName": "Coffee",
       "file": "coffee.json",
       "nativeScheme": "dark",
-      "tags": [
-        "warm",
-        "brown"
-      ]
+      "tags": { "style": "cozy", "palette": "earthy" }
     },
     {
       "name": "winter",
       "displayName": "Winter",
       "file": "winter.json",
       "nativeScheme": "light",
-      "tags": [
-        "cool",
-        "blue"
-      ]
+      "tags": { "style": "minimal", "palette": "cool" }
     },
     {
       "name": "dim",
       "displayName": "Dim",
       "file": "dim.json",
       "nativeScheme": "dark",
-      "tags": [
-        "muted",
-        "subtle"
-      ]
+      "tags": { "style": "minimal", "palette": "muted" }
     },
     {
       "name": "nord",
       "displayName": "Nord",
       "file": "nord.json",
       "nativeScheme": "light",
-      "tags": [
-        "cool",
-        "scandinavian"
-      ]
+      "tags": { "style": "professional", "palette": "cool" }
     },
     {
       "name": "sunset",
       "displayName": "Sunset",
       "file": "sunset.json",
       "nativeScheme": "dark",
-      "tags": [
-        "warm",
-        "orange"
-      ]
+      "tags": { "style": "cozy", "palette": "warm" }
     },
     {
       "name": "caramellatte",
       "displayName": "Caramel Latte",
       "file": "caramellatte.json",
       "nativeScheme": "light",
-      "tags": [
-        "warm",
-        "cozy"
-      ]
+      "tags": { "style": "cozy", "palette": "warm" }
     },
     {
       "name": "abyss",
       "displayName": "Abyss",
       "file": "abyss.json",
       "nativeScheme": "dark",
-      "tags": [
-        "deep",
-        "ocean"
-      ]
+      "tags": { "style": "elegant", "palette": "cool" }
     },
     {
       "name": "silk",
       "displayName": "Silk",
       "file": "silk.json",
       "nativeScheme": "light",
-      "tags": [
-        "elegant",
-        "minimal"
-      ]
+      "tags": { "style": "elegant", "palette": "muted" }
+    },
+    {
+      "name": "parchment",
+      "displayName": "Parchment",
+      "file": "parchment.json",
+      "nativeScheme": "light",
+      "tags": { "style": "retro", "palette": "warm" }
+    },
+    {
+      "name": "terracotta",
+      "displayName": "Terracotta",
+      "file": "terracotta.json",
+      "nativeScheme": "light",
+      "tags": { "style": "cozy", "palette": "earthy" }
+    },
+    {
+      "name": "ocean",
+      "displayName": "Ocean",
+      "file": "ocean.json",
+      "nativeScheme": "light",
+      "tags": { "style": "whimsical", "palette": "cool" }
+    },
+    {
+      "name": "peach",
+      "displayName": "Peach",
+      "file": "peach.json",
+      "nativeScheme": "light",
+      "tags": { "style": "playful", "palette": "warm" }
+    },
+    {
+      "name": "walnut",
+      "displayName": "Walnut",
+      "file": "walnut.json",
+      "nativeScheme": "light",
+      "tags": { "style": "professional", "palette": "warm" }
     }
   ],
-  "defaultTheme": "light"
+  "defaultTheme": "indigo"
 }

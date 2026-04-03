@@ -17,7 +17,7 @@
     "colorScheme": "light",
     "colors": {
       "primary": "oklch(56.86% .255 257.57)",
-      "primaryContent": "oklch(91.372% .051 257.57)",
+      "primaryContent": "oklch(99% 0.03 257.57)",
       "secondary": "oklch(42.551% .161 282.339)",
       "secondaryContent": "oklch(88.51% .032 282.339)",
       "accent": "oklch(59.939% .191 335.171)",
@@ -42,7 +42,7 @@
     "colorScheme": "dark",
     "colors": {
       "primary": "oklch(69.86% 0.255 257.57)",
-      "primaryContent": "oklch(95% 0.04 257.57)",
+      "primaryContent": "oklch(28.6% 0.04 257.57)",
       "secondary": "oklch(42.551% .161 282.339)",
       "secondaryContent": "oklch(88.51% .032 282.339)",
       "accent": "oklch(59.939% .191 335.171)",

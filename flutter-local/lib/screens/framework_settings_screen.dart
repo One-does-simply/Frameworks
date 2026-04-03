@@ -23,6 +23,14 @@ class FrameworkSettingsScreen extends StatefulWidget {
 }
 
 class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
+  static const _themeNames = [
+    'indigo','slate','cupcake','bumblebee','emerald','corporate','synthwave','retro',
+    'cyberpunk','valentine','halloween','garden','forest','aqua','lofi','pastel',
+    'fantasy','wireframe','black','luxury','dracula','cmyk','autumn','business',
+    'acid','lemonade','night','coffee','winter','dim','nord','sunset',
+    'caramellatte','abyss','silk','parchment','terracotta','ocean','peach','walnut',
+  ];
+
   SettingsStore get settings => widget.settings;
 
   @override
@@ -70,14 +78,14 @@ class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
             subtitle: const Text('Used as the initial theme for new apps'),
             contentPadding: const EdgeInsets.symmetric(horizontal: 24),
             trailing: DropdownButton<String>(
-              value: settings.defaultTheme,
+              value: _themeNames.contains(settings.defaultTheme) ? settings.defaultTheme : 'indigo',
               underline: const SizedBox.shrink(),
               items: const [
-                'light','dark','cupcake','bumblebee','emerald','corporate','synthwave','retro',
+                'indigo','slate','cupcake','bumblebee','emerald','corporate','synthwave','retro',
                 'cyberpunk','valentine','halloween','garden','forest','aqua','lofi','pastel',
                 'fantasy','wireframe','black','luxury','dracula','cmyk','autumn','business',
                 'acid','lemonade','night','coffee','winter','dim','nord','sunset',
-                'caramellatte','abyss','silk',
+                'caramellatte','abyss','silk','parchment','terracotta','ocean','peach','walnut',
               ].map((t) => DropdownMenuItem(
                 value: t,
                 child: Text(t[0].toUpperCase() + t.substring(1), style: const TextStyle(fontSize: 13)),

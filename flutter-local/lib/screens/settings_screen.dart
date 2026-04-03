@@ -787,11 +787,11 @@ class _BrandingSectionState extends State<_BrandingSection> {
   bool _customizeOpen = false;
 
   static const _themeNames = [
-    'light','dark','cupcake','bumblebee','emerald','corporate','synthwave','retro',
+    'indigo','slate','cupcake','bumblebee','emerald','corporate','synthwave','retro',
     'cyberpunk','valentine','halloween','garden','forest','aqua','lofi','pastel',
     'fantasy','wireframe','black','luxury','dracula','cmyk','autumn','business',
     'acid','lemonade','night','coffee','winter','dim','nord','sunset',
-    'caramellatte','abyss','silk',
+    'caramellatte','abyss','silk','parchment','terracotta','ocean','peach','walnut',
   ];
 
   static const _customizableTokens = [
@@ -994,7 +994,7 @@ class _BrandingSectionState extends State<_BrandingSection> {
           title: const Text('Theme'),
           contentPadding: const EdgeInsets.symmetric(horizontal: 24),
           trailing: DropdownButton<String>(
-            value: _themeNames.contains(_theme) ? _theme : 'light',
+            value: _themeNames.contains(_theme) ? _theme : 'indigo',
             underline: const SizedBox.shrink(),
             items: _themeNames.map((t) => DropdownMenuItem(
               value: t,

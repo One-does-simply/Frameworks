@@ -17,7 +17,7 @@
     "colorScheme": "light",
     "colors": {
       "primary": "oklch(90.0% 0.0 0.0)",
-      "primaryContent": "oklch(95% 0.0 0.0)",
+      "primaryContent": "oklch(49.2% 0 0)",
       "secondary": "oklch(27.581% .064 261.069)",
       "secondaryContent": "oklch(85.516% .012 261.069)",
       "accent": "oklch(36.674% .051 338.825)",

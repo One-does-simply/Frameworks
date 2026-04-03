@@ -19,9 +19,9 @@
       "primary": "oklch(90% .063 306.703)",
       "primaryContent": "oklch(49% .265 301.924)",
       "secondary": "oklch(89% .058 10.001)",
-      "secondaryContent": "oklch(51% .222 16.935)",
+      "secondaryContent": "oklch(48.8% 0.222 16.935)",
       "accent": "oklch(90% .093 164.15)",
-      "accentContent": "oklch(50% .118 165.612)",
+      "accentContent": "oklch(48.1% 0.118 165.612)",
       "neutral": "oklch(55% .046 257.417)",
       "neutralContent": "oklch(92% .013 255.508)",
       "base100": "oklch(100% 0 0)",
@@ -35,18 +35,18 @@
       "warning": "oklch(83% .128 66.29)",
       "warningContent": "oklch(55% .195 38.402)",
       "error": "oklch(80% .114 19.571)",
-      "errorContent": "oklch(50% .213 27.518)"
+      "errorContent": "oklch(39% 0.213 27.518)"
     }
   },
   "dark": {
     "colorScheme": "dark",
     "colors": {
       "primary": "oklch(90.0% 0.063 306.703)",
-      "primaryContent": "oklch(95% 0.04 301.924)",
+      "primaryContent": "oklch(49.1% 0.04 301.924)",
       "secondary": "oklch(89% .058 10.001)",
-      "secondaryContent": "oklch(51% .222 16.935)",
+      "secondaryContent": "oklch(48.8% 0.222 16.935)",
       "accent": "oklch(90% .093 164.15)",
-      "accentContent": "oklch(50% .118 165.612)",
+      "accentContent": "oklch(48.1% 0.118 165.612)",
       "neutral": "oklch(35% 0.046 257.417)",
       "neutralContent": "oklch(80% 0.013 255.508)",
       "base100": "oklch(25% 0.015 260)",
@@ -60,7 +60,7 @@
       "warning": "oklch(83% .128 66.29)",
       "warningContent": "oklch(55% .195 38.402)",
       "error": "oklch(80% .114 19.571)",
-      "errorContent": "oklch(50% .213 27.518)"
+      "errorContent": "oklch(39% 0.213 27.518)"
     }
   }
 }

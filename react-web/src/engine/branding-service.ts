@@ -85,7 +85,7 @@ export async function applyBranding(branding: OdsBranding): Promise<void> {
   }
 
   // Load theme
-  const themeData = await loadTheme(branding.theme || 'light')
+  const themeData = await loadTheme(branding.theme || 'indigo')
   if (!themeData) return
 
   // Resolve mode
@@ -154,7 +154,7 @@ export function resetBranding(): void {
 }
 
 /** Get the list of available themes from the catalog. */
-export async function loadThemeCatalog(): Promise<Array<{ name: string; displayName: string; nativeScheme: string; tags: string[] }>> {
+export async function loadThemeCatalog(): Promise<Array<{ name: string; displayName: string; nativeScheme: string; tags?: { style?: string; palette?: string } | string[] }>> {
   try {
     const resp = await fetch(`${THEMES_BASE}/catalog.json`)
     if (!resp.ok) return []

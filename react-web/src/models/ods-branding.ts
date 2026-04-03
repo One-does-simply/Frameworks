@@ -18,7 +18,7 @@ export interface OdsBranding {
 
 export function parseBranding(json: unknown): OdsBranding {
   if (json == null || typeof json !== 'object') {
-    return { theme: 'light', mode: 'system', headerStyle: 'light' }
+    return { theme: 'indigo', mode: 'system', headerStyle: 'light' }
   }
   const j = json as Record<string, unknown>
 
@@ -28,7 +28,7 @@ export function parseBranding(json: unknown): OdsBranding {
     if (j['primaryColor']) overrides.primary = j['primaryColor'] as string
     if (j['accentColor']) overrides.accent = j['accentColor'] as string
     return {
-      theme: 'light',
+      theme: 'indigo',
       mode: 'system',
       logo: j['logo'] as string | undefined,
       favicon: j['favicon'] as string | undefined,
@@ -40,8 +40,12 @@ export function parseBranding(json: unknown): OdsBranding {
     }
   }
 
+  let parsedTheme = (j['theme'] as string) ?? 'indigo'
+  if (parsedTheme === 'light') parsedTheme = 'indigo'
+  if (parsedTheme === 'dark') parsedTheme = 'slate'
+
   return {
-    theme: (j['theme'] as string) ?? 'light',
+    theme: parsedTheme,
     mode: (['light', 'dark', 'system'].includes(j['mode'] as string)
       ? j['mode'] as 'light' | 'dark' | 'system'
       : 'system'),

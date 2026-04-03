@@ -21,7 +21,7 @@ class SettingsStore extends ChangeNotifier {
   String? _backupFolder;
   bool _isMultiUserEnabled = false;
   String? _defaultAppId;
-  String _defaultTheme = 'light';
+  String _defaultTheme = 'indigo';
 
   /// Per-app branding overrides: appName -> {primaryColor, cornerStyle}
   final Map<String, Map<String, String>> _brandingOverrides = {};
@@ -147,7 +147,11 @@ class SettingsStore extends ChangeNotifier {
         _backupFolder = data['backupFolder'] as String?;
         _isMultiUserEnabled = data['isMultiUserEnabled'] as bool? ?? false;
         _defaultAppId = data['defaultAppId'] as String?;
-        _defaultTheme = data['defaultTheme'] as String? ?? 'light';
+        var loadedTheme = data['defaultTheme'] as String? ?? 'indigo';
+        // Migrate legacy theme names
+        if (loadedTheme == 'light') loadedTheme = 'indigo';
+        if (loadedTheme == 'dark') loadedTheme = 'slate';
+        _defaultTheme = loadedTheme;
         final brandOverrides = data['brandingOverrides'] as Map<String, dynamic>?;
         if (brandOverrides != null) {
           for (final entry in brandOverrides.entries) {

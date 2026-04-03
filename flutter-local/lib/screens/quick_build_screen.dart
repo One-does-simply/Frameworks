@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -75,9 +76,11 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
 
   // Phase 2.5: Theme selection
   bool _inThemePhase = false;
-  String _selectedTheme = 'light';
+  String _selectedTheme = 'indigo';
   Map<String, String> _colorOverrides = {}; // token name -> hex color
   List<Map<String, dynamic>>? _themeCatalog;
+  String? _activeStyle; // style filter for theme list
+  String? _activePalette; // palette filter for theme list
   ColorScheme? _themePreviewLightCs;
   ColorScheme? _themePreviewDarkCs;
 
@@ -226,7 +229,11 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
 
   Future<void> _goToThemePhase() async {
     final catalog = await ThemeResolver.loadCatalog();
-    final themeFromAnswers = _answers['theme'] as String? ?? 'light';
+    // Resolve theme: use answer, but fall back to 'indigo' if the answered theme doesn't exist
+    var themeFromAnswers = _answers['theme'] as String? ?? 'indigo';
+    // Handle legacy 'light'/'dark' theme names from old templates
+    if (themeFromAnswers == 'light') themeFromAnswers = 'indigo';
+    if (themeFromAnswers == 'dark') themeFromAnswers = 'slate';
     final lightCs = await ThemeResolver.resolveColorScheme(themeFromAnswers, Brightness.light);
     final darkCs = await ThemeResolver.resolveColorScheme(themeFromAnswers, Brightness.dark);
     if (!mounted) return;
@@ -244,6 +251,8 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
     setState(() {
       _inThemePhase = false;
       _themeCatalog = null;
+      _activeStyle = null;
+      _activePalette = null;
       _themePreviewLightCs = null;
       _themePreviewDarkCs = null;
       _colorOverrides = {};
@@ -270,15 +279,60 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
     });
   }
 
+  static const _tokenPairs = {
+    'primary': 'primaryContent',
+    'secondary': 'secondaryContent',
+    'accent': 'accentContent',
+    'base100': 'baseContent',
+    'baseContent': 'base100',
+    'error': 'errorContent',
+  };
+
+  static const _tokenHints = {
+    'primary': 'Main action buttons and links',
+    'secondary': 'Supporting actions and highlights',
+    'accent': 'Decorative elements and badges',
+    'base100': 'Page background color',
+    'baseContent': 'Main body text color',
+    'error': 'Error messages and alerts',
+  };
+
+  Future<Color?> _getPairedColor(String token) async {
+    final pairToken = _tokenPairs[token];
+    if (pairToken == null) return null;
+
+    // Check if the paired token has a user override
+    if (_colorOverrides.containsKey(pairToken)) {
+      final hex = _colorOverrides[pairToken]!;
+      final parsed = int.tryParse(hex.replaceFirst('#', ''), radix: 16);
+      if (parsed != null) return Color(0xFF000000 | parsed);
+    }
+
+    // Load directly from theme data to avoid ColorScheme mapping issues
+    final theme = await ThemeResolver.loadTheme(_selectedTheme);
+    if (theme == null) return null;
+    // Use light mode for contrast reference
+    final variant = (theme['light'] ?? theme['dark']) as Map<String, dynamic>?;
+    final colors = variant?['colors'] as Map<String, dynamic>?;
+    final oklchStr = colors?[pairToken] as String?;
+    if (oklchStr == null) return null;
+    return ThemeResolver.parseOklch(oklchStr);
+  }
+
   Future<void> _pickColor(String token, Color currentColor) async {
+    final pairedColor = await _getPairedColor(token);
+    if (!mounted) return;
     final picked = await showDialog<Color>(
       context: context,
-      builder: (_) => _ColorPickerDialog(initialColor: currentColor),
+      builder: (_) => _GridColorPickerDialog(
+        initialColor: currentColor,
+        pairedColor: pairedColor,
+        label: _tokenHints[token] ?? 'Choose a color',
+      ),
     );
     if (picked != null && mounted) {
       final hex = '#${picked.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
       setState(() => _colorOverrides[token] = hex);
-      // Rebuild preview with override applied
       _rebuildPreviewWithOverrides();
     }
   }
@@ -355,18 +409,13 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
 
     // Determine current phase for the app bar.
     final bool inTextReview = _reviewTexts != null;
-    final String title;
-    if (inTextReview) {
-      title = 'Review & Customize';
-    } else if (_inThemePhase) {
-      title = 'Choose a Theme';
-    } else {
-      title = _templateName ?? 'Quick Build';
-    }
+    final bool inCatalog = _questions == null && !_inThemePhase && !inTextReview;
+    // Breadcrumb step: 1=details, 2=theme, 3=text review (0=catalog, no breadcrumb)
+    final int breadcrumbStep = inTextReview ? 3 : _inThemePhase ? 2 : _questions != null ? 1 : 0;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(title),
+        title: Text(_templateName ?? 'Quick Build'),
         leading: IconButton(
           icon: Icon(inTextReview || _inThemePhase ? Icons.arrow_back : Icons.close),
           onPressed: inTextReview
@@ -375,6 +424,44 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
                   ? _backToWizardFromTheme
                   : () => Navigator.pop(context),
         ),
+        bottom: !inCatalog
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(32),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+                  child: Row(
+                    children: [
+                      for (int i = 0; i < 3; i++) ...[
+                        if (i > 0)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            child: Icon(Icons.chevron_right, size: 14, color: theme.colorScheme.onSurface.withValues(alpha: 0.25)),
+                          ),
+                        _buildBreadcrumbItem(
+                          theme,
+                          ['Enter App Details', 'Choose Theme', 'Customize App Text'][i],
+                          step: i + 1,
+                          currentStep: breadcrumbStep,
+                          onTap: i + 1 < breadcrumbStep
+                              ? () {
+                                  if (i + 1 == 1 && breadcrumbStep >= 2) {
+                                    if (inTextReview) {
+                                      _backToTheme();
+                                      WidgetsBinding.instance.addPostFrameCallback((_) => _backToWizardFromTheme());
+                                    } else {
+                                      _backToWizardFromTheme();
+                                    }
+                                  }
+                                  if (i + 1 == 2 && inTextReview) _backToTheme();
+                                }
+                              : null,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              )
+            : null,
       ),
       body: inTextReview
           ? _buildTextReview(theme)
@@ -384,6 +471,34 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
                   ? _buildWizard(theme)
                   : _buildCatalogPicker(theme),
     );
+  }
+
+  Widget _buildBreadcrumbItem(ThemeData theme, String label, {required int step, required int currentStep, VoidCallback? onTap}) {
+    final isCurrent = step == currentStep;
+    final isPast = step < currentStep;
+    final color = isCurrent
+        ? theme.colorScheme.primary
+        : isPast
+            ? theme.colorScheme.onSurface.withValues(alpha: 0.6)
+            : theme.colorScheme.onSurface.withValues(alpha: 0.25);
+    final widget = Text(
+      label,
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: color,
+        fontWeight: isCurrent ? FontWeight.w600 : FontWeight.normal,
+      ),
+    );
+    if (isPast && onTap != null) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+          child: widget,
+        ),
+      );
+    }
+    return widget;
   }
 
   // ---------------------------------------------------------------------------
@@ -402,7 +517,7 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.cloud_off, size: 48, color: theme.colorScheme.outline),
+              Icon(Icons.cloud_off, size: 48, color: theme.colorScheme.onSurfaceVariant),
               const SizedBox(height: 16),
               Text(_catalogError!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
@@ -438,7 +553,7 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
         Text(
           'Answer a few questions and your app will be ready to go.',
           style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.outline,
+            color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 20),
@@ -590,7 +705,7 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
     if (fields.isEmpty) {
       return Text(
         'Add fields above first',
-        style: TextStyle(color: Theme.of(context).colorScheme.outline),
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
       );
     }
 
@@ -787,6 +902,60 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
     final lightCs = _themePreviewLightCs ?? theme.colorScheme;
     final darkCs = _themePreviewDarkCs ?? theme.colorScheme;
 
+    // Extract style/palette from tags (supports both old array and new object format)
+    String? getStyle(Map<String, dynamic> entry) {
+      final tags = entry['tags'];
+      if (tags is Map) return tags['style'] as String?;
+      return null;
+    }
+    String? getPalette(Map<String, dynamic> entry) {
+      final tags = entry['tags'];
+      if (tags is Map) return tags['palette'] as String?;
+      return null;
+    }
+
+    // Collect unique styles and palettes
+    final allStyles = <String>{};
+    final allPalettes = <String>{};
+    for (final entry in catalog) {
+      final s = getStyle(entry);
+      final p = getPalette(entry);
+      if (s != null) allStyles.add(s);
+      if (p != null) allPalettes.add(p);
+    }
+    final sortedStyles = allStyles.toList()..sort();
+    final sortedPalettes = allPalettes.toList()..sort();
+
+    // Filter by active style/palette and sort alphabetically
+    final filteredCatalog = catalog.where((entry) {
+      if (_activeStyle != null && getStyle(entry) != _activeStyle) return false;
+      if (_activePalette != null && getPalette(entry) != _activePalette) return false;
+      return true;
+    }).toList()
+      ..sort((a, b) => ((a['displayName'] ?? a['name']) as String)
+          .compareTo((b['displayName'] ?? b['name']) as String));
+
+    Widget buildChip(String label, bool isActive, VoidCallback onTap) {
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: isActive ? theme.colorScheme.primary : theme.colorScheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: isActive ? theme.colorScheme.onPrimary : theme.colorScheme.onSurfaceVariant,
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+        ),
+      );
+    }
+
     return Column(
       children: [
         Expanded(
@@ -795,28 +964,69 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
             children: [
               // Left pane — scrollable theme list
               SizedBox(
-                width: 220,
+                width: 230,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
                       child: Text('Themes', style: theme.textTheme.titleSmall),
+                    ),
+                    // Two-dimension tag filters
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (sortedStyles.isNotEmpty) ...[
+                            Text('STYLE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, letterSpacing: 1, color: theme.colorScheme.onSurfaceVariant)),
+                            const SizedBox(height: 3),
+                            Wrap(
+                              spacing: 4,
+                              runSpacing: 4,
+                              children: [
+                                for (final tag in sortedStyles)
+                                  buildChip(tag, _activeStyle == tag, () => setState(() => _activeStyle = _activeStyle == tag ? null : tag)),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                          ],
+                          if (sortedPalettes.isNotEmpty) ...[
+                            Text('PALETTE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, letterSpacing: 1, color: theme.colorScheme.onSurfaceVariant)),
+                            const SizedBox(height: 3),
+                            Wrap(
+                              spacing: 4,
+                              runSpacing: 4,
+                              children: [
+                                for (final tag in sortedPalettes)
+                                  buildChip(tag, _activePalette == tag, () => setState(() => _activePalette = _activePalette == tag ? null : tag)),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                     Expanded(
                       child: ListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
-                        itemCount: catalog.length,
+                        itemCount: filteredCatalog.length,
                         itemBuilder: (context, index) {
-                          final entry = catalog[index];
+                          final entry = filteredCatalog[index];
                           final name = entry['name'] as String;
                           final displayName = entry['displayName'] as String? ?? name;
+                          final entryTags = entry['tags'];
+                          final tagList = <String>[];
+                          if (entryTags is Map) {
+                            if (entryTags['style'] != null) tagList.add(entryTags['style'] as String);
+                            if (entryTags['palette'] != null) tagList.add(entryTags['palette'] as String);
+                          }
                           final isSelected = name == _selectedTheme;
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 4),
                             child: _ThemeCard(
                               themeName: name,
                               displayName: displayName,
+                              tags: tagList,
                               isSelected: isSelected,
                               onTap: () => _selectTheme(name),
                             ),
@@ -841,7 +1051,7 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Light', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+                              Text('Light Mode', style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600)),
                               const SizedBox(height: 4),
                               _buildInlinePreview(lightCs),
                             ],
@@ -852,7 +1062,7 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Dark', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+                              Text('Dark Mode', style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600)),
                               const SizedBox(height: 4),
                               _buildInlinePreview(darkCs),
                             ],
@@ -999,14 +1209,14 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
               ),
               if (hasOverride)
                 IconButton(
-                  icon: Icon(Icons.undo, size: 18, color: theme.colorScheme.outline),
+                  icon: Icon(Icons.undo, size: 18, color: theme.colorScheme.onSurfaceVariant),
                   tooltip: 'Reset',
                   onPressed: () {
                     setState(() => _colorOverrides.remove(token));
                     _rebuildPreviewWithOverrides();
                   },
                 ),
-              Icon(Icons.edit, size: 16, color: theme.colorScheme.outline),
+              Icon(Icons.edit, size: 16, color: theme.colorScheme.onSurfaceVariant),
             ],
           ),
         ),
@@ -1048,7 +1258,7 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
                 'These are the labels, titles, and messages your users will see. '
                 'Edit any you\'d like to customize.',
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.outline,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 20),
@@ -1699,12 +1909,14 @@ class _EditOptionsDialogState extends State<_EditOptionsDialog> {
 class _ThemeCard extends StatefulWidget {
   final String themeName;
   final String displayName;
+  final List<String> tags;
   final bool isSelected;
   final VoidCallback onTap;
 
   const _ThemeCard({
     required this.themeName,
     required this.displayName,
+    this.tags = const [],
     required this.isSelected,
     required this.onTap,
   });
@@ -1722,6 +1934,17 @@ class _ThemeCardState extends State<_ThemeCard> {
   void initState() {
     super.initState();
     _loadColors();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ThemeCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.themeName != widget.themeName) {
+      _primary = null;
+      _secondary = null;
+      _accent = null;
+      _loadColors();
+    }
   }
 
   Future<void> _loadColors() async {
@@ -1753,26 +1976,45 @@ class _ThemeCardState extends State<_ThemeCard> {
         onTap: widget.onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Color dots
-              if (_primary != null) ...[
-                _dot(_primary!),
-                _dot(_secondary ?? _primary!),
-                _dot(_accent ?? _primary!),
-                const SizedBox(width: 8),
-              ],
-              Expanded(
-                child: Text(
-                  widget.displayName,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.w400,
+              Row(
+                children: [
+                  if (_primary != null) ...[
+                    _dot(_primary!),
+                    _dot(_secondary ?? _primary!),
+                    _dot(_accent ?? _primary!),
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(
+                    child: Text(
+                      widget.displayName,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.w400,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  overflow: TextOverflow.ellipsis,
-                ),
+                  if (widget.isSelected)
+                    Icon(Icons.check_circle, size: 18, color: theme.colorScheme.primary),
+                ],
               ),
-              if (widget.isSelected)
-                Icon(Icons.check_circle, size: 18, color: theme.colorScheme.primary),
+              if (widget.tags.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 2,
+                  children: widget.tags.map((tag) => Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHigh,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(tag, style: TextStyle(fontSize: 9, color: theme.colorScheme.onSurfaceVariant)),
+                  )).toList(),
+                ),
+              ],
             ],
           ),
         ),
@@ -1793,101 +2035,466 @@ class _ThemeCardState extends State<_ThemeCard> {
 }
 
 // ---------------------------------------------------------------------------
-// Color picker dialog — HSL sliders
+// Grid color picker dialog
 // ---------------------------------------------------------------------------
 
-class _ColorPickerDialog extends StatefulWidget {
-  final Color initialColor;
-  const _ColorPickerDialog({required this.initialColor});
+/// 6x8 curated color grid + grayscale row.
+const _colorGrid = <List<int>>[
+  // Reds
+  [0xFFFFCDD2, 0xFFEF9A9A, 0xFFE57373, 0xFFEF5350, 0xFFF44336, 0xFFE53935, 0xFFC62828, 0xFFB71C1C],
+  // Oranges / Yellows
+  [0xFFFFE0B2, 0xFFFFCC80, 0xFFFFB74D, 0xFFFFA726, 0xFFFF9800, 0xFFFB8C00, 0xFFEF6C00, 0xFFE65100],
+  // Greens
+  [0xFFC8E6C9, 0xFFA5D6A7, 0xFF81C784, 0xFF66BB6A, 0xFF4CAF50, 0xFF43A047, 0xFF2E7D32, 0xFF1B5E20],
+  // Teals / Cyans
+  [0xFFB2EBF2, 0xFF80DEEA, 0xFF4DD0E1, 0xFF26C6DA, 0xFF00BCD4, 0xFF00ACC1, 0xFF00838F, 0xFF006064],
+  // Blues / Indigos
+  [0xFFBBDEFB, 0xFF90CAF9, 0xFF64B5F6, 0xFF42A5F5, 0xFF2196F3, 0xFF1E88E5, 0xFF1565C0, 0xFF0D47A1],
+  // Purples / Pinks
+  [0xFFE1BEE7, 0xFFCE93D8, 0xFFBA68C8, 0xFFAB47BC, 0xFF9C27B0, 0xFF8E24AA, 0xFF6A1B9A, 0xFF4A148C],
+  // Grays (white to black)
+  [0xFFFFFFFF, 0xFFE0E0E0, 0xFFBDBDBD, 0xFF9E9E9E, 0xFF757575, 0xFF616161, 0xFF424242, 0xFF212121],
+];
 
-  @override
-  State<_ColorPickerDialog> createState() => _ColorPickerDialogState();
+double _wcagLuminance(Color c) {
+  // Color.r/.g/.b are 0.0-1.0 doubles in modern Flutter
+  double linearize(double s) {
+    if (s <= 0.04045) return s / 12.92;
+    return math.pow((s + 0.055) / 1.055, 2.4).toDouble();
+  }
+  return 0.2126 * linearize(c.r) + 0.7152 * linearize(c.g) + 0.0722 * linearize(c.b);
 }
 
-class _ColorPickerDialogState extends State<_ColorPickerDialog> {
-  late double _hue;
-  late double _saturation;
-  late double _lightness;
+double _contrastRatio(Color c1, Color c2) {
+  final l1 = _wcagLuminance(c1);
+  final l2 = _wcagLuminance(c2);
+  final lighter = l1 > l2 ? l1 : l2;
+  final darker = l1 > l2 ? l2 : l1;
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+String _colorToHex(Color c) => '#${c.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+
+/// Adjust [color] toward white or black until it achieves 4.5:1 contrast against [paired].
+Color _fixContrast(Color color, Color paired) {
+  final pairedLum = _wcagLuminance(paired);
+  final goLighter = pairedLum < 0.2;
+  final r = color.r, g = color.g, b = color.b; // 0.0-1.0
+
+  double lo = 0, hi = 1;
+  Color best = color;
+  for (int i = 0; i < 30; i++) {
+    final mid = (lo + hi) / 2;
+    final nr = goLighter ? r + (1.0 - r) * mid : r * (1 - mid);
+    final ng = goLighter ? g + (1.0 - g) * mid : g * (1 - mid);
+    final nb = goLighter ? b + (1.0 - b) * mid : b * (1 - mid);
+    final candidate = Color.fromARGB(255, (nr * 255).round(), (ng * 255).round(), (nb * 255).round());
+    if (_contrastRatio(candidate, paired) >= 4.5) {
+      best = candidate;
+      hi = mid;
+    } else {
+      lo = mid;
+    }
+  }
+  return best;
+}
+
+class _GridColorPickerDialog extends StatefulWidget {
+  final Color initialColor;
+  final Color? pairedColor;
+  final String label;
+  const _GridColorPickerDialog({required this.initialColor, this.pairedColor, required this.label});
+
+  @override
+  State<_GridColorPickerDialog> createState() => _GridColorPickerDialogState();
+}
+
+class _GridColorPickerDialogState extends State<_GridColorPickerDialog> {
+  late Color _selected;
+  bool _showRgb = false;
+  late TextEditingController _hexController;
 
   @override
   void initState() {
     super.initState();
-    final hsl = HSLColor.fromColor(widget.initialColor);
-    _hue = hsl.hue;
-    _saturation = hsl.saturation;
-    _lightness = hsl.lightness;
+    _selected = widget.initialColor;
+    _hexController = TextEditingController(text: _colorToHex(widget.initialColor));
   }
 
-  Color get _currentColor => HSLColor.fromAHSL(1, _hue, _saturation, _lightness).toColor();
+  @override
+  void dispose() {
+    _hexController.dispose();
+    super.dispose();
+  }
+
+  void _setColor(Color c) {
+    setState(() {
+      _selected = c;
+      _hexController.text = _colorToHex(c);
+    });
+  }
+
+  void _showWhyDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Why Color Contrast Matters'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Color contrast is the difference in brightness between text and its background. '
+              'When contrast is too low, text becomes hard or impossible to read — especially for '
+              'people with low vision, color blindness, or anyone using a screen in bright sunlight.',
+              style: TextStyle(fontSize: 13),
+            ),
+            SizedBox(height: 12),
+            Text(
+              'The WCAG AA standard requires a minimum contrast ratio of 4.5:1 for normal text. '
+              'This is the internationally recognized benchmark for web accessibility, and ODS '
+              'enforces it for all built-in themes.',
+              style: TextStyle(fontSize: 13),
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Colors in the Recommended section meet this standard against the text that will '
+              'appear on top of them. You can still pick any color, but low-contrast choices will '
+              'show a warning.',
+              style: TextStyle(fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Got it')),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildColorGridSections(ThemeData theme) {
+    final allColors = _colorGrid.expand((row) => row).toList();
+    final paired = widget.pairedColor;
+    final recommended = <int>[];
+    final other = <int>[];
+
+    if (paired != null) {
+      final seen = <int>{};
+      for (final c in allColors) {
+        if (_contrastRatio(Color(c), paired) >= 4.5) {
+          recommended.add(c);
+          seen.add(c);
+        } else {
+          other.add(c);
+        }
+      }
+      // Add fixed versions of failing colors (deduplicated)
+      for (final c in other) {
+        final fixed = _fixContrast(Color(c), paired);
+        final fixedArgb = fixed.toARGB32();
+        if (!seen.contains(fixedArgb)) {
+          recommended.add(fixedArgb);
+          seen.add(fixedArgb);
+        }
+      }
+    } else {
+      recommended.addAll(allColors);
+    }
+
+    Widget buildGrid(List<int> colors, {double opacity = 1.0}) {
+      const cols = 8;
+      final rows = <List<int>>[];
+      for (var i = 0; i < colors.length; i += cols) {
+        rows.add(colors.sublist(i, (i + cols).clamp(0, colors.length)));
+      }
+      return Opacity(
+        opacity: opacity,
+        child: Column(
+          children: [
+            for (final row in rows)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Row(
+                  children: [
+                    for (int i = 0; i < cols; i++) ...[
+                      if (i > 0) const SizedBox(width: 2),
+                      Expanded(
+                        child: i < row.length
+                            ? GestureDetector(
+                                onTap: () => _setColor(Color(row[i])),
+                                child: Container(
+                                  height: 28,
+                                  decoration: BoxDecoration(
+                                    color: Color(row[i]),
+                                    borderRadius: BorderRadius.circular(3),
+                                    border: _selected.toARGB32() == row[i]
+                                        ? Border.all(color: theme.colorScheme.primary, width: 2.5)
+                                        : null,
+                                  ),
+                                ),
+                              )
+                            : const SizedBox(height: 28),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    return [
+      if (recommended.isNotEmpty) ...[
+        if (paired != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              children: [
+                Text('Recommended (accessible)', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: () => _showWhyDialog(context),
+                  child: Text('Why?', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary)),
+                ),
+              ],
+            ),
+          ),
+        buildGrid(recommended),
+      ],
+      if (other.isNotEmpty) ...[
+        const SizedBox(height: 6),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Text('Other (low contrast)', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ),
+        buildGrid(other, opacity: 0.5),
+      ],
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
-    final color = _currentColor;
-    final hexStr = '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+    final theme = Theme.of(context);
+    final ratio = widget.pairedColor != null ? _contrastRatio(_selected, widget.pairedColor!) : null;
+    final passesAA = ratio != null && ratio >= 4.5;
 
     return AlertDialog(
       title: const Text('Pick Color'),
       content: SizedBox(
-        width: 300,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Color preview
-            Container(
-              height: 48,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Theme.of(context).colorScheme.outline),
+        width: 340,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Hint
+              Text(widget.label, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              const SizedBox(height: 12),
+
+              // Current vs New preview + contrast
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(children: [
+                      Text('Current', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                      const SizedBox(height: 4),
+                      Container(
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: widget.initialColor,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: theme.colorScheme.outlineVariant),
+                        ),
+                      ),
+                    ]),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(children: [
+                      Text('New', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                      const SizedBox(height: 4),
+                      Container(
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: _selected,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: theme.colorScheme.outlineVariant),
+                        ),
+                      ),
+                    ]),
+                  ),
+                  if (ratio != null) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(children: [
+                        Text('Contrast', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                        const SizedBox(height: 4),
+                        Container(
+                          height: 40,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: passesAA ? const Color(0x1A22C55E) : const Color(0x1AEF4444),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: passesAA ? const Color(0xFF22C55E) : const Color(0xFFEF4444)),
+                          ),
+                          child: Text(
+                            '${ratio.toStringAsFixed(1)}:1 ${passesAA ? '\u2713' : '\u26A0'}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: passesAA ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
+                            ),
+                          ),
+                        ),
+                      ]),
+                    ),
+                  ],
+                ],
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(hexStr, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace')),
-            const SizedBox(height: 16),
-            // Hue slider
-            _sliderRow(context, 'Hue', _hue, 0, 360,
-              (v) => setState(() => _hue = v),
-            ),
-            const SizedBox(height: 8),
-            // Saturation slider
-            _sliderRow(context, 'Saturation', _saturation, 0, 1,
-              (v) => setState(() => _saturation = v),
-            ),
-            const SizedBox(height: 8),
-            // Lightness slider
-            _sliderRow(context, 'Lightness', _lightness, 0, 1,
-              (v) => setState(() => _lightness = v),
-            ),
-          ],
+              const SizedBox(height: 12),
+
+              // Color grid — split into recommended (accessible) and other
+              ..._buildColorGridSections(theme),
+              const SizedBox(height: 4),
+
+              // Contrast warning banner
+              if (ratio != null && !passesAA)
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  margin: const EdgeInsets.only(bottom: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0x1AEF4444),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'This color may make text hard to read. A contrast ratio of at least 4.5:1 is needed for accessible text.',
+                        style: TextStyle(fontSize: 11, color: theme.brightness == Brightness.dark ? const Color(0xFFF87171) : const Color(0xFFDC2626)),
+                      ),
+                      if (widget.pairedColor != null) ...[
+                        const SizedBox(height: 4),
+                        GestureDetector(
+                          onTap: () => _setColor(_fixContrast(_selected, widget.pairedColor!)),
+                          child: Text(
+                            'Fix for me',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              decoration: TextDecoration.underline,
+                              color: theme.brightness == Brightness.dark ? const Color(0xFFF87171) : const Color(0xFFDC2626),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
+              // Hex input
+              Row(
+                children: [
+                  Text('Hex', style: theme.textTheme.bodySmall),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SizedBox(
+                      height: 32,
+                      child: TextField(
+                        controller: _hexController,
+                        style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        ),
+                        onChanged: (v) {
+                          final hex = v.trim();
+                          if (RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(hex)) {
+                            final parsed = int.tryParse(hex.replaceFirst('#', ''), radix: 16);
+                            if (parsed != null) {
+                              setState(() => _selected = Color(0xFF000000 | parsed));
+                            }
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+
+              // Collapsible RGB sliders
+              InkWell(
+                onTap: () => setState(() => _showRgb = !_showRgb),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _showRgb ? Icons.expand_more : Icons.chevron_right,
+                        size: 16,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 4),
+                      Text('Custom RGB color', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                    ],
+                  ),
+                ),
+              ),
+              if (_showRgb) ...[
+                _rgbSlider('R', (_selected.r * 255).round(), const Color(0xFFE53935), (v) {
+                  _setColor(Color.fromARGB(255, v, (_selected.g * 255).round(), (_selected.b * 255).round()));
+                }),
+                _rgbSlider('G', (_selected.g * 255).round(), const Color(0xFF43A047), (v) {
+                  _setColor(Color.fromARGB(255, (_selected.r * 255).round(), v, (_selected.b * 255).round()));
+                }),
+                _rgbSlider('B', (_selected.b * 255).round(), const Color(0xFF1E88E5), (v) {
+                  _setColor(Color.fromARGB(255, (_selected.r * 255).round(), (_selected.g * 255).round(), v));
+                }),
+              ],
+            ],
+          ),
         ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(context, color), child: const Text('Select')),
+        FilledButton(onPressed: () => Navigator.pop(context, _selected), child: const Text('Select')),
       ],
     );
   }
 
-  Widget _sliderRow(BuildContext context, String label, double value, double min, double max, ValueChanged<double> onChanged) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            trackHeight: 12,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-            trackShape: const RoundedRectSliderTrackShape(),
+  Widget _rgbSlider(String label, int value, Color labelColor, ValueChanged<int> onChanged) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 14,
+            child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: labelColor)),
           ),
-          child: Slider(
-            value: value,
-            min: min,
-            max: max,
-            onChanged: onChanged,
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 6,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+              ),
+              child: Slider(
+                value: value.toDouble(),
+                min: 0,
+                max: 255,
+                onChanged: (v) => onChanged(v.round()),
+              ),
+            ),
           ),
-        ),
-      ],
+          SizedBox(
+            width: 30,
+            child: Text('$value', textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, fontFamily: 'monospace')),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,0 +1,66 @@
+{
+  "name": "terracotta",
+  "displayName": "Terracotta",
+  "author": "ods",
+  "nativeScheme": "light",
+  "design": {
+    "radiusSelector": ".375rem",
+    "radiusField": ".25rem",
+    "radiusBox": ".5rem",
+    "sizeSelector": ".25rem",
+    "sizeField": ".25rem",
+    "border": "1px",
+    "depth": 1,
+    "noise": 0
+  },
+  "light": {
+    "colorScheme": "light",
+    "colors": {
+      "primary": "oklch(50% .14 35)",
+      "primaryContent": "oklch(95% .02 35)",
+      "secondary": "oklch(45% .1 70)",
+      "secondaryContent": "oklch(95% .015 70)",
+      "accent": "oklch(50% .1 170)",
+      "accentContent": "oklch(95% .015 170)",
+      "neutral": "oklch(28% .02 45)",
+      "neutralContent": "oklch(85% .01 45)",
+      "base100": "oklch(97% .008 70)",
+      "base200": "oklch(94% .012 65)",
+      "base300": "oklch(90% .018 60)",
+      "baseContent": "oklch(25% .025 40)",
+      "info": "oklch(55% .12 240)",
+      "infoContent": "oklch(95% .02 240)",
+      "success": "oklch(58% .14 160)",
+      "successContent": "oklch(95% .02 160)",
+      "warning": "oklch(72% .15 80)",
+      "warningContent": "oklch(28% .06 80)",
+      "error": "oklch(55% .19 20)",
+      "errorContent": "oklch(95% .02 20)"
+    }
+  },
+  "dark": {
+    "colorScheme": "dark",
+    "colors": {
+      "primary": "oklch(65% .14 35)",
+      "primaryContent": "oklch(20% .04 35)",
+      "secondary": "oklch(60% .1 70)",
+      "secondaryContent": "oklch(20% .03 70)",
+      "accent": "oklch(65% .1 170)",
+      "accentContent": "oklch(20% .02 170)",
+      "neutral": "oklch(20% .015 45)",
+      "neutralContent": "oklch(80% .01 45)",
+      "base100": "oklch(22% .015 40)",
+      "base200": "oklch(19% .012 38)",
+      "base300": "oklch(16% .01 36)",
+      "baseContent": "oklch(92% .015 55)",
+      "info": "oklch(65% .12 240)",
+      "infoContent": "oklch(20% .03 240)",
+      "success": "oklch(65% .14 160)",
+      "successContent": "oklch(20% .03 160)",
+      "warning": "oklch(75% .15 80)",
+      "warningContent": "oklch(28% .06 80)",
+      "error": "oklch(65% .19 20)",
+      "errorContent": "oklch(20% .04 20)"
+    }
+  }
+}

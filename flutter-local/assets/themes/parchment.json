@@ -1,0 +1,66 @@
+{
+  "name": "parchment",
+  "displayName": "Parchment",
+  "author": "ods",
+  "nativeScheme": "light",
+  "design": {
+    "radiusSelector": ".25rem",
+    "radiusField": ".25rem",
+    "radiusBox": ".25rem",
+    "sizeSelector": ".25rem",
+    "sizeField": ".25rem",
+    "border": "1px",
+    "depth": 0,
+    "noise": 0
+  },
+  "light": {
+    "colorScheme": "light",
+    "colors": {
+      "primary": "oklch(42% .08 50)",
+      "primaryContent": "oklch(95% .015 50)",
+      "secondary": "oklch(55% .12 30)",
+      "secondaryContent": "oklch(96.5% 0.02 30)",
+      "accent": "oklch(50% .09 160)",
+      "accentContent": "oklch(95% .015 160)",
+      "neutral": "oklch(30% .02 60)",
+      "neutralContent": "oklch(85% .01 60)",
+      "base100": "oklch(96% .015 80)",
+      "base200": "oklch(93% .02 75)",
+      "base300": "oklch(88% .025 70)",
+      "baseContent": "oklch(25% .03 55)",
+      "info": "oklch(55% .12 240)",
+      "infoContent": "oklch(95% .02 240)",
+      "success": "oklch(55% .14 155)",
+      "successContent": "oklch(95% .02 155)",
+      "warning": "oklch(70% .16 75)",
+      "warningContent": "oklch(25% .06 75)",
+      "error": "oklch(55% .18 25)",
+      "errorContent": "oklch(95% .02 25)"
+    }
+  },
+  "dark": {
+    "colorScheme": "dark",
+    "colors": {
+      "primary": "oklch(62% .08 50)",
+      "primaryContent": "oklch(20% .02 50)",
+      "secondary": "oklch(65% .12 30)",
+      "secondaryContent": "oklch(20% .03 30)",
+      "accent": "oklch(65% .09 160)",
+      "accentContent": "oklch(20% .02 160)",
+      "neutral": "oklch(22% .02 60)",
+      "neutralContent": "oklch(80% .01 60)",
+      "base100": "oklch(22% .02 60)",
+      "base200": "oklch(19% .018 58)",
+      "base300": "oklch(16% .015 55)",
+      "baseContent": "oklch(90% .02 70)",
+      "info": "oklch(65% .12 240)",
+      "infoContent": "oklch(20% .03 240)",
+      "success": "oklch(65% .14 155)",
+      "successContent": "oklch(20% .03 155)",
+      "warning": "oklch(75% .16 75)",
+      "warningContent": "oklch(25% .06 75)",
+      "error": "oklch(65% .18 25)",
+      "errorContent": "oklch(20% .04 25)"
+    }
+  }
+}

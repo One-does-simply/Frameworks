@@ -35,7 +35,7 @@
       "warning": "oklch(82% .189 84.429)",
       "warningContent": "oklch(41% .112 45.904)",
       "error": "oklch(70% .191 22.216)",
-      "errorContent": "oklch(39% .141 25.723)"
+      "errorContent": "oklch(31.1% 0.141 25.723)"
     }
   },
   "dark": {
@@ -60,7 +60,7 @@
       "warning": "oklch(82% .189 84.429)",
       "warningContent": "oklch(41% .112 45.904)",
       "error": "oklch(70% .191 22.216)",
-      "errorContent": "oklch(39% .141 25.723)"
+      "errorContent": "oklch(31.1% 0.141 25.723)"
     }
   }
 }

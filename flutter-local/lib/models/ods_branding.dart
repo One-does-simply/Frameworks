@@ -28,7 +28,7 @@ class OdsBranding {
   final Map<String, String> overrides;
 
   const OdsBranding({
-    this.theme = 'light',
+    this.theme = 'indigo',
     this.mode = 'system',
     this.logo,
     this.favicon,
@@ -46,7 +46,7 @@ class OdsBranding {
       if (json['primaryColor'] != null) overrides['primary'] = json['primaryColor'] as String;
       if (json['accentColor'] != null) overrides['accent'] = json['accentColor'] as String;
       return OdsBranding(
-        theme: 'light',
+        theme: 'indigo',
         mode: 'system',
         logo: json['logo'] as String?,
         favicon: json['favicon'] as String?,
@@ -56,8 +56,12 @@ class OdsBranding {
       );
     }
 
+    var parsedTheme = json['theme'] as String? ?? 'indigo';
+    if (parsedTheme == 'light') parsedTheme = 'indigo';
+    if (parsedTheme == 'dark') parsedTheme = 'slate';
+
     return OdsBranding(
-      theme: json['theme'] as String? ?? 'light',
+      theme: parsedTheme,
       mode: json['mode'] as String? ?? 'system',
       logo: json['logo'] as String?,
       favicon: json['favicon'] as String?,

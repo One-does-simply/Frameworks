@@ -110,9 +110,9 @@ export function QuickBuildScreen() {
 
   // Phase 2.5: Theme selection
   const [inThemePhase, setInThemePhase] = useState(false)
-  const [selectedTheme, setSelectedTheme] = useState('light')
+  const [selectedTheme, setSelectedTheme] = useState('indigo')
   const [colorOverrides, setColorOverrides] = useState<Record<string, string>>({})
-  const [themeCatalog, setThemeCatalog] = useState<Array<{ name: string; displayName: string }> | null>(null)
+  const [themeCatalog, setThemeCatalog] = useState<Array<{ name: string; displayName: string; tags?: { style?: string; palette?: string } | string[] }> | null>(null)
 
   // Saving
   const [saving, setSaving] = useState(false)
@@ -163,7 +163,7 @@ export function QuickBuildScreen() {
         initialFieldLists[q.id] = []
       } else if (q.id === 'theme') {
         // Use framework default theme, falling back to template default
-        initialAnswers[q.id] = localStorage.getItem('ods_default_theme') ?? q.default ?? 'light'
+        initialAnswers[q.id] = localStorage.getItem('ods_default_theme') ?? q.default ?? 'indigo'
       } else if (q.default != null) {
         initialAnswers[q.id] = q.default
       }
@@ -258,7 +258,10 @@ export function QuickBuildScreen() {
 
   async function goToThemePhase() {
     const catalog = await loadThemeCatalog()
-    const themeFromAnswers = (answers['theme'] as string) ?? localStorage.getItem('ods_default_theme') ?? 'light'
+    let themeFromAnswers = (answers['theme'] as string) ?? localStorage.getItem('ods_default_theme') ?? 'indigo'
+    // Handle legacy 'light'/'dark' theme names from old templates
+    if (themeFromAnswers === 'light') themeFromAnswers = 'indigo'
+    if (themeFromAnswers === 'dark') themeFromAnswers = 'slate'
     setThemeCatalog(catalog)
     setSelectedTheme(themeFromAnswers)
     setColorOverrides({})
@@ -323,29 +326,71 @@ export function QuickBuildScreen() {
   const inTextReview = reviewTexts != null
   const inTheme = inThemePhase && !inTextReview
   const inWizard = questions != null && !inTextReview && !inTheme
-  const title = inTextReview ? 'Review & Customize' : inTheme ? 'Choose a Theme' : templateName ?? 'Quick Build'
+  const inCatalog = !inWizard && !inTheme && !inTextReview
+
+  // Breadcrumb step: 0=catalog (no breadcrumb), 1=details, 2=theme, 3=text review
+  const breadcrumbStep = inTextReview ? 3 : inTheme ? 2 : inWizard ? 1 : 0
 
   // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
 
+  const breadcrumbLabels = ['Enter App Details', 'Choose Theme', 'Customize App Text']
+
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* Top bar */}
-      <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b bg-background/95 px-4 supports-backdrop-filter:backdrop-blur-sm">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={() => {
-            if (inTextReview) backToTheme()
-            else if (inTheme) backToWizardFromTheme()
-            else if (inWizard) { setQuestions(null); setTemplateJson(null) }
-            else navigate('/admin')
-          }}
-        >
-          <ArrowLeft className="size-5" />
-        </Button>
-        <h1 className="flex-1 truncate text-base font-semibold">{title}</h1>
+      <header className="sticky top-0 z-40 flex flex-col border-b bg-background/95 supports-backdrop-filter:backdrop-blur-sm">
+        <div className="flex h-14 items-center gap-3 px-4">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => {
+              if (inTextReview) backToTheme()
+              else if (inTheme) backToWizardFromTheme()
+              else if (inWizard) { setQuestions(null); setTemplateJson(null) }
+              else navigate('/admin')
+            }}
+          >
+            <ArrowLeft className="size-5" />
+          </Button>
+          <h1 className="flex-1 truncate text-base font-semibold">{templateName ?? 'Quick Build'}</h1>
+        </div>
+
+        {/* Breadcrumb — visible once a template is selected */}
+        {!inCatalog && (
+          <nav className="flex items-center gap-1.5 px-4 pb-2.5 text-xs">
+            {breadcrumbLabels.map((label, i) => {
+              const step = i + 1
+              const isCurrent = step === breadcrumbStep
+              const isPast = step < breadcrumbStep
+              return (
+                <span key={label} className="flex items-center gap-1.5">
+                  {i > 0 && <ChevronRight className="size-3 text-muted-foreground/50" />}
+                  {isPast ? (
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        if (step === 1 && breadcrumbStep >= 2) {
+                          if (inTextReview) { backToTheme(); setTimeout(backToWizardFromTheme, 0) }
+                          else backToWizardFromTheme()
+                        }
+                        if (step === 2 && inTextReview) backToTheme()
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ) : (
+                    <span className={isCurrent ? 'font-semibold text-primary' : 'text-muted-foreground/50'}>
+                      {label}
+                    </span>
+                  )}
+                </span>
+              )
+            })}
+          </nav>
+        )}
       </header>
 
       {/* Content */}
@@ -566,9 +611,9 @@ function WizardPhase({
           {rendering ? (
             <Loader2 className="mr-2 size-4 animate-spin" />
           ) : (
-            <Rocket className="mr-2 size-4" />
+            <Palette className="mr-2 size-4" />
           )}
-          {rendering ? 'Building...' : 'Build My App'}
+          {rendering ? 'Loading...' : 'Choose Theme'}
         </Button>
       </div>
     </div>
@@ -910,7 +955,7 @@ function ThemePhase({
   rendering,
   renderError,
 }: {
-  catalog: Array<{ name: string; displayName: string }> | null
+  catalog: Array<{ name: string; displayName: string; tags?: { style?: string; palette?: string } | string[] }> | null
   selectedTheme: string
   colorOverrides: Record<string, string>
   onSelectTheme: (theme: string) => void
@@ -920,18 +965,88 @@ function ThemePhase({
   rendering: boolean
   renderError: string | null
 }) {
+  const [activeStyle, setActiveStyle] = useState<string | null>(null)
+  const [activePalette, setActivePalette] = useState<string | null>(null)
+
+  // Helper to extract style/palette from tags (supports both old array and new object format)
+  const getStyle = (tags?: { style?: string; palette?: string } | string[]): string | undefined =>
+    tags && !Array.isArray(tags) ? tags.style : undefined
+  const getPalette = (tags?: { style?: string; palette?: string } | string[]): string | undefined =>
+    tags && !Array.isArray(tags) ? tags.palette : undefined
+
+  // Collect all unique styles and palettes
+  const allStyles = [...new Set((catalog ?? []).map((e) => getStyle(e.tags)).filter(Boolean) as string[])].sort()
+  const allPalettes = [...new Set((catalog ?? []).map((e) => getPalette(e.tags)).filter(Boolean) as string[])].sort()
+
+  // Filter and sort themes
+  const filteredCatalog = (catalog ?? [])
+    .filter((e) => {
+      if (activeStyle && getStyle(e.tags) !== activeStyle) return false
+      if (activePalette && getPalette(e.tags) !== activePalette) return false
+      return true
+    })
+    .sort((a, b) => a.displayName.localeCompare(b.displayName))
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex min-h-0 flex-1">
         {/* Left pane — scrollable theme list */}
-        <div className="flex w-52 shrink-0 flex-col border-r">
-          <div className="px-3 pt-3 pb-2 text-sm font-semibold">Themes</div>
+        <div className="flex w-56 shrink-0 flex-col border-r">
+          <div className="px-3 pt-3 pb-1 text-sm font-semibold">Themes</div>
+
+          {/* Two-dimension tag filters */}
+          <div className="space-y-1.5 px-3 pb-2">
+            {allStyles.length > 0 && (
+              <div>
+                <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Style</div>
+                <div className="flex flex-wrap gap-1">
+                  {allStyles.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      className={`rounded-full px-2 py-0.5 text-[10px] transition-colors ${
+                        activeStyle === tag
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                      }`}
+                      onClick={() => setActiveStyle(activeStyle === tag ? null : tag)}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {allPalettes.length > 0 && (
+              <div>
+                <div className="mb-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Palette</div>
+                <div className="flex flex-wrap gap-1">
+                  {allPalettes.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      className={`rounded-full px-2 py-0.5 text-[10px] transition-colors ${
+                        activePalette === tag
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                      }`}
+                      onClick={() => setActivePalette(activePalette === tag ? null : tag)}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="flex-1 space-y-1 overflow-y-auto px-2 pb-2">
-            {(catalog ?? []).map((entry) => (
+            {filteredCatalog.map((entry) => (
               <ThemeCard
                 key={entry.name}
                 themeName={entry.name}
                 displayName={entry.displayName}
+                tags={entry.tags}
                 isSelected={entry.name === selectedTheme}
                 onSelect={() => onSelectTheme(entry.name)}
               />
@@ -978,11 +1093,13 @@ function ThemePhase({
 function ThemeCard({
   themeName,
   displayName,
+  tags,
   isSelected,
   onSelect,
 }: {
   themeName: string
   displayName: string
+  tags?: { style?: string; palette?: string } | string[]
   isSelected: boolean
   onSelect: () => void
 }) {
@@ -1005,21 +1122,29 @@ function ThemeCard({
     <button
       type="button"
       onClick={onSelect}
-      className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
+      className={`flex flex-col gap-1 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
         isSelected
           ? 'border-primary bg-primary/5 font-semibold ring-1 ring-primary'
           : 'border-border hover:border-primary/50 hover:bg-muted/50'
       }`}
     >
-      {colors && (
-        <div className="flex gap-0.5">
-          <span className="size-3 rounded-full border border-black/10" style={{ background: colors.primary }} />
-          <span className="size-3 rounded-full border border-black/10" style={{ background: colors.secondary }} />
-          <span className="size-3 rounded-full border border-black/10" style={{ background: colors.accent }} />
+      <div className="flex w-full items-center gap-2">
+        {colors && (
+          <div className="flex gap-0.5">
+            <span className="size-3 rounded-full border border-black/10" style={{ background: colors.primary }} />
+            <span className="size-3 rounded-full border border-black/10" style={{ background: colors.secondary }} />
+            <span className="size-3 rounded-full border border-black/10" style={{ background: colors.accent }} />
+          </div>
+        )}
+        <span className="flex-1 truncate">{displayName}</span>
+        {isSelected && <Check className="size-3.5 shrink-0 text-primary" />}
+      </div>
+      {tags && !Array.isArray(tags) && (tags.style || tags.palette) && (
+        <div className="flex flex-wrap gap-1">
+          {tags.style && <span className="rounded-full bg-muted px-1.5 py-px text-[9px] text-muted-foreground">{tags.style}</span>}
+          {tags.palette && <span className="rounded-full bg-muted px-1.5 py-px text-[9px] text-muted-foreground">{tags.palette}</span>}
         </div>
       )}
-      <span className="flex-1 truncate">{displayName}</span>
-      {isSelected && <Check className="size-3.5 shrink-0 text-primary" />}
     </button>
   )
 }
@@ -1113,6 +1238,114 @@ function ThemePreviewFull({ themeName, overrides, mode }: { themeName: string; o
   )
 }
 
+// ---------------------------------------------------------------------------
+// Color Picker helpers
+// ---------------------------------------------------------------------------
+
+/** 6x8 curated color grid: 6 hue rows (reds, oranges, greens, teals, blues, purples) x 8 shades + 1 grayscale row */
+const COLOR_GRID: string[][] = [
+  // Reds
+  ['#FFCDD2','#EF9A9A','#E57373','#EF5350','#F44336','#E53935','#C62828','#B71C1C'],
+  // Oranges / Yellows
+  ['#FFE0B2','#FFCC80','#FFB74D','#FFA726','#FF9800','#FB8C00','#EF6C00','#E65100'],
+  // Greens
+  ['#C8E6C9','#A5D6A7','#81C784','#66BB6A','#4CAF50','#43A047','#2E7D32','#1B5E20'],
+  // Teals / Cyans
+  ['#B2EBF2','#80DEEA','#4DD0E1','#26C6DA','#00BCD4','#00ACC1','#00838F','#006064'],
+  // Blues / Indigos
+  ['#BBDEFB','#90CAF9','#64B5F6','#42A5F5','#2196F3','#1E88E5','#1565C0','#0D47A1'],
+  // Purples / Pinks
+  ['#E1BEE7','#CE93D8','#BA68C8','#AB47BC','#9C27B0','#8E24AA','#6A1B9A','#4A148C'],
+  // Grays (black to white)
+  ['#FFFFFF','#E0E0E0','#BDBDBD','#9E9E9E','#757575','#616161','#424242','#212121'],
+]
+
+const TOKEN_HINTS: Record<string, string> = {
+  primary: 'Main action buttons and links',
+  secondary: 'Supporting actions and highlights',
+  accent: 'Decorative elements and badges',
+  base100: 'Page background color',
+  baseContent: 'Main body text color',
+  error: 'Error messages and alerts',
+}
+
+const TOKEN_PAIRS: Record<string, string> = {
+  primary: 'primaryContent',
+  secondary: 'secondaryContent',
+  accent: 'accentContent',
+  base100: 'baseContent',
+  baseContent: 'base100',
+  error: 'errorContent',
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '')
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  return '#' + [r, g, b].map((c) => Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2, '0')).join('')
+}
+
+/** WCAG relative luminance from sRGB hex */
+function relativeLuminance(hex: string): number {
+  const [r, g, b] = hexToRgb(hex).map((c) => {
+    const s = c / 255
+    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+function contrastRatio(hex1: string, hex2: string): number {
+  const l1 = relativeLuminance(hex1)
+  const l2 = relativeLuminance(hex2)
+  const lighter = Math.max(l1, l2)
+  const darker = Math.min(l1, l2)
+  return (lighter + 0.05) / (darker + 0.05)
+}
+
+/** Find the closest accessible hex color by adjusting lightness toward the paired color's opposite. */
+function fixContrast(hex: string, pairedHex: string): string {
+  const [r, g, b] = hexToRgb(hex)
+  const pairedLum = relativeLuminance(pairedHex)
+  // Determine direction: if paired is dark, we need to go lighter, and vice versa
+  const goLighter = pairedLum < 0.2
+
+  // Binary search on a brightness multiplier
+  let lo = 0, hi = 1
+  let bestHex = hex
+  for (let iter = 0; iter < 30; iter++) {
+    const mid = (lo + hi) / 2
+    // Blend toward white (goLighter) or black (!goLighter)
+    const nr = goLighter ? r + (255 - r) * mid : r * (1 - mid)
+    const ng = goLighter ? g + (255 - g) * mid : g * (1 - mid)
+    const nb = goLighter ? b + (255 - b) * mid : b * (1 - mid)
+    const candidate = rgbToHex(Math.round(nr), Math.round(ng), Math.round(nb))
+    const ratio = contrastRatio(candidate, pairedHex)
+    if (ratio >= 4.5) {
+      bestHex = candidate
+      hi = mid // Try to stay closer to the original
+    } else {
+      lo = mid
+    }
+  }
+  return bestHex
+}
+
+/** Convert oklch CSS string to hex by rendering in the DOM */
+function oklchToHex(oklch: string): string {
+  const el = document.createElement('div')
+  el.style.color = oklch
+  document.body.appendChild(el)
+  const computed = getComputedStyle(el).color
+  document.body.removeChild(el)
+  const match = computed.match(/(\d+)/g)
+  if (match && match.length >= 3) {
+    return '#' + match.slice(0, 3).map((n: string) => parseInt(n).toString(16).padStart(2, '0')).join('')
+  }
+  return '#888888'
+}
+
 function ColorRow({
   label,
   token,
@@ -1129,7 +1362,8 @@ function ColorRow({
   onReset: () => void
 }) {
   const [baseColor, setBaseColor] = useState<string>('#888888')
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [pairedColor, setPairedColor] = useState<string | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -1139,20 +1373,9 @@ function ColorRow({
         if (cancelled) return
         const variant = data.light ?? data.dark
         const colors = variant?.colors
-        if (colors?.[token]) {
-          // Convert oklch to hex for the input by rendering it
-          const el = document.createElement('div')
-          el.style.color = colors[token]
-          document.body.appendChild(el)
-          const computed = getComputedStyle(el).color
-          document.body.removeChild(el)
-          // Parse rgb(r, g, b) to hex
-          const match = computed.match(/(\d+)/g)
-          if (match && match.length >= 3) {
-            const hex = '#' + match.slice(0, 3).map((n: string) => parseInt(n).toString(16).padStart(2, '0')).join('')
-            setBaseColor(hex)
-          }
-        }
+        if (colors?.[token]) setBaseColor(oklchToHex(colors[token]))
+        const pairToken = TOKEN_PAIRS[token]
+        if (pairToken && colors?.[pairToken]) setPairedColor(oklchToHex(colors[pairToken]))
       })
       .catch(() => {})
     return () => { cancelled = true }
@@ -1161,35 +1384,281 @@ function ColorRow({
   const displayColor = override ?? baseColor
 
   return (
-    <div className="flex items-center gap-3">
-      <button
-        type="button"
-        className="size-8 shrink-0 rounded-lg border border-border shadow-sm transition-shadow hover:shadow-md"
-        style={{ background: displayColor }}
-        title={`Pick ${label} color`}
-        onClick={() => inputRef.current?.click()}
-      />
-      <input
-        ref={inputRef}
-        type="color"
-        value={displayColor.startsWith('#') ? displayColor : '#888888'}
-        onChange={(e) => onChange(e.target.value)}
-        className="sr-only"
-        aria-label={`${label} color picker`}
-      />
-      <div className="flex-1">
-        <div className="text-sm font-medium">{label}</div>
-        {override && <div className="text-xs text-primary">Custom</div>}
-      </div>
-      {override && (
+    <>
+      <div className="flex items-center gap-3">
         <button
           type="button"
-          onClick={onReset}
-          className="text-xs text-muted-foreground hover:text-foreground"
-        >
-          Reset
-        </button>
+          className="size-8 shrink-0 rounded-lg border border-border shadow-sm transition-shadow hover:shadow-md"
+          style={{ background: displayColor }}
+          title={`Pick ${label} color`}
+          onClick={() => setPickerOpen(true)}
+        />
+        <div className="flex-1">
+          <div className="text-sm font-medium">{label}</div>
+          {override && <div className="text-xs text-primary">Custom</div>}
+        </div>
+        {override && (
+          <button
+            type="button"
+            onClick={onReset}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Reset
+          </button>
+        )}
+      </div>
+
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Pick {label} Color</DialogTitle>
+            <DialogDescription>{TOKEN_HINTS[token] ?? 'Choose a color'}</DialogDescription>
+          </DialogHeader>
+          <GridColorPicker
+            currentColor={displayColor}
+            pairedColor={pairedColor}
+            token={token}
+            onSelect={(hex) => { onChange(hex); setPickerOpen(false) }}
+            onCancel={() => setPickerOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+function WhyAccessiblePopover() {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button
+        type="button"
+        className="text-[10px] text-primary hover:underline"
+        onClick={() => setOpen(true)}
+      >
+        Why?
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Why Color Contrast Matters</DialogTitle>
+            <DialogDescription>Making your app usable for everyone</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>
+              Color contrast is the difference in brightness between text and its background.
+              When contrast is too low, text becomes hard or impossible to read — especially for people
+              with low vision, color blindness, or anyone using a screen in bright sunlight.
+            </p>
+            <p>
+              The <span className="font-medium text-foreground">WCAG AA standard</span> requires a minimum contrast ratio of
+              {' '}<span className="font-medium text-foreground">4.5:1</span> for normal text. This is the internationally
+              recognized benchmark for web accessibility, and ODS enforces it for all built-in themes.
+            </p>
+            <p>
+              Colors in the <span className="font-medium text-foreground">Recommended</span> section meet this standard against
+              the text that will appear on top of them. You can still pick any color, but low-contrast choices will show a warning.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+function GridColorPicker({
+  currentColor,
+  pairedColor,
+  token,
+  onSelect,
+  onCancel,
+}: {
+  currentColor: string
+  pairedColor: string | null
+  token: string
+  onSelect: (hex: string) => void
+  onCancel: () => void
+}) {
+  const [selected, setSelected] = useState(currentColor)
+  const [showRgb, setShowRgb] = useState(false)
+  const [hexInput, setHexInput] = useState(currentColor)
+
+  useEffect(() => { setHexInput(selected) }, [selected])
+
+  const [r, g, b] = hexToRgb(selected)
+
+  // Contrast against paired color
+  const ratio = pairedColor ? contrastRatio(selected, pairedColor) : null
+  const passesAA = ratio !== null && ratio >= 4.5
+
+  return (
+    <div className="space-y-3">
+      {/* Current vs New preview */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 text-center">
+          <div className="mb-1 text-[10px] font-medium text-muted-foreground">Current</div>
+          <div className="mx-auto h-10 w-full rounded-lg border border-border" style={{ background: currentColor }} />
+        </div>
+        <div className="flex-1 text-center">
+          <div className="mb-1 text-[10px] font-medium text-muted-foreground">New</div>
+          <div className="mx-auto h-10 w-full rounded-lg border border-border" style={{ background: selected }} />
+        </div>
+        {ratio !== null && (
+          <div className="flex-1 text-center">
+            <div className="mb-1 text-[10px] font-medium text-muted-foreground">Contrast</div>
+            <div className={`rounded-lg border px-2 py-2 text-xs font-semibold ${passesAA ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-400' : 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400'}`}>
+              {ratio.toFixed(1)}:1 {passesAA ? '\u2713' : '\u26A0'}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Color grid — split into recommended (passes contrast) and other */}
+      {(() => {
+        const allColors = COLOR_GRID.flat()
+        const gridCols = 8
+
+        // Build recommended: original accessible colors + fixed versions of non-accessible ones
+        const recommended: string[] = []
+        const other: string[] = []
+        const seen = new Set<string>()
+
+        if (pairedColor) {
+          for (const hex of allColors) {
+            if (contrastRatio(hex, pairedColor) >= 4.5) {
+              recommended.push(hex)
+              seen.add(hex.toUpperCase())
+            } else {
+              other.push(hex)
+            }
+          }
+          // Add fixed versions of failing colors (deduplicated)
+          for (const hex of other) {
+            const fixed = fixContrast(hex, pairedColor)
+            if (!seen.has(fixed.toUpperCase())) {
+              recommended.push(fixed)
+              seen.add(fixed.toUpperCase())
+            }
+          }
+        } else {
+          recommended.push(...allColors)
+        }
+
+        const renderGrid = (colors: string[]) => {
+          const rows: string[][] = []
+          for (let i = 0; i < colors.length; i += gridCols) rows.push(colors.slice(i, i + gridCols))
+          return rows.map((row, ri) => (
+            <div key={ri} className="flex gap-0.5">
+              {row.map((hex) => (
+                <button
+                  key={hex}
+                  type="button"
+                  className={`h-7 flex-1 rounded-sm border transition-transform hover:scale-110 ${selected.toUpperCase() === hex.toUpperCase() ? 'ring-2 ring-primary ring-offset-1' : 'border-transparent'}`}
+                  style={{ background: hex }}
+                  onClick={() => setSelected(hex)}
+                  title={hex}
+                />
+              ))}
+              {/* Pad last row */}
+              {row.length < gridCols && Array.from({ length: gridCols - row.length }).map((_, i) => (
+                <div key={`pad-${i}`} className="h-7 flex-1" />
+              ))}
+            </div>
+          ))
+        }
+
+        return (
+          <div className="space-y-2">
+            {recommended.length > 0 && (
+              <div>
+                {pairedColor && (
+                  <div className="mb-1 flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground">
+                    Recommended (accessible)
+                    <WhyAccessiblePopover />
+                  </div>
+                )}
+                <div className="space-y-0.5">{renderGrid(recommended)}</div>
+              </div>
+            )}
+            {other.length > 0 && (
+              <div>
+                <div className="mb-1 text-[10px] font-medium text-muted-foreground">Other (low contrast)</div>
+                <div className="space-y-0.5 opacity-50">{renderGrid(other)}</div>
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* Contrast warning banner */}
+      {ratio !== null && !passesAA && pairedColor && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
+          This color may make text hard to read. A contrast ratio of at least 4.5:1 is needed for accessible text.{' '}
+          <button
+            type="button"
+            className="inline font-semibold underline hover:no-underline"
+            onClick={() => setSelected(fixContrast(selected, pairedColor))}
+          >
+            Fix for me
+          </button>
+        </div>
       )}
+
+      {/* Hex input */}
+      <div className="flex items-center gap-2">
+        <Label className="text-xs">Hex</Label>
+        <Input
+          className="h-7 flex-1 font-mono text-xs"
+          value={hexInput}
+          onChange={(e) => {
+            setHexInput(e.target.value)
+            const v = e.target.value.trim()
+            if (/^#[0-9a-fA-F]{6}$/.test(v)) setSelected(v)
+          }}
+        />
+      </div>
+
+      {/* Collapsible RGB sliders */}
+      <button
+        type="button"
+        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        onClick={() => setShowRgb(!showRgb)}
+      >
+        <ChevronRight className={`size-3 transition-transform ${showRgb ? 'rotate-90' : ''}`} />
+        Custom RGB color
+      </button>
+
+      {showRgb && (
+        <div className="space-y-2 pl-1">
+          {([['R', r, 0], ['G', g, 1], ['B', b, 2]] as const).map(([ch, val, idx]) => (
+            <div key={ch} className="flex items-center gap-2">
+              <span className="w-3 text-xs font-semibold" style={{ color: ch === 'R' ? '#e53935' : ch === 'G' ? '#43a047' : '#1e88e5' }}>{ch}</span>
+              <input
+                type="range"
+                min={0}
+                max={255}
+                value={val}
+                className="h-1.5 flex-1 appearance-none rounded-full"
+                style={{
+                  background: `linear-gradient(to right, ${rgbToHex(...([r, g, b].map((c, i) => i === idx ? 0 : c) as [number, number, number]))}, ${rgbToHex(...([r, g, b].map((c, i) => i === idx ? 255 : c) as [number, number, number]))})`,
+                }}
+                onChange={(e) => {
+                  const rgb: [number, number, number] = [r, g, b]
+                  rgb[idx] = parseInt(e.target.value)
+                  setSelected(rgbToHex(...rgb))
+                }}
+              />
+              <span className="w-7 text-right font-mono text-xs">{val}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex justify-end gap-2 pt-1">
+        <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" onClick={() => onSelect(selected)}>Select</Button>
+      </div>
     </div>
   )
 }
