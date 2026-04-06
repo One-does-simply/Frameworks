@@ -15,6 +15,7 @@ import '../models/ods_branding.dart';
 import '../renderer/snackbar_helper.dart';
 import '../screens/app_tour_dialog.dart';
 import '../screens/user_management_screen.dart';
+import '../widgets/theme_picker_dialog.dart';
 
 /// Full-page settings screen for the Flutter Local framework.
 ///
@@ -786,14 +787,6 @@ class _BrandingSectionState extends State<_BrandingSection> {
   late String _theme;
   bool _customizeOpen = false;
 
-  static const _themeNames = [
-    'indigo','slate','cupcake','bumblebee','emerald','corporate','synthwave','retro',
-    'cyberpunk','valentine','halloween','garden','forest','aqua','lofi','pastel',
-    'fantasy','wireframe','black','luxury','dracula','cmyk','autumn','business',
-    'acid','lemonade','night','coffee','winter','dim','nord','sunset',
-    'caramellatte','abyss','silk','parchment','terracotta','ocean','peach','walnut',
-  ];
-
   static const _customizableTokens = [
     ('primary', 'Primary', 'Main action color — buttons, links, active states.'),
     ('secondary', 'Secondary', 'Supporting color — secondary buttons, tags.'),
@@ -989,24 +982,12 @@ class _BrandingSectionState extends State<_BrandingSection> {
     return Column(
       children: [
         // Theme selector
-        ListTile(
-          leading: const Icon(Icons.palette_outlined),
-          title: const Text('Theme'),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-          trailing: DropdownButton<String>(
-            value: _themeNames.contains(_theme) ? _theme : 'indigo',
-            underline: const SizedBox.shrink(),
-            items: _themeNames.map((t) => DropdownMenuItem(
-              value: t,
-              child: Text(t[0].toUpperCase() + t.substring(1), style: const TextStyle(fontSize: 13)),
-            )).toList(),
-            onChanged: (v) {
-              if (v != null) {
-                setState(() => _theme = v);
-                _save();
-              }
-            },
-          ),
+        ThemePickerTile(
+          currentTheme: _theme,
+          onThemeChanged: (v) {
+            setState(() => _theme = v);
+            _save();
+          },
         ),
         // Customize toggle
         Padding(

@@ -34,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { ThemePicker } from '@/components/ThemePicker.tsx'
 
 // ---------------------------------------------------------------------------
 // SettingsDialog — framework settings + app-level settings from the spec
@@ -264,18 +265,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           {/* Theme selector */}
           <div className="flex items-center justify-between gap-4">
             <Label>Theme</Label>
-            <Select value={selectedTheme} onValueChange={applyThemeOverride}>
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="max-h-60">
-                {['indigo','slate','cupcake','bumblebee','emerald','corporate','synthwave','retro','cyberpunk','valentine','halloween','garden','forest','aqua','lofi','pastel','fantasy','wireframe','black','luxury','dracula','cmyk','autumn','business','acid','lemonade','night','coffee','winter','dim','nord','sunset','caramellatte','abyss','silk','parchment','terracotta','ocean','peach','walnut'].map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t.charAt(0).toUpperCase() + t.slice(1)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ThemePicker value={selectedTheme} onValueChange={applyThemeOverride} />
           </div>
 
           {/* Preview / Customize links */}

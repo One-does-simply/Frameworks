@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { ThemePicker } from '@/components/ThemePicker.tsx'
 import {
   getThemeMode,
   setThemeMode,
@@ -392,24 +393,13 @@ export function AdminSettingsPage() {
                 <Label>Default Theme</Label>
                 <p className="text-xs text-muted-foreground">Used as the initial theme when building new apps</p>
               </div>
-              <Select
+              <ThemePicker
                 value={localStorage.getItem('ods_default_theme') ?? 'indigo'}
                 onValueChange={(v) => {
                   localStorage.setItem('ods_default_theme', v)
                   toast.success(`Default theme set to ${v}`)
                 }}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="max-h-60">
-                  {['indigo','slate','cupcake','bumblebee','emerald','corporate','synthwave','retro','cyberpunk','valentine','halloween','garden','forest','aqua','lofi','pastel','fantasy','wireframe','black','luxury','dracula','cmyk','autumn','business','acid','lemonade','night','coffee','winter','dim','nord','sunset','caramellatte','abyss','silk','parchment','terracotta','ocean','peach','walnut'].map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t.charAt(0).toUpperCase() + t.slice(1)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </div>
 
             <Separator />

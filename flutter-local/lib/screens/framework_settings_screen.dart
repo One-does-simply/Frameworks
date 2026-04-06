@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../engine/framework_auth_service.dart';
 import '../engine/settings_store.dart';
+import '../widgets/theme_picker_dialog.dart';
 import 'framework_admin_setup_screen.dart';
 
 /// Framework-level settings screen, accessible from the Welcome/Home screen.
@@ -23,14 +24,6 @@ class FrameworkSettingsScreen extends StatefulWidget {
 }
 
 class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
-  static const _themeNames = [
-    'indigo','slate','cupcake','bumblebee','emerald','corporate','synthwave','retro',
-    'cyberpunk','valentine','halloween','garden','forest','aqua','lofi','pastel',
-    'fantasy','wireframe','black','luxury','dracula','cmyk','autumn','business',
-    'acid','lemonade','night','coffee','winter','dim','nord','sunset',
-    'caramellatte','abyss','silk','parchment','terracotta','ocean','peach','walnut',
-  ];
-
   SettingsStore get settings => widget.settings;
 
   @override
@@ -72,31 +65,14 @@ class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
             ),
           ),
           // Default theme
-          ListTile(
-            leading: const Icon(Icons.palette_outlined),
-            title: const Text('Default Theme'),
-            subtitle: const Text('Used as the initial theme for new apps'),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-            trailing: DropdownButton<String>(
-              value: _themeNames.contains(settings.defaultTheme) ? settings.defaultTheme : 'indigo',
-              underline: const SizedBox.shrink(),
-              items: const [
-                'indigo','slate','cupcake','bumblebee','emerald','corporate','synthwave','retro',
-                'cyberpunk','valentine','halloween','garden','forest','aqua','lofi','pastel',
-                'fantasy','wireframe','black','luxury','dracula','cmyk','autumn','business',
-                'acid','lemonade','night','coffee','winter','dim','nord','sunset',
-                'caramellatte','abyss','silk','parchment','terracotta','ocean','peach','walnut',
-              ].map((t) => DropdownMenuItem(
-                value: t,
-                child: Text(t[0].toUpperCase() + t.substring(1), style: const TextStyle(fontSize: 13)),
-              )).toList(),
-              onChanged: (v) {
-                if (v != null) {
-                  settings.setDefaultTheme(v);
-                  setState(() {});
-                }
-              },
-            ),
+          ThemePickerTile(
+            currentTheme: settings.defaultTheme,
+            title: 'Default Theme',
+            subtitle: 'Used as the initial theme for new apps',
+            onThemeChanged: (v) {
+              settings.setDefaultTheme(v);
+              setState(() {});
+            },
           ),
           const Divider(),
 
