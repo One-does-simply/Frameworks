@@ -59,6 +59,8 @@ sealed class OdsComponent {
         return OdsTabsComponent.fromJson(json);
       case 'detail':
         return OdsDetailComponent.fromJson(json);
+      case 'kanban':
+        return OdsKanbanComponent.fromJson(json);
       default:
         // Graceful degradation: unknown components are captured, not rejected.
         // This keeps forward compatibility — a spec with future component types
@@ -772,6 +774,74 @@ class OdsDetailComponent extends OdsComponent {
       labels: (json['labels'] as Map<String, dynamic>?)
           ?.map((k, v) => MapEntry(k, v as String)),
       fromForm: json['fromForm'] as String?,
+      styleHint: _parseStyleHint(json),
+      visibleWhen: _parseVisibleWhen(json),
+      visible: _parseVisible(json),
+      roles: _parseRoles(json),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Kanban Component
+// ---------------------------------------------------------------------------
+
+/// Renders data as a kanban board with draggable cards organized by a status
+/// field's select options. Cards can be dragged between columns to update
+/// the status field value.
+class OdsKanbanComponent extends OdsComponent {
+  /// The ID of the GET data source to read rows from.
+  final String dataSource;
+
+  /// The field name whose select options define the board columns.
+  final String statusField;
+
+  /// The field name used as the card title. Falls back to the first
+  /// entry in [cardFields] when not set.
+  final String? titleField;
+
+  /// Field names to display on each card.
+  final List<String> cardFields;
+
+  /// Optional action buttons rendered on each card.
+  final List<OdsRowAction> rowActions;
+
+  /// Optional initial sort order applied to cards within each column.
+  final OdsDefaultSort? defaultSort;
+
+  /// When true, a search bar appears above the board.
+  final bool searchable;
+
+  const OdsKanbanComponent({
+    required this.dataSource,
+    required this.statusField,
+    this.titleField,
+    this.cardFields = const [],
+    this.rowActions = const [],
+    this.defaultSort,
+    this.searchable = false,
+    required super.styleHint,
+    super.visibleWhen,
+    super.visible,
+    super.roles,
+  }) : super(component: 'kanban');
+
+  factory OdsKanbanComponent.fromJson(Map<String, dynamic> json) {
+    return OdsKanbanComponent(
+      dataSource: json['dataSource'] as String,
+      statusField: json['statusField'] as String,
+      titleField: json['titleField'] as String?,
+      cardFields: (json['cardFields'] as List<dynamic>?)
+              ?.cast<String>() ??
+          const [],
+      rowActions: (json['rowActions'] as List<dynamic>?)
+              ?.map((a) => OdsRowAction.fromJson(a as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      defaultSort: json['defaultSort'] != null
+          ? OdsDefaultSort.fromJson(json['defaultSort'] as Map<String, dynamic>)
+          : null,
+      searchable: json['searchable'] as bool? ?? false,
       styleHint: _parseStyleHint(json),
       visibleWhen: _parseVisibleWhen(json),
       visible: _parseVisible(json),

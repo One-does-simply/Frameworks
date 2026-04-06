@@ -974,6 +974,8 @@ include: package:flutter_lints/flutter.yaml
         buf.writeln("          // Tabs component — code generation not yet supported");
       case OdsDetailComponent _:
         buf.writeln("          // Detail component — code generation not yet supported");
+      case OdsKanbanComponent _:
+        buf.writeln("          // Kanban component — code generation not yet supported");
       case OdsUnknownComponent _:
         buf.writeln("          // Unknown component type — skipped");
     }

@@ -17,6 +17,7 @@ import { ListComponent } from './components/ListComponent.tsx'
 import { ChartComponent } from './components/ChartComponent.tsx'
 import { TabsComponent } from './components/TabsComponent.tsx'
 import { DetailComponent } from './components/DetailComponent.tsx'
+import { KanbanComponent } from './components/KanbanComponent.tsx'
 
 // ---------------------------------------------------------------------------
 // PageRenderer — maps an OdsPage to rendered components
@@ -68,6 +69,9 @@ function ComponentRenderer({ component }: { component: OdsComponent }) {
       break
     case 'detail':
       content = <DetailComponent model={component} />
+      break
+    case 'kanban':
+      content = <KanbanComponent model={component} />
       break
     case 'unknown':
       content = <UnknownComponent originalType={component.originalType} />

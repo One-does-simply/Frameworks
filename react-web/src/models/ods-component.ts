@@ -232,6 +232,17 @@ export interface OdsDetailComponent extends OdsComponentBase {
   fromForm?: string
 }
 
+export interface OdsKanbanComponent extends OdsComponentBase {
+  component: 'kanban'
+  dataSource: string
+  statusField: string
+  titleField?: string
+  cardFields: string[]
+  rowActions: OdsRowAction[]
+  defaultSort?: OdsDefaultSort
+  searchable: boolean
+}
+
 export interface OdsUnknownComponent extends OdsComponentBase {
   component: 'unknown'
   originalType: string
@@ -248,6 +259,7 @@ export type OdsComponent =
   | OdsSummaryComponent
   | OdsTabsComponent
   | OdsDetailComponent
+  | OdsKanbanComponent
   | OdsUnknownComponent
 
 // ---------------------------------------------------------------------------
@@ -365,6 +377,25 @@ export function parseComponent(json: unknown): OdsComponent {
               }
             }) : [],
       }
+
+    case 'kanban': {
+      return {
+        ...base,
+        component: 'kanban',
+        dataSource: j['dataSource'] as string,
+        statusField: (j['statusField'] as string) ?? '',
+        titleField: j['titleField'] as string | undefined,
+        cardFields: Array.isArray(j['cardFields'])
+          ? (j['cardFields'] as string[]) : [],
+        rowActions: Array.isArray(j['rowActions'])
+          ? (j['rowActions'] as unknown[]).map(parseRowAction) : [],
+        defaultSort: j['defaultSort'] ? (() => {
+          const ds = j['defaultSort'] as Record<string, unknown>
+          return { field: ds['field'] as string, direction: (ds['direction'] as string) ?? 'asc' }
+        })() : undefined,
+        searchable: (j['searchable'] as boolean) ?? false,
+      }
+    }
 
     case 'detail':
       return {

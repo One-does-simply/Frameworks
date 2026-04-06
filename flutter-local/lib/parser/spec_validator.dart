@@ -313,6 +313,36 @@ class SpecValidator {
         }
       }
 
+      // Validate kanban component data source and row actions.
+      if (component is OdsKanbanComponent) {
+        if (!app.dataSources.containsKey(component.dataSource)) {
+          result.warning(
+            'Kanban component references unknown dataSource "${component.dataSource}"',
+            context: 'page: $pageId',
+          );
+        }
+        for (final rowAction in component.rowActions) {
+          if (!app.dataSources.containsKey(rowAction.dataSource)) {
+            result.warning(
+              'Kanban row action "${rowAction.label}" references unknown dataSource "${rowAction.dataSource}"',
+              context: 'page: $pageId',
+            );
+          }
+          if (rowAction.isUpdate && rowAction.values.isEmpty) {
+            result.warning(
+              'Kanban row action "${rowAction.label}" has empty values map',
+              context: 'page: $pageId',
+            );
+          }
+          if (!rowAction.isUpdate && !rowAction.isDelete) {
+            result.warning(
+              'Kanban row action "${rowAction.label}" has unknown action type "${rowAction.action}"',
+              context: 'page: $pageId',
+            );
+          }
+        }
+      }
+
       // F9: Validate detail component data source references.
       if (component is OdsDetailComponent) {
         if (!app.dataSources.containsKey(component.dataSource)) {
@@ -406,6 +436,11 @@ class SpecValidator {
           for (final col in component.columns) {
             checkRoles(col.roles, 'page: ${entry.key}, column: ${col.field}');
           }
+          for (final action in component.rowActions) {
+            checkRoles(action.roles, 'page: ${entry.key}, rowAction: ${action.label}');
+          }
+        }
+        if (component is OdsKanbanComponent) {
           for (final action in component.rowActions) {
             checkRoles(action.roles, 'page: ${entry.key}, rowAction: ${action.label}');
           }

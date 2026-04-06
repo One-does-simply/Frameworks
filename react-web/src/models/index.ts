@@ -7,7 +7,7 @@ export { parsePage } from './ods-page.ts'
 export type {
   OdsComponent, OdsTextComponent, OdsListComponent, OdsFormComponent,
   OdsButtonComponent, OdsChartComponent, OdsSummaryComponent, OdsTabsComponent,
-  OdsDetailComponent, OdsUnknownComponent,
+  OdsDetailComponent, OdsKanbanComponent, OdsUnknownComponent,
   OdsListColumn, OdsRowAction, OdsRowActionHideWhen, OdsToggle, OdsAutoComplete,
   OdsSummaryRule, OdsDefaultSort, OdsRowTap, OdsTabDefinition,
 } from './ods-component.ts'

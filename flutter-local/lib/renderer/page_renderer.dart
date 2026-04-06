@@ -10,6 +10,7 @@ import 'components/button_component.dart';
 import 'components/chart_component.dart';
 import 'components/detail_component.dart';
 import 'components/form_component.dart';
+import 'components/kanban_widget.dart';
 import 'components/list_component.dart';
 import 'components/summary_component.dart';
 import 'components/tabs_component.dart';
@@ -54,6 +55,7 @@ class PageRenderer extends StatelessWidget {
       OdsSummaryComponent c => OdsSummaryWidget(model: c),
       OdsTabsComponent c => OdsTabsWidget(model: c, styleResolver: styleResolver),
       OdsDetailComponent c => OdsDetailWidget(model: c),
+      OdsKanbanComponent c => OdsKanbanWidget(model: c),
       OdsUnknownComponent c => _UnknownComponentWidget(model: c),
     };
 

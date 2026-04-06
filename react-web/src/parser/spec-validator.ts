@@ -293,6 +293,39 @@ function validateComponent(component: OdsComponent, pageId: string, app: OdsApp,
       break
     }
 
+    case 'kanban': {
+      if (!app.dataSources[component.dataSource]) {
+        result.warning(
+          `Kanban component references unknown dataSource "${component.dataSource}"`,
+          `page: ${pageId}`,
+        )
+      }
+      if (!component.statusField) {
+        result.warning(
+          'Kanban component has empty statusField — board columns cannot be determined',
+          `page: ${pageId}`,
+        )
+      }
+      for (const ra of component.rowActions) {
+        if (!app.dataSources[ra.dataSource]) {
+          result.warning(
+            `Row action "${ra.label}" references unknown dataSource "${ra.dataSource}"`,
+            `page: ${pageId}`,
+          )
+        }
+        if (ra.action === 'update' && Object.keys(ra.values).length === 0) {
+          result.warning(`Row action "${ra.label}" has empty values map`, `page: ${pageId}`)
+        }
+        if (ra.action !== 'update' && ra.action !== 'delete' && ra.action !== 'copyRows') {
+          result.warning(
+            `Row action "${ra.label}" has unknown action type "${ra.action}"`,
+            `page: ${pageId}`,
+          )
+        }
+      }
+      break
+    }
+
     case 'detail': {
       if (!app.dataSources[component.dataSource]) {
         result.warning(`Detail component references unknown dataSource "${component.dataSource}"`, `page: ${pageId}`)
@@ -351,6 +384,11 @@ function validateAuth(app: OdsApp, result: ValidationResult) {
         for (const col of component.columns) {
           checkRoles(col.roles, `page: ${pageId}, column: ${col.field}`)
         }
+        for (const action of component.rowActions) {
+          checkRoles(action.roles, `page: ${pageId}, rowAction: ${action.label}`)
+        }
+      }
+      if (component.component === 'kanban') {
         for (const action of component.rowActions) {
           checkRoles(action.roles, `page: ${pageId}, rowAction: ${action.label}`)
         }
