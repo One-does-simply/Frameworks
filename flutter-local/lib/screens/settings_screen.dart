@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../engine/app_engine.dart';
 import '../engine/auth_service.dart';
+import '../engine/color_helpers.dart';
 import '../engine/theme_resolver.dart';
 import '../engine/settings_store.dart';
 import '../models/ods_app.dart';
@@ -15,6 +16,7 @@ import '../models/ods_branding.dart';
 import '../renderer/snackbar_helper.dart';
 import '../screens/app_tour_dialog.dart';
 import '../screens/user_management_screen.dart';
+import '../widgets/color_picker_widgets.dart';
 import '../widgets/theme_picker_dialog.dart';
 
 /// Full-page settings screen for the Flutter Local framework.
@@ -823,107 +825,56 @@ class _BrandingSectionState extends State<_BrandingSection> {
   Future<void> _editToken(String token, String label, String description) async {
     final overrides = widget.settings.getBrandingOverrides(widget.app.appName);
     final currentValue = overrides[token] ?? '';
-    // Convert oklch to hex for the input, or start with a sensible default
-    String hexValue = currentValue.isNotEmpty
-        ? _oklchToHex(currentValue)
-        : '#888888';
-    final hexController = TextEditingController(text: hexValue);
-    Color previewColor = _parseHex(hexValue);
 
-    final result = await showDialog<String>(
+    // Convert existing OKLch override to a Flutter Color, or resolve from theme
+    Color initialColor;
+    if (currentValue.isNotEmpty) {
+      initialColor = ThemeResolver.parseOklch(currentValue) ?? const Color(0xFF888888);
+    } else {
+      // Load from theme data
+      final themeData = await ThemeResolver.loadTheme(_theme);
+      final variant = (themeData?['light'] ?? themeData?['dark']) as Map<String, dynamic>?;
+      final colors = variant?['colors'] as Map<String, dynamic>?;
+      final oklchStr = colors?[token] as String?;
+      initialColor = (oklchStr != null ? ThemeResolver.parseOklch(oklchStr) : null) ?? const Color(0xFF888888);
+    }
+
+    // Load the paired color for contrast checking
+    final pairToken = tokenPairs[token];
+    Color? pairedColor;
+    if (pairToken != null) {
+      if (overrides.containsKey(pairToken)) {
+        pairedColor = ThemeResolver.parseOklch(overrides[pairToken]!);
+      } else {
+        final themeData = await ThemeResolver.loadTheme(_theme);
+        final variant = (themeData?['light'] ?? themeData?['dark']) as Map<String, dynamic>?;
+        final colors = variant?['colors'] as Map<String, dynamic>?;
+        final oklchStr = colors?[pairToken] as String?;
+        if (oklchStr != null) pairedColor = ThemeResolver.parseOklch(oklchStr);
+      }
+    }
+
+    if (!mounted) return;
+
+    final picked = await showDialog<Color>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text(label),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(description, style: Theme.of(ctx).textTheme.bodySmall),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  // Color preview swatch
-                  GestureDetector(
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: previewColor,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.grey.shade400),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Hex input
-                  Expanded(
-                    child: TextField(
-                      controller: hexController,
-                      autofocus: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Hex color',
-                        hintText: '#4F46E5',
-                        border: OutlineInputBorder(),
-                        helperText: 'Enter a hex color (e.g., #4F46E5)',
-                      ),
-                      onChanged: (v) {
-                        if (v.startsWith('#') && v.length == 7) {
-                          setDialogState(() => previewColor = _parseHex(v));
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-            if (currentValue.isNotEmpty)
-              TextButton(onPressed: () => Navigator.pop(ctx, ''), child: const Text('Reset')),
-            FilledButton(
-              onPressed: () {
-                final hex = hexController.text.trim();
-                if (hex.startsWith('#') && hex.length == 7) {
-                  Navigator.pop(ctx, _hexToOklch(hex));
-                } else {
-                  Navigator.pop(ctx);
-                }
-              },
-              child: const Text('Apply'),
-            ),
-          ],
-        ),
+      builder: (_) => GridColorPickerDialog(
+        initialColor: initialColor,
+        pairedColor: pairedColor,
+        label: description,
       ),
     );
 
-    if (result == null) return;
+    if (picked == null || !mounted) return;
+
+    final hex = colorToHex(picked);
+    final oklch = _hexToOklch(hex);
     final newOverrides = Map<String, String>.from(overrides);
-    if (result.isEmpty) {
-      newOverrides.remove(token);
-    } else {
-      newOverrides[token] = result;
-    }
+    newOverrides[token] = oklch;
     newOverrides['theme'] = _theme;
     await widget.settings.setBrandingOverrides(widget.app.appName, newOverrides);
     widget.onChanged();
     setState(() {});
-  }
-
-  Color _parseHex(String hex) {
-    try {
-      return Color(int.parse('FF${hex.replaceFirst('#', '')}', radix: 16));
-    } catch (_) {
-      return const Color(0xFF888888);
-    }
-  }
-
-  String _oklchToHex(String oklch) {
-    // Approximate oklch → hex via ThemeResolver
-    final color = ThemeResolver.parseOklch(oklch);
-    if (color == null) return '#888888';
-    return '#${color.value.toRadixString(16).substring(2).padLeft(6, '0')}';
   }
 
   String _hexToOklch(String hex) {
@@ -943,6 +894,19 @@ class _BrandingSectionState extends State<_BrandingSection> {
     else H = 60 * (4 + (r - g) / (maxC - minC + 0.001));
     if (H < 0) H += 360;
     return 'oklch(${(L * 100).toStringAsFixed(1)}% ${C.toStringAsFixed(3)} ${H.toStringAsFixed(1)})';
+  }
+
+  Color _resolveTokenColor(String token, ColorScheme cs) {
+    switch (token) {
+      case 'primary': return cs.primary;
+      case 'secondary': return cs.secondary;
+      case 'accent': return cs.tertiary;
+      case 'base100': return cs.surface;
+      case 'baseContent': return cs.onSurface;
+      case 'error': return cs.error;
+      case 'success': return const Color(0xFF22C55E); // default green
+      default: return const Color(0xFF888888);
+    }
   }
 
   void _showThemePreview(BuildContext context) {
@@ -1056,28 +1020,33 @@ class _BrandingSectionState extends State<_BrandingSection> {
           ..._customizableTokens.map((t) {
             final (token, label, desc) = t;
             final hasValue = overrides.containsKey(token);
-            return ListTile(
-              dense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-              title: Row(
-                children: [
-                  Text(label, style: const TextStyle(fontSize: 13)),
-                  if (hasValue) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                      child: Text('custom', style: TextStyle(fontSize: 9, color: theme.colorScheme.primary)),
-                    ),
-                  ],
-                ],
+            // Resolve current color from override or fall back to theme color scheme
+            Color resolvedColor = const Color(0xFF888888);
+            if (hasValue) {
+              resolvedColor = ThemeResolver.parseOklch(overrides[token]!) ?? resolvedColor;
+            } else {
+              // Best-effort: map token to current ColorScheme color
+              resolvedColor = _resolveTokenColor(token, theme.colorScheme);
+            }
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: ColorRow(
+                label: label,
+                token: token,
+                color: resolvedColor,
+                hasOverride: hasValue,
+                onTap: () => _editToken(token, label, desc),
+                onReset: hasValue
+                    ? () async {
+                        final newOverrides = Map<String, String>.from(overrides);
+                        newOverrides.remove(token);
+                        newOverrides['theme'] = _theme;
+                        await widget.settings.setBrandingOverrides(widget.app.appName, newOverrides);
+                        widget.onChanged();
+                        setState(() {});
+                      }
+                    : null,
               ),
-              subtitle: Text(desc, style: const TextStyle(fontSize: 10)),
-              trailing: const Icon(Icons.edit_outlined, size: 16),
-              onTap: () => _editToken(token, label, desc),
             );
           }),
         ],

@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ThemePicker } from '@/components/ThemePicker.tsx'
+import { ColorRow } from '@/components/ColorCustomizer.tsx'
 
 // ---------------------------------------------------------------------------
 // SettingsDialog — framework settings + app-level settings from the spec
@@ -294,40 +295,41 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
               {CUSTOMIZABLE_TOKENS.map(({ token, label, description, example, type }) => (
                 <div key={token} className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    {type === 'color' ? (
-                      <input
-                        type="color"
-                        title={`Pick ${label} color`}
-                        value={oklchToHexApprox(tokenOverrides[token] || themeDefaults[token] || '')}
-                        onChange={(e) => applyTokenOverride(token, hexToOklchApprox(e.target.value))}
-                        className="h-6 w-8 cursor-pointer rounded border border-input bg-transparent"
-                      />
-                    ) : (
-                      <div className="w-8" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium">{label}</span>
-                        {tokenOverrides[token] && (
-                          <button
-                            onClick={() => applyTokenOverride(token, '')}
-                            className="text-[10px] text-muted-foreground hover:text-foreground"
-                          >
-                            reset
-                          </button>
-                        )}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground">{description}</div>
-                    </div>
-                  </div>
-                  {type === 'size' && (
-                    <Input
-                      value={tokenOverrides[token] ?? ''}
-                      onChange={(e) => applyTokenOverride(token, e.target.value)}
-                      placeholder={example}
-                      className="h-7 text-xs font-mono"
+                  {type === 'color' ? (
+                    <ColorRow
+                      label={label}
+                      token={token}
+                      themeName={selectedTheme}
+                      override={tokenOverrides[token] ? oklchToHexApprox(tokenOverrides[token]) : undefined}
+                      onChange={(hex) => applyTokenOverride(token, hexToOklchApprox(hex))}
+                      onReset={() => applyTokenOverride(token, '')}
                     />
+                  ) : (
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-8" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium">{label}</span>
+                            {tokenOverrides[token] && (
+                              <button
+                                onClick={() => applyTokenOverride(token, '')}
+                                className="text-[10px] text-muted-foreground hover:text-foreground"
+                              >
+                                reset
+                              </button>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground">{description}</div>
+                        </div>
+                      </div>
+                      <Input
+                        value={tokenOverrides[token] ?? ''}
+                        onChange={(e) => applyTokenOverride(token, e.target.value)}
+                        placeholder={example}
+                        className="h-7 text-xs font-mono"
+                      />
+                    </div>
                   )}
                 </div>
               ))}
