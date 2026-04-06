@@ -67,6 +67,20 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     savedOverrides.overrides ?? app.branding.overrides ?? {}
   )
 
+  // Branding fields (logo, favicon, headerStyle, fontFamily)
+  const [brandingLogo, setBrandingLogo] = useState(savedOverrides.logo ?? app.branding.logo ?? '')
+  const [brandingFavicon, setBrandingFavicon] = useState(savedOverrides.favicon ?? app.branding.favicon ?? '')
+  const [brandingHeaderStyle, setBrandingHeaderStyle] = useState<'light' | 'solid' | 'transparent'>(
+    savedOverrides.headerStyle ?? app.branding.headerStyle ?? 'light'
+  )
+  const [brandingFontFamily, setBrandingFontFamily] = useState(savedOverrides.fontFamily ?? app.branding.fontFamily ?? '')
+  const [brandingFieldsOpen, setBrandingFieldsOpen] = useState(false)
+
+  // Admin check — branding fields are admin-only
+  const authService = useAppStore((s) => s.authService)
+  const isMultiUser = useAppStore((s) => s.isMultiUser)
+  const isAdmin = !isMultiUser || !authService || authService.isAdmin
+
   // Load theme default colors for color pickers and preview
   useEffect(() => {
     if (!customizeOpen && !previewOpen) return
@@ -79,11 +93,34 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     }).catch(() => {})
   }, [customizeOpen, previewOpen, selectedTheme])
 
+  /** Build the localStorage-persisted branding override object from current state. */
+  function buildSavedOverrides(
+    overrideTheme?: string,
+    overrideTokens?: Record<string, string>,
+    overrideLogo?: string,
+    overrideFavicon?: string,
+    overrideHeaderStyle?: 'light' | 'solid' | 'transparent',
+    overrideFontFamily?: string,
+  ) {
+    const t = overrideTheme ?? selectedTheme
+    const tk = overrideTokens ?? tokenOverrides
+    const lo = overrideLogo ?? brandingLogo
+    const fa = overrideFavicon ?? brandingFavicon
+    const hs = overrideHeaderStyle ?? brandingHeaderStyle
+    const ff = overrideFontFamily ?? brandingFontFamily
+    const saved: Record<string, unknown> = { theme: t }
+    if (Object.keys(tk).length > 0) saved.overrides = tk
+    if (lo) saved.logo = lo
+    if (fa) saved.favicon = fa
+    if (hs !== 'light') saved.headerStyle = hs
+    if (ff) saved.fontFamily = ff
+    return saved
+  }
+
   function applyThemeOverride(themeName: string) {
     setSelectedTheme(themeName)
-    const saved = { theme: themeName, ...(Object.keys(tokenOverrides).length > 0 ? { overrides: tokenOverrides } : {}) }
-    localStorage.setItem(brandingKey, JSON.stringify(saved))
-    applyBranding({ ...app.branding, theme: themeName, overrides: tokenOverrides }).catch(() => {})
+    localStorage.setItem(brandingKey, JSON.stringify(buildSavedOverrides(themeName)))
+    applyBranding({ ...app.branding, theme: themeName, overrides: tokenOverrides, logo: brandingLogo || undefined, favicon: brandingFavicon || undefined, headerStyle: brandingHeaderStyle, fontFamily: brandingFontFamily || undefined }).catch(() => {})
   }
 
   function applyTokenOverride(token: string, value: string) {
@@ -94,16 +131,34 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       delete updated[token]
     }
     setTokenOverrides(updated)
-    const saved = { theme: selectedTheme, ...(Object.keys(updated).length > 0 ? { overrides: updated } : {}) }
-    localStorage.setItem(brandingKey, JSON.stringify(saved))
-    applyBranding({ ...app.branding, theme: selectedTheme, overrides: updated }).catch(() => {})
+    localStorage.setItem(brandingKey, JSON.stringify(buildSavedOverrides(undefined, updated)))
+    applyBranding({ ...app.branding, theme: selectedTheme, overrides: updated, logo: brandingLogo || undefined, favicon: brandingFavicon || undefined, headerStyle: brandingHeaderStyle, fontFamily: brandingFontFamily || undefined }).catch(() => {})
+  }
+
+  function applyBrandingField(
+    logo?: string,
+    favicon?: string,
+    headerStyle?: 'light' | 'solid' | 'transparent',
+    fontFamily?: string,
+  ) {
+    const lo = logo ?? brandingLogo
+    const fa = favicon ?? brandingFavicon
+    const hs = headerStyle ?? brandingHeaderStyle
+    const ff = fontFamily ?? brandingFontFamily
+    localStorage.setItem(brandingKey, JSON.stringify(buildSavedOverrides(undefined, undefined, lo, fa, hs, ff)))
+    applyBranding({ ...app.branding, theme: selectedTheme, overrides: tokenOverrides, logo: lo || undefined, favicon: fa || undefined, headerStyle: hs, fontFamily: ff || undefined }).catch(() => {})
   }
 
   function resetBrandingOverride() {
     localStorage.removeItem(brandingKey)
     setSelectedTheme(app.branding.theme)
     setTokenOverrides({})
+    setBrandingLogo(app.branding.logo ?? '')
+    setBrandingFavicon(app.branding.favicon ?? '')
+    setBrandingHeaderStyle(app.branding.headerStyle ?? 'light')
+    setBrandingFontFamily(app.branding.fontFamily ?? '')
     setCustomizeOpen(false)
+    setBrandingFieldsOpen(false)
     applyBranding(app.branding).catch(() => {})
   }
 
@@ -336,8 +391,91 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             </div>
           )}
 
+          {/* App Branding fields (admin only) */}
+          {isAdmin && (
+            <>
+              <button
+                onClick={() => setBrandingFieldsOpen(!brandingFieldsOpen)}
+                className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {brandingFieldsOpen ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+                App Branding
+              </button>
+
+              {brandingFieldsOpen && (
+                <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+                  <p className="text-[11px] text-muted-foreground">
+                    Optional branding overrides. Leave blank to use spec defaults.
+                  </p>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs">Logo URL</Label>
+                    <Input
+                      value={brandingLogo}
+                      onChange={(e) => {
+                        setBrandingLogo(e.target.value)
+                        applyBrandingField(e.target.value, undefined, undefined, undefined)
+                      }}
+                      placeholder="https://example.com/logo.png"
+                      className="h-7 text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs">Favicon URL</Label>
+                    <Input
+                      value={brandingFavicon}
+                      onChange={(e) => {
+                        setBrandingFavicon(e.target.value)
+                        applyBrandingField(undefined, e.target.value, undefined, undefined)
+                      }}
+                      placeholder="https://example.com/favicon.ico"
+                      className="h-7 text-xs"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs">Header Style</Label>
+                    <div className="flex gap-1 rounded-lg border p-0.5 w-fit">
+                      {(['light', 'solid', 'transparent'] as const).map((style) => (
+                        <button
+                          key={style}
+                          type="button"
+                          onClick={() => {
+                            setBrandingHeaderStyle(style)
+                            applyBrandingField(undefined, undefined, style, undefined)
+                          }}
+                          className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                            brandingHeaderStyle === style
+                              ? 'bg-primary text-primary-foreground'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {style.charAt(0).toUpperCase() + style.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs">Font Family</Label>
+                    <Input
+                      value={brandingFontFamily}
+                      onChange={(e) => {
+                        setBrandingFontFamily(e.target.value)
+                        applyBrandingField(undefined, undefined, undefined, e.target.value)
+                      }}
+                      placeholder="e.g., Inter, Georgia"
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
           {/* Reset branding */}
-          {(savedOverrides.theme || Object.keys(tokenOverrides).length > 0) && (
+          {(savedOverrides.theme || Object.keys(tokenOverrides).length > 0 || savedOverrides.logo || savedOverrides.favicon || savedOverrides.headerStyle || savedOverrides.fontFamily) && (
             <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={resetBrandingOverride}>
               Reset to spec defaults
             </Button>

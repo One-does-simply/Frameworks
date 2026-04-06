@@ -84,6 +84,13 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
   ColorScheme? _themePreviewLightCs;
   ColorScheme? _themePreviewDarkCs;
 
+  // Phase 2.5: Branding fields
+  final TextEditingController _logoUrlController = TextEditingController();
+  final TextEditingController _faviconUrlController = TextEditingController();
+  final TextEditingController _fontFamilyController = TextEditingController();
+  String _headerStyle = 'light';
+  bool _brandingExpanded = false;
+
   // Phase 3: text review
   Map<String, dynamic>? _renderedSpec;
   List<_ReviewableText>? _reviewTexts;
@@ -92,6 +99,14 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
   void initState() {
     super.initState();
     _loadCatalog();
+  }
+
+  @override
+  void dispose() {
+    _logoUrlController.dispose();
+    _faviconUrlController.dispose();
+    _fontFamilyController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadCatalog() async {
@@ -192,6 +207,18 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
       branding['mode'] = 'system';
       if (_colorOverrides.isNotEmpty) {
         branding['overrides'] = Map<String, String>.from(_colorOverrides);
+      }
+      if (_logoUrlController.text.trim().isNotEmpty) {
+        branding['logo'] = _logoUrlController.text.trim();
+      }
+      if (_faviconUrlController.text.trim().isNotEmpty) {
+        branding['favicon'] = _faviconUrlController.text.trim();
+      }
+      if (_headerStyle != 'light') {
+        branding['headerStyle'] = _headerStyle;
+      }
+      if (_fontFamilyController.text.trim().isNotEmpty) {
+        branding['fontFamily'] = _fontFamilyController.text.trim();
       }
       spec['branding'] = branding;
 
@@ -1061,6 +1088,88 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
                     _colorRow('Background', 'base100', lightCs.surface, theme),
                     _colorRow('Text', 'baseContent', lightCs.onSurface, theme),
                     _colorRow('Error', 'error', lightCs.error, theme),
+                    const SizedBox(height: 16),
+                    // Collapsible App Branding section
+                    InkWell(
+                      onTap: () => setState(() => _brandingExpanded = !_brandingExpanded),
+                      borderRadius: BorderRadius.circular(4),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _brandingExpanded ? Icons.expand_less : Icons.expand_more,
+                              size: 20,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 4),
+                            Text('App Branding', style: theme.textTheme.titleSmall),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (_brandingExpanded) ...[
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _logoUrlController,
+                        decoration: const InputDecoration(
+                          labelText: 'Logo URL',
+                          hintText: 'https://example.com/logo.png',
+                          helperText: 'Optional — displayed in the app drawer',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _faviconUrlController,
+                        decoration: const InputDecoration(
+                          labelText: 'Favicon URL',
+                          hintText: 'https://example.com/favicon.ico',
+                          helperText: 'Optional — for web framework compatibility',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Header Style', style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            )),
+                            const SizedBox(height: 4),
+                            SegmentedButton<String>(
+                              segments: const [
+                                ButtonSegment(value: 'light', label: Text('Light')),
+                                ButtonSegment(value: 'solid', label: Text('Solid')),
+                                ButtonSegment(value: 'transparent', label: Text('Transparent')),
+                              ],
+                              selected: {_headerStyle},
+                              onSelectionChanged: (v) => setState(() => _headerStyle = v.first),
+                              showSelectedIcon: false,
+                              style: ButtonStyle(
+                                visualDensity: VisualDensity.compact,
+                                textStyle: WidgetStatePropertyAll(theme.textTheme.labelSmall),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _fontFamilyController,
+                        decoration: const InputDecoration(
+                          labelText: 'Font Family',
+                          hintText: 'e.g., Inter, Georgia',
+                          helperText: 'Optional — custom font for the app',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

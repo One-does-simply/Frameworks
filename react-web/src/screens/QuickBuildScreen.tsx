@@ -34,6 +34,7 @@ import {
   Loader2,
   Rocket,
   ChevronRight,
+  ChevronDown,
   Plus,
   X,
   GripVertical,
@@ -114,6 +115,12 @@ export function QuickBuildScreen() {
   const [selectedTheme, setSelectedTheme] = useState('indigo')
   const [colorOverrides, setColorOverrides] = useState<Record<string, string>>({})
   const [themeCatalog, setThemeCatalog] = useState<Array<{ name: string; displayName: string; tags?: { style?: string; palette?: string } | string[] }> | null>(null)
+
+  // Branding fields (theme phase)
+  const [brandingLogo, setBrandingLogo] = useState('')
+  const [brandingFavicon, setBrandingFavicon] = useState('')
+  const [brandingHeaderStyle, setBrandingHeaderStyle] = useState<'light' | 'solid' | 'transparent'>('light')
+  const [brandingFontFamily, setBrandingFontFamily] = useState('')
 
   // Saving
   const [saving, setSaving] = useState(false)
@@ -266,6 +273,10 @@ export function QuickBuildScreen() {
     setThemeCatalog(catalog)
     setSelectedTheme(themeFromAnswers)
     setColorOverrides({})
+    setBrandingLogo('')
+    setBrandingFavicon('')
+    setBrandingHeaderStyle('light')
+    setBrandingFontFamily('')
     setInThemePhase(true)
   }
 
@@ -273,6 +284,10 @@ export function QuickBuildScreen() {
     setInThemePhase(false)
     setThemeCatalog(null)
     setColorOverrides({})
+    setBrandingLogo('')
+    setBrandingFavicon('')
+    setBrandingHeaderStyle('light')
+    setBrandingFontFamily('')
   }
 
   function backToTheme() {
@@ -303,6 +318,10 @@ export function QuickBuildScreen() {
       if (Object.keys(colorOverrides).length > 0) {
         branding['overrides'] = { ...colorOverrides }
       }
+      if (brandingLogo.trim()) branding['logo'] = brandingLogo.trim()
+      if (brandingFavicon.trim()) branding['favicon'] = brandingFavicon.trim()
+      branding['headerStyle'] = brandingHeaderStyle
+      if (brandingFontFamily.trim()) branding['fontFamily'] = brandingFontFamily.trim()
       rendered['branding'] = branding
 
       const texts = extractReviewableTexts(rendered)
@@ -415,6 +434,14 @@ export function QuickBuildScreen() {
                 onContinue={continueFromTheme}
                 rendering={rendering}
                 renderError={renderError}
+                brandingLogo={brandingLogo}
+                onBrandingLogoChange={setBrandingLogo}
+                brandingFavicon={brandingFavicon}
+                onBrandingFaviconChange={setBrandingFavicon}
+                brandingHeaderStyle={brandingHeaderStyle}
+                onBrandingHeaderStyleChange={setBrandingHeaderStyle}
+                brandingFontFamily={brandingFontFamily}
+                onBrandingFontFamilyChange={setBrandingFontFamily}
               />
             : inWizard
               ? <WizardPhase
@@ -955,6 +982,14 @@ function ThemePhase({
   onContinue,
   rendering,
   renderError,
+  brandingLogo,
+  onBrandingLogoChange,
+  brandingFavicon,
+  onBrandingFaviconChange,
+  brandingHeaderStyle,
+  onBrandingHeaderStyleChange,
+  brandingFontFamily,
+  onBrandingFontFamilyChange,
 }: {
   catalog: Array<{ name: string; displayName: string; tags?: { style?: string; palette?: string } | string[] }> | null
   selectedTheme: string
@@ -965,9 +1000,18 @@ function ThemePhase({
   onContinue: () => void
   rendering: boolean
   renderError: string | null
+  brandingLogo: string
+  onBrandingLogoChange: (v: string) => void
+  brandingFavicon: string
+  onBrandingFaviconChange: (v: string) => void
+  brandingHeaderStyle: 'light' | 'solid' | 'transparent'
+  onBrandingHeaderStyleChange: (v: 'light' | 'solid' | 'transparent') => void
+  brandingFontFamily: string
+  onBrandingFontFamilyChange: (v: string) => void
 }) {
   const [activeStyle, setActiveStyle] = useState<string | null>(null)
   const [activePalette, setActivePalette] = useState<string | null>(null)
+  const [brandingOpen, setBrandingOpen] = useState(false)
 
   // Helper to extract style/palette from tags (supports both old array and new object format)
   const getStyle = (tags?: { style?: string; palette?: string } | string[]): string | undefined =>
@@ -1068,6 +1112,74 @@ function ThemePhase({
             <ColorRow label="Text" token="baseContent" themeName={selectedTheme} override={colorOverrides['baseContent']} onChange={(v) => onOverrideChange('baseContent', v)} onReset={() => onResetOverride('baseContent')} />
             <ColorRow label="Error" token="error" themeName={selectedTheme} override={colorOverrides['error']} onChange={(v) => onOverrideChange('error', v)} onReset={() => onResetOverride('error')} />
           </div>
+
+          {/* Collapsible App Branding section */}
+          <button
+            type="button"
+            onClick={() => setBrandingOpen(!brandingOpen)}
+            className="mt-4 flex items-center gap-1 text-sm font-semibold hover:text-primary transition-colors"
+          >
+            {brandingOpen ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+            App Branding
+          </button>
+
+          {brandingOpen && (
+            <div className="mt-2 space-y-3 rounded-lg border bg-muted/30 p-3">
+              <p className="text-[11px] text-muted-foreground">
+                Optional branding options. Leave blank to use defaults.
+              </p>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Logo URL</Label>
+                <Input
+                  value={brandingLogo}
+                  onChange={(e) => onBrandingLogoChange(e.target.value)}
+                  placeholder="https://example.com/logo.png"
+                  className="h-8 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Favicon URL</Label>
+                <Input
+                  value={brandingFavicon}
+                  onChange={(e) => onBrandingFaviconChange(e.target.value)}
+                  placeholder="https://example.com/favicon.ico"
+                  className="h-8 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Header Style</Label>
+                <div className="flex gap-1 rounded-lg border p-0.5 w-fit">
+                  {(['light', 'solid', 'transparent'] as const).map((style) => (
+                    <button
+                      key={style}
+                      type="button"
+                      onClick={() => onBrandingHeaderStyleChange(style)}
+                      className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                        brandingHeaderStyle === style
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {style.charAt(0).toUpperCase() + style.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs">Font Family</Label>
+                <Input
+                  value={brandingFontFamily}
+                  onChange={(e) => onBrandingFontFamilyChange(e.target.value)}
+                  placeholder="e.g., Inter, Georgia"
+                  className="h-8 text-xs"
+                />
+              </div>
+            </div>
+          )}
 
           {renderError && (
             <div className="mt-3 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">

@@ -73,21 +73,47 @@ ColorScheme _darkScheme([Color? seed]) => ColorScheme.fromSeed(
       brightness: Brightness.dark,
     );
 
-ThemeData _buildTheme(ColorScheme colorScheme, {String? fontFamily, double borderRadius = 12}) {
+ThemeData _buildTheme(ColorScheme colorScheme, {String? fontFamily, double borderRadius = 12, String headerStyle = 'light'}) {
   final isDark = colorScheme.brightness == Brightness.dark;
   final radius = borderRadius;
+
+  // Resolve AppBar theme based on headerStyle
+  AppBarTheme appBarTheme;
+  switch (headerStyle) {
+    case 'solid':
+      appBarTheme = AppBarTheme(
+        centerTitle: false,
+        elevation: 0,
+        scrolledUnderElevation: 1,
+        backgroundColor: colorScheme.primary,
+        foregroundColor: colorScheme.onPrimary,
+      );
+      break;
+    case 'transparent':
+      appBarTheme = AppBarTheme(
+        centerTitle: false,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: Colors.transparent,
+        foregroundColor: isDark ? Colors.white : const Color(0xFF1E293B),
+      );
+      break;
+    default: // 'light'
+      appBarTheme = AppBarTheme(
+        centerTitle: false,
+        elevation: 0,
+        scrolledUnderElevation: 1,
+        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+        foregroundColor: isDark ? Colors.white : const Color(0xFF1E293B),
+      );
+  }
+
   return ThemeData(
     colorScheme: colorScheme,
     useMaterial3: true,
     fontFamily: fontFamily ?? 'Segoe UI',
     scaffoldBackgroundColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-    appBarTheme: AppBarTheme(
-      centerTitle: false,
-      elevation: 0,
-      scrolledUnderElevation: 1,
-      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-      foregroundColor: isDark ? Colors.white : const Color(0xFF1E293B),
-    ),
+    appBarTheme: appBarTheme,
     cardTheme: CardThemeData(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -216,7 +242,8 @@ class _OdsFrameworkAppState extends State<OdsFrameworkApp> {
         ? settings.getBrandingOverrides(engine.app!.appName)
         : <String, String>{};
     final themeName = userOverrides['theme'] ?? branding?.theme ?? 'indigo';
-    final fontFamily = branding?.fontFamily;
+    final fontFamily = userOverrides['fontFamily'] ?? branding?.fontFamily;
+    final headerStyle = userOverrides['headerStyle'] ?? branding?.headerStyle ?? 'light';
 
     // Resolve theme asynchronously (cached after first load)
     if (themeName != _resolvedThemeName) {
@@ -231,8 +258,8 @@ class _OdsFrameworkAppState extends State<OdsFrameworkApp> {
     return MaterialApp(
       title: appName,
       debugShowCheckedModeBanner: false,
-      theme: _buildTheme(lightScheme, fontFamily: fontFamily, borderRadius: borderRadius),
-      darkTheme: _buildTheme(darkScheme, fontFamily: fontFamily, borderRadius: borderRadius),
+      theme: _buildTheme(lightScheme, fontFamily: fontFamily, borderRadius: borderRadius, headerStyle: headerStyle),
+      darkTheme: _buildTheme(darkScheme, fontFamily: fontFamily, borderRadius: borderRadius, headerStyle: headerStyle),
       themeMode: settings.themeMode,
       home: _buildHome(engine, settings),
     );
@@ -2436,6 +2463,8 @@ class _AppShellState extends State<AppShell> {
     final engine = context.watch<AppEngine>();
     final settings = context.watch<SettingsStore>();
     final app = engine.app!;
+    final brandingOverrides = settings.getBrandingOverrides(app.appName);
+    final effectiveLogoUrl = brandingOverrides['logo'] ?? app.branding.logo;
 
     // Auth gate: show admin setup or login screen when multi-user is enabled.
     if (engine.needsAdminSetup) {
@@ -2563,11 +2592,11 @@ class _AppShellState extends State<AppShell> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  if (app.branding.logo != null)
+                  if (effectiveLogoUrl != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Image.network(
-                        app.branding.logo!,
+                        effectiveLogoUrl,
                         height: 32,
                         fit: BoxFit.contain,
                         alignment: Alignment.centerLeft,

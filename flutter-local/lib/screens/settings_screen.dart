@@ -788,6 +788,10 @@ class _BrandingSection extends StatefulWidget {
 class _BrandingSectionState extends State<_BrandingSection> {
   late String _theme;
   bool _customizeOpen = false;
+  bool _brandingOpen = false;
+  late TextEditingController _logoController;
+  late TextEditingController _fontFamilyController;
+  late String _headerStyle;
 
   static const _customizableTokens = [
     ('primary', 'Primary', 'Main action color — buttons, links, active states.'),
@@ -804,12 +808,43 @@ class _BrandingSectionState extends State<_BrandingSection> {
     super.initState();
     final overrides = widget.settings.getBrandingOverrides(widget.app.appName);
     _theme = overrides['theme'] ?? widget.app.branding.theme;
+    _logoController = TextEditingController(
+      text: overrides['logo'] ?? widget.app.branding.logo ?? '',
+    );
+    _fontFamilyController = TextEditingController(
+      text: overrides['fontFamily'] ?? widget.app.branding.fontFamily ?? '',
+    );
+    _headerStyle = overrides['headerStyle'] ?? widget.app.branding.headerStyle;
+  }
+
+  @override
+  void dispose() {
+    _logoController.dispose();
+    _fontFamilyController.dispose();
+    super.dispose();
   }
 
   Future<void> _save() async {
-    await widget.settings.setBrandingOverrides(widget.app.appName, {
-      'theme': _theme,
-    });
+    final overrides = Map<String, String>.from(
+      widget.settings.getBrandingOverrides(widget.app.appName),
+    );
+    overrides['theme'] = _theme;
+    if (_logoController.text.trim().isNotEmpty) {
+      overrides['logo'] = _logoController.text.trim();
+    } else {
+      overrides.remove('logo');
+    }
+    if (_fontFamilyController.text.trim().isNotEmpty) {
+      overrides['fontFamily'] = _fontFamilyController.text.trim();
+    } else {
+      overrides.remove('fontFamily');
+    }
+    if (_headerStyle != 'light') {
+      overrides['headerStyle'] = _headerStyle;
+    } else {
+      overrides.remove('headerStyle');
+    }
+    await widget.settings.setBrandingOverrides(widget.app.appName, overrides);
     widget.onChanged();
   }
 
@@ -818,6 +853,10 @@ class _BrandingSectionState extends State<_BrandingSection> {
     setState(() {
       _theme = widget.app.branding.theme;
       _customizeOpen = false;
+      _brandingOpen = false;
+      _logoController.text = widget.app.branding.logo ?? '';
+      _fontFamilyController.text = widget.app.branding.fontFamily ?? '';
+      _headerStyle = widget.app.branding.headerStyle;
     });
     widget.onChanged();
   }
@@ -1049,6 +1088,115 @@ class _BrandingSectionState extends State<_BrandingSection> {
               ),
             );
           }),
+        ],
+        // App Branding section (collapsible)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Row(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text('|', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12)),
+              ),
+              InkWell(
+                onTap: () => setState(() => _brandingOpen = !_brandingOpen),
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _brandingOpen ? Icons.expand_less : Icons.chevron_right,
+                        size: 16,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'App Branding',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (_brandingOpen) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Text(
+              'Customize logo, header style, and font. Leave empty to use spec defaults.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontSize: 11,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: TextField(
+              controller: _logoController,
+              decoration: const InputDecoration(
+                labelText: 'Logo URL',
+                hintText: 'https://example.com/logo.png',
+                helperText: 'Displayed in the app drawer header',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => _save(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Header Style', style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                )),
+                const SizedBox(height: 4),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'light', label: Text('Light')),
+                    ButtonSegment(value: 'solid', label: Text('Solid')),
+                    ButtonSegment(value: 'transparent', label: Text('Transparent')),
+                  ],
+                  selected: {_headerStyle},
+                  onSelectionChanged: (v) {
+                    setState(() => _headerStyle = v.first);
+                    _save();
+                  },
+                  showSelectedIcon: false,
+                  style: ButtonStyle(
+                    visualDensity: VisualDensity.compact,
+                    textStyle: WidgetStatePropertyAll(theme.textTheme.labelSmall),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: TextField(
+              controller: _fontFamilyController,
+              decoration: const InputDecoration(
+                labelText: 'Font Family',
+                hintText: 'e.g., Inter, Georgia',
+                helperText: 'Custom font for the app',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => _save(),
+            ),
+          ),
+          const SizedBox(height: 8),
         ],
         // Reset
         if (hasOverrides)
