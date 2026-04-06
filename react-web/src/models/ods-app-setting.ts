@@ -12,6 +12,6 @@ export function parseAppSetting(json: unknown): OdsAppSetting {
     label: (j['label'] as string) ?? '',
     type: (j['type'] as string) ?? 'text',
     defaultValue: (j['default'] as string) ?? '',
-    options: j['options'] as string[] | undefined,
+    options: Array.isArray(j['options']) ? j['options'] as string[] : typeof j['options'] === 'string' ? (j['options'] as string).split(',').map(s => s.trim()).filter(Boolean) : undefined,
   }
 }

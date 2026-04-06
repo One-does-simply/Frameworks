@@ -1,3 +1,11 @@
+/// Parse options from JSON — tolerates both List and comma-separated String.
+List<String>? _parseOptions(dynamic value) {
+  if (value == null) return null;
+  if (value is List) return value.cast<String>();
+  if (value is String) return value.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+  return null;
+}
+
 /// Filters dynamic options based on a sibling form field's value,
 /// enabling dependent/cascading dropdowns.
 class OdsOptionsFilter {
@@ -266,7 +274,7 @@ class OdsFieldDefinition {
       required: json['required'] as bool? ?? false,
       placeholder: json['placeholder'] as String?,
       defaultValue: json['default'] as String?,
-      options: (json['options'] as List<dynamic>?)?.cast<String>(),
+      options: _parseOptions(json['options']),
       optionsFrom: json['optionsFrom'] != null
           ? OdsOptionsFrom.fromJson(json['optionsFrom'] as Map<String, dynamic>)
           : null,

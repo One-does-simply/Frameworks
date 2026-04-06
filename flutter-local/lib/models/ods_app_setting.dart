@@ -31,9 +31,11 @@ class OdsAppSetting {
       label: json['label'] as String? ?? '',
       type: json['type'] as String? ?? 'text',
       defaultValue: json['default'] as String? ?? '',
-      options: (json['options'] as List<dynamic>?)
-          ?.map((o) => o.toString())
-          .toList(),
+      options: json['options'] is List
+          ? (json['options'] as List<dynamic>).map((o) => o.toString()).toList()
+          : json['options'] is String
+              ? (json['options'] as String).split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList()
+              : null,
     );
   }
 

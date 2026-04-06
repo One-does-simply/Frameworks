@@ -91,7 +91,7 @@ export function parseFieldDefinition(json: unknown): OdsFieldDefinition {
     required: (j['required'] as boolean) ?? false,
     placeholder: j['placeholder'] as string | undefined,
     defaultValue: j['default'] as string | undefined,
-    options: j['options'] as string[] | undefined,
+    options: Array.isArray(j['options']) ? j['options'] as string[] : typeof j['options'] === 'string' ? (j['options'] as string).split(',').map(s => s.trim()).filter(Boolean) : undefined,
     optionsFrom: parseOptionsFrom(j['optionsFrom']),
     formula: j['formula'] as string | undefined,
     visibleWhen: parseVisibleWhen(j['visibleWhen']),
