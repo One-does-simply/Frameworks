@@ -389,6 +389,8 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
         return _buildDate();
       case 'datetime':
         return _buildDateTime();
+      case 'user':
+        return _buildUserField(currentValue);
       default:
         return _buildTextField();
     }
@@ -652,6 +654,86 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
         suffixIcon: const Icon(Icons.access_time),
         errorText: _validationError,
       ),
+    );
+  }
+
+  Widget _buildUserField(String currentValue) {
+    final engine = context.read<AppEngine>();
+    if (!engine.isMultiUser) {
+      // Single-user mode: render as a plain text field.
+      return _buildTextField();
+    }
+
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: engine.authService.listUsers(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return InputDecorator(
+            decoration: InputDecoration(
+              labelText: _labelText(),
+              border: const OutlineInputBorder(),
+            ),
+            child: const SizedBox(
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+
+        final users = snapshot.data ?? [];
+        if (users.isEmpty) {
+          return InputDecorator(
+            decoration: InputDecoration(
+              labelText: _labelText(),
+              hintText: 'No users available',
+              border: const OutlineInputBorder(),
+            ),
+            child: const Text(
+              'No users available',
+              style: TextStyle(color: Colors.grey),
+            ),
+          );
+        }
+
+        // Build list of usernames for matching.
+        final usernames = users
+            .map((u) => u['username']?.toString() ?? '')
+            .where((u) => u.isNotEmpty)
+            .toList();
+        final effectiveValue =
+            usernames.contains(currentValue) ? currentValue : null;
+
+        return DropdownButtonFormField<String>(
+          value: effectiveValue,
+          decoration: InputDecoration(
+            labelText: _labelText(),
+            hintText: widget.field.placeholder,
+            border: const OutlineInputBorder(),
+            errorText: _validationError,
+          ),
+          items: users.map((u) {
+            final displayName =
+                u['display_name']?.toString() ?? u['username']?.toString() ?? '';
+            final username = u['username']?.toString() ?? '';
+            return DropdownMenuItem<String>(
+              value: username,
+              child: Text(displayName.isNotEmpty ? displayName : username),
+            );
+          }).toList(),
+          onChanged: (value) {
+            if (value != null) {
+              context.read<AppEngine>().updateFormField(
+                    widget.formId,
+                    widget.field.name,
+                    value,
+                  );
+              _runValidation(value);
+              widget.onChanged?.call();
+            }
+          },
+        );
+      },
     );
   }
 

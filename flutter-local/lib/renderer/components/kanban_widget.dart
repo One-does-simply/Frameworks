@@ -291,6 +291,142 @@ class _OdsKanbanWidgetState extends State<OdsKanbanWidget> {
                       );
                     }
 
+                    if (fieldType == 'date') {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: TextFormField(
+                          controller: controllers[fieldName],
+                          readOnly: true,
+                          decoration: InputDecoration(
+                            labelText: label,
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                            suffixIcon: const Icon(Icons.calendar_today),
+                          ),
+                          onTap: () async {
+                            final now = DateTime.now();
+                            final existing = DateTime.tryParse(
+                                controllers[fieldName]?.text ?? '');
+                            final picked = await showDatePicker(
+                              context: ctx,
+                              initialDate: existing ?? now,
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime(2100),
+                            );
+                            if (picked != null) {
+                              final formatted =
+                                  '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                              setDialogState(() {
+                                controllers[fieldName]!.text = formatted;
+                              });
+                            }
+                          },
+                          validator: isRequired
+                              ? (val) => (val == null || val.trim().isEmpty)
+                                  ? '$label is required'
+                                  : null
+                              : null,
+                        ),
+                      );
+                    }
+
+                    if (fieldType == 'datetime') {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: TextFormField(
+                          controller: controllers[fieldName],
+                          readOnly: true,
+                          decoration: InputDecoration(
+                            labelText: label,
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                            suffixIcon: const Icon(Icons.access_time),
+                          ),
+                          onTap: () async {
+                            final now = DateTime.now();
+                            final existing = DateTime.tryParse(
+                                controllers[fieldName]?.text ?? '');
+                            final pickedDate = await showDatePicker(
+                              context: ctx,
+                              initialDate: existing ?? now,
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime(2100),
+                            );
+                            if (pickedDate == null || !ctx.mounted) return;
+                            final initialTime = existing != null
+                                ? TimeOfDay(
+                                    hour: existing.hour,
+                                    minute: existing.minute)
+                                : TimeOfDay(
+                                    hour: now.hour, minute: now.minute);
+                            final pickedTime = await showTimePicker(
+                              context: ctx,
+                              initialTime: initialTime,
+                            );
+                            if (pickedTime == null || !ctx.mounted) return;
+                            final formatted =
+                                '${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')} '
+                                '${pickedTime.hour.toString().padLeft(2, '0')}:${pickedTime.minute.toString().padLeft(2, '0')}';
+                            setDialogState(() {
+                              controllers[fieldName]!.text = formatted;
+                            });
+                          },
+                          validator: isRequired
+                              ? (val) => (val == null || val.trim().isEmpty)
+                                  ? '$label is required'
+                                  : null
+                              : null,
+                        ),
+                      );
+                    }
+
+                    if (fieldType == 'user') {
+                      if (engine.isMultiUser) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: FutureBuilder<List<Map<String, dynamic>>>(
+                            future: engine.authService.listUsers(),
+                            builder: (context, userSnapshot) {
+                              final users = userSnapshot.data ?? [];
+                              return DropdownButtonFormField<String>(
+                                value: dropdownValues[fieldName],
+                                decoration: InputDecoration(
+                                  labelText: label,
+                                  border: const OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                                items: users.map((u) {
+                                  final displayName =
+                                      u['display_name']?.toString() ??
+                                          u['username']?.toString() ??
+                                          '';
+                                  final username =
+                                      u['username']?.toString() ?? '';
+                                  return DropdownMenuItem<String>(
+                                    value: username,
+                                    child: Text(displayName.isNotEmpty
+                                        ? displayName
+                                        : username),
+                                  );
+                                }).toList(),
+                                onChanged: (val) {
+                                  setDialogState(
+                                      () => dropdownValues[fieldName] = val);
+                                },
+                                validator: isRequired
+                                    ? (val) =>
+                                        (val == null || val.isEmpty)
+                                            ? '$label is required'
+                                            : null
+                                    : null,
+                              );
+                            },
+                          ),
+                        );
+                      }
+                      // Single-user mode: fall through to plain text field.
+                    }
+
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: TextFormField(
@@ -337,6 +473,12 @@ class _OdsKanbanWidgetState extends State<OdsKanbanWidget> {
                   if (fieldType == 'select' &&
                       def?.options != null &&
                       def!.options!.isNotEmpty) {
+                    final val = dropdownValues[fieldName];
+                    if (val != null && val.isNotEmpty) {
+                      data[fieldName] = val;
+                    }
+                  } else if (fieldType == 'user' &&
+                      engine.isMultiUser) {
                     final val = dropdownValues[fieldName];
                     if (val != null && val.isNotEmpty) {
                       data[fieldName] = val;
@@ -581,6 +723,11 @@ class _OdsKanbanWidgetState extends State<OdsKanbanWidget> {
         dropdownValues[fieldName] =
             def.options!.contains(currentVal) ? currentVal : null;
       }
+      // Pre-populate user field dropdown values.
+      if (def != null && def.type == 'user') {
+        final currentVal = row[fieldName]?.toString() ?? '';
+        dropdownValues[fieldName] = currentVal.isNotEmpty ? currentVal : null;
+      }
     }
 
     // Status dropdown value.
@@ -693,6 +840,142 @@ class _OdsKanbanWidgetState extends State<OdsKanbanWidget> {
                       );
                     }
 
+                    if (fieldType == 'date') {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: TextFormField(
+                          controller: controllers[fieldName],
+                          readOnly: true,
+                          decoration: InputDecoration(
+                            labelText: label,
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                            suffixIcon: const Icon(Icons.calendar_today),
+                          ),
+                          onTap: () async {
+                            final now = DateTime.now();
+                            final existing = DateTime.tryParse(
+                                controllers[fieldName]?.text ?? '');
+                            final picked = await showDatePicker(
+                              context: ctx,
+                              initialDate: existing ?? now,
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime(2100),
+                            );
+                            if (picked != null) {
+                              final formatted =
+                                  '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                              setDialogState(() {
+                                controllers[fieldName]!.text = formatted;
+                              });
+                            }
+                          },
+                          validator: isRequired
+                              ? (val) => (val == null || val.trim().isEmpty)
+                                  ? '$label is required'
+                                  : null
+                              : null,
+                        ),
+                      );
+                    }
+
+                    if (fieldType == 'datetime') {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: TextFormField(
+                          controller: controllers[fieldName],
+                          readOnly: true,
+                          decoration: InputDecoration(
+                            labelText: label,
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                            suffixIcon: const Icon(Icons.access_time),
+                          ),
+                          onTap: () async {
+                            final now = DateTime.now();
+                            final existing = DateTime.tryParse(
+                                controllers[fieldName]?.text ?? '');
+                            final pickedDate = await showDatePicker(
+                              context: ctx,
+                              initialDate: existing ?? now,
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime(2100),
+                            );
+                            if (pickedDate == null || !ctx.mounted) return;
+                            final initialTime = existing != null
+                                ? TimeOfDay(
+                                    hour: existing.hour,
+                                    minute: existing.minute)
+                                : TimeOfDay(
+                                    hour: now.hour, minute: now.minute);
+                            final pickedTime = await showTimePicker(
+                              context: ctx,
+                              initialTime: initialTime,
+                            );
+                            if (pickedTime == null || !ctx.mounted) return;
+                            final formatted =
+                                '${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')} '
+                                '${pickedTime.hour.toString().padLeft(2, '0')}:${pickedTime.minute.toString().padLeft(2, '0')}';
+                            setDialogState(() {
+                              controllers[fieldName]!.text = formatted;
+                            });
+                          },
+                          validator: isRequired
+                              ? (val) => (val == null || val.trim().isEmpty)
+                                  ? '$label is required'
+                                  : null
+                              : null,
+                        ),
+                      );
+                    }
+
+                    if (fieldType == 'user') {
+                      if (engine.isMultiUser) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: FutureBuilder<List<Map<String, dynamic>>>(
+                            future: engine.authService.listUsers(),
+                            builder: (context, userSnapshot) {
+                              final users = userSnapshot.data ?? [];
+                              return DropdownButtonFormField<String>(
+                                value: dropdownValues[fieldName],
+                                decoration: InputDecoration(
+                                  labelText: label,
+                                  border: const OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                                items: users.map((u) {
+                                  final displayName =
+                                      u['display_name']?.toString() ??
+                                          u['username']?.toString() ??
+                                          '';
+                                  final username =
+                                      u['username']?.toString() ?? '';
+                                  return DropdownMenuItem<String>(
+                                    value: username,
+                                    child: Text(displayName.isNotEmpty
+                                        ? displayName
+                                        : username),
+                                  );
+                                }).toList(),
+                                onChanged: (val) {
+                                  setDialogState(
+                                      () => dropdownValues[fieldName] = val);
+                                },
+                                validator: isRequired
+                                    ? (val) =>
+                                        (val == null || val.isEmpty)
+                                            ? '$label is required'
+                                            : null
+                                    : null,
+                              );
+                            },
+                          ),
+                        );
+                      }
+                      // Single-user mode: fall through to plain text field.
+                    }
+
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: TextFormField(
@@ -782,6 +1065,12 @@ class _OdsKanbanWidgetState extends State<OdsKanbanWidget> {
                   if (fieldType == 'select' &&
                       def?.options != null &&
                       def!.options!.isNotEmpty) {
+                    final val = dropdownValues[fieldName];
+                    if (val != null && val.isNotEmpty) {
+                      data[fieldName] = val;
+                    }
+                  } else if (fieldType == 'user' &&
+                      engine.isMultiUser) {
                     final val = dropdownValues[fieldName];
                     if (val != null && val.isNotEmpty) {
                       data[fieldName] = val;

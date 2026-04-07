@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useAppStore } from '@/engine/app-store'
 import { evaluateFormula } from '@/engine/formula-evaluator'
 import { validateField, isComputed, type OdsFieldDefinition, type OdsOptionsFrom } from '@/models/ods-field'
@@ -354,6 +354,18 @@ function renderInput(
     case 'hidden':
       return <input type="hidden" id={id} value={value} />
 
+    case 'user':
+      return (
+        <UserFieldSelect
+          id={id}
+          value={value}
+          placeholder={placeholder}
+          readOnly={field.readOnly}
+          onChange={onChange}
+          onBlur={onBlur}
+        />
+      )
+
     case 'text':
     default:
       return (
@@ -462,6 +474,84 @@ function DynamicSelect({ field, formId, value, optionsFrom, formState, onChange,
         {options.map((opt) => (
           <SelectItem key={opt} value={opt}>
             {opt}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// User field — dropdown of users (multi-user) or plain text (single-user)
+// ---------------------------------------------------------------------------
+
+interface UserFieldSelectProps {
+  id: string
+  value: string
+  placeholder: string
+  readOnly?: boolean
+  onChange: (value: string) => void
+  onBlur: () => void
+}
+
+function UserFieldSelect({ id, value, placeholder, readOnly, onChange, onBlur }: UserFieldSelectProps) {
+  const authService = useAppStore((s) => s.authService)
+  const isMultiUser = useAppStore((s) => s.isMultiUser)
+  const [users, setUsers] = useState<{ value: string; label: string }[]>([])
+  const [loading, setLoading] = useState(false)
+  const loadedRef = useRef(false)
+
+  useEffect(() => {
+    if (!isMultiUser || !authService || loadedRef.current) return
+    loadedRef.current = true
+    setLoading(true)
+    authService.listUsers().then((list) => {
+      setUsers(
+        list.map((u) => ({
+          value: String(u.username ?? u.email ?? u._id ?? ''),
+          label: String(u.displayName ?? u.username ?? u.email ?? ''),
+        })),
+      )
+      setLoading(false)
+    })
+  }, [isMultiUser, authService])
+
+  // Single-user mode: plain text input
+  if (!isMultiUser) {
+    return (
+      <Input
+        id={id}
+        type="text"
+        value={value}
+        placeholder={placeholder}
+        readOnly={readOnly}
+        onBlur={onBlur}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    )
+  }
+
+  // Multi-user mode: dropdown of users
+  if (loading) {
+    return (
+      <Select disabled>
+        <SelectTrigger id={id}>
+          <SelectValue placeholder="Loading users..." />
+        </SelectTrigger>
+        <SelectContent />
+      </Select>
+    )
+  }
+
+  return (
+    <Select value={value || undefined} onValueChange={(v) => onChange(v ?? '')}>
+      <SelectTrigger id={id} onBlur={onBlur}>
+        <SelectValue placeholder={placeholder || 'Select user...'} />
+      </SelectTrigger>
+      <SelectContent>
+        {users.map((u) => (
+          <SelectItem key={u.value} value={u.value}>
+            {u.label}
           </SelectItem>
         ))}
       </SelectContent>

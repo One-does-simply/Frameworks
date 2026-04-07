@@ -46,7 +46,7 @@ export class ValidationResult {
 // ---------------------------------------------------------------------------
 
 const VALID_FIELD_TYPES = new Set([
-  'text', 'email', 'number', 'date', 'datetime', 'multiline', 'select', 'checkbox', 'hidden',
+  'text', 'email', 'number', 'date', 'datetime', 'multiline', 'select', 'checkbox', 'hidden', 'user',
 ])
 
 const VALID_SUMMARY_FUNCTIONS = new Set(['sum', 'avg', 'count', 'min', 'max'])

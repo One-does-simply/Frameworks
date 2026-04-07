@@ -306,6 +306,21 @@ export function KanbanComponent({ model }: KanbanComponentProps) {
   // Confirm dialog
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null)
 
+  // User list for 'user' field type
+  const [userOptions, setUserOptions] = useState<{ value: string; label: string }[]>([])
+
+  useEffect(() => {
+    if (!isMultiUser || !authService) return
+    authService.listUsers().then((list) => {
+      setUserOptions(
+        list.map((u) => ({
+          value: String(u.username ?? u.email ?? u._id ?? ''),
+          label: String(u.displayName ?? u.username ?? u.email ?? ''),
+        })),
+      )
+    })
+  }, [isMultiUser, authService])
+
   // Drag state
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
   const dragStartedRef = useRef(false)
@@ -813,6 +828,8 @@ export function KanbanComponent({ model }: KanbanComponentProps) {
                       options={def?.options}
                       placeholder={def?.placeholder}
                       onChange={handleAddFieldChange}
+                      isMultiUser={isMultiUser}
+                      users={userOptions}
                     />
                   </div>
                 )
@@ -864,6 +881,8 @@ export function KanbanComponent({ model }: KanbanComponentProps) {
                         options={def?.options}
                         placeholder={def?.placeholder}
                         onChange={handleEditFieldChange}
+                        isMultiUser={isMultiUser}
+                        users={userOptions}
                       />
                     </div>
                   )
@@ -1083,6 +1102,8 @@ interface QuickAddFieldProps {
   options?: string[]
   placeholder?: string
   onChange: (fieldName: string, value: string) => void
+  isMultiUser?: boolean
+  users?: { value: string; label: string }[]
 }
 
 function QuickAddField({
@@ -1092,6 +1113,8 @@ function QuickAddField({
   options,
   placeholder,
   onChange,
+  isMultiUser,
+  users,
 }: QuickAddFieldProps) {
   switch (fieldType) {
     case 'select':
@@ -1169,6 +1192,33 @@ function QuickAddField({
       return (
         <Input
           type="email"
+          value={value}
+          onChange={(e) => onChange(fieldName, e.target.value)}
+          placeholder={placeholder}
+          className="h-8 text-sm"
+        />
+      )
+
+    case 'user':
+      if (isMultiUser && users && users.length > 0) {
+        return (
+          <Select value={value || undefined} onValueChange={(v) => onChange(fieldName, v ?? '')}>
+            <SelectTrigger className="h-8 text-sm">
+              <SelectValue placeholder={placeholder ?? 'Select user...'} />
+            </SelectTrigger>
+            <SelectContent>
+              {users.map((u) => (
+                <SelectItem key={u.value} value={u.value}>
+                  {u.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )
+      }
+      return (
+        <Input
+          type="text"
           value={value}
           onChange={(e) => onChange(fieldName, e.target.value)}
           placeholder={placeholder}
