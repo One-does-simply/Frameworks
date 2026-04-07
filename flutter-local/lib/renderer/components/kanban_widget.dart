@@ -540,57 +540,283 @@ class _OdsKanbanWidgetState extends State<OdsKanbanWidget> {
     }
   }
 
-  /// Shows a detail dialog displaying all card fields for a tapped card.
-  void _showDetailDialog(BuildContext context, Map<String, dynamic> row) {
+  /// Finds a DELETE row action defined in the kanban's rowActions list.
+  OdsRowAction? _findDeleteRowAction() {
+    for (final action in widget.model.rowActions) {
+      if (action.isDelete) return action;
+    }
+    return null;
+  }
+
+  /// Shows an editable form dialog for a tapped kanban card.
+  void _showEditCardDialog(
+    BuildContext context,
+    AppEngine engine,
+    Map<String, dynamic> row,
+  ) {
     final theme = Theme.of(context);
-    final fields = widget.model.cardFields.isNotEmpty
-        ? widget.model.cardFields
-        : row.keys.where((k) => !k.startsWith('_')).toList();
+    final fieldDefs = _discoverFieldDefinitions(engine);
+    final statusOptions = _discoverStatusOptions(engine);
+    final fields = widget.model.cardFields
+        .where((f) => f != widget.model.statusField)
+        .toList();
+
+    // Build controllers pre-populated with existing values.
+    final controllers = <String, TextEditingController>{};
+    for (final fieldName in fields) {
+      controllers[fieldName] = TextEditingController(
+        text: row[fieldName]?.toString() ?? '',
+      );
+    }
+
+    // Track selected values for dropdowns (pre-populated).
+    final dropdownValues = <String, String?>{};
+    for (final fieldName in fields) {
+      final def = fieldDefs[fieldName];
+      if (def != null &&
+          def.type == 'select' &&
+          def.options != null &&
+          def.options!.isNotEmpty) {
+        final currentVal = row[fieldName]?.toString() ?? '';
+        dropdownValues[fieldName] =
+            def.options!.contains(currentVal) ? currentVal : null;
+      }
+    }
+
+    // Status dropdown value.
+    String? selectedStatus = row[widget.model.statusField]?.toString() ?? '';
+    if (statusOptions.isNotEmpty && !statusOptions.contains(selectedStatus)) {
+      selectedStatus = statusOptions.first;
+    }
+
+    final formKey = GlobalKey<FormState>();
+    final titleValue = row[_titleField]?.toString() ?? 'Card';
+    final deleteAction = _findDeleteRowAction();
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          row[_titleField]?.toString() ?? 'Details',
-          style: theme.textTheme.titleLarge,
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: fields.map((field) {
-              final value = row[field]?.toString() ?? '';
-              // Pretty-print the field name as a label.
-              final label = _prettifyFieldName(field);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(
+            'Edit $titleValue',
+            style: theme.textTheme.titleMedium,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Status dropdown (editable).
+                  if (statusOptions.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: DropdownButtonFormField<String>(
+                        value: selectedStatus,
+                        decoration: InputDecoration(
+                          labelText: _prettifyFieldName(
+                              widget.model.statusField),
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: statusOptions
+                            .map((opt) => DropdownMenuItem(
+                                  value: opt,
+                                  child: Text(opt),
+                                ))
+                            .toList(),
+                        onChanged: (val) {
+                          setDialogState(() => selectedStatus = val);
+                        },
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      value.isEmpty ? '-' : value,
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                  ],
+                  // Dynamic fields (same pattern as add dialog).
+                  ...fields.map((fieldName) {
+                    final def = fieldDefs[fieldName];
+                    final label = def?.label ?? _prettifyFieldName(fieldName);
+                    final fieldType = def?.type ?? 'text';
+                    final isTitle = fieldName == _titleField;
+                    final isRequired = isTitle || (def?.required ?? false);
+
+                    if (fieldType == 'select' &&
+                        def?.options != null &&
+                        def!.options!.isNotEmpty) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: DropdownButtonFormField<String>(
+                          value: dropdownValues[fieldName],
+                          decoration: InputDecoration(
+                            labelText: label,
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: def.options!
+                              .map((opt) => DropdownMenuItem(
+                                    value: opt,
+                                    child: Text(opt),
+                                  ))
+                              .toList(),
+                          onChanged: (val) {
+                            setDialogState(
+                                () => dropdownValues[fieldName] = val);
+                          },
+                          validator: isRequired
+                              ? (val) => (val == null || val.isEmpty)
+                                  ? '$label is required'
+                                  : null
+                              : null,
+                        ),
+                      );
+                    }
+
+                    if (fieldType == 'checkbox') {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value:
+                                  controllers[fieldName]?.text == 'true',
+                              onChanged: (val) {
+                                setDialogState(() {
+                                  controllers[fieldName]!.text =
+                                      val == true ? 'true' : 'false';
+                                });
+                              },
+                            ),
+                            Text(label),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: TextFormField(
+                        controller: controllers[fieldName],
+                        decoration: InputDecoration(
+                          labelText: label,
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        keyboardType: fieldType == 'number'
+                            ? TextInputType.number
+                            : fieldType == 'email'
+                                ? TextInputType.emailAddress
+                                : TextInputType.text,
+                        maxLines: fieldType == 'multiline' ? 3 : 1,
+                        validator: isRequired
+                            ? (val) => (val == null || val.trim().isEmpty)
+                                ? '$label is required'
+                                : null
+                            : null,
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            // Delete button (if a delete row action exists).
+            if (deleteAction != null)
+              TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: theme.colorScheme.error,
                 ),
-              );
-            }).toList(),
-          ),
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: ctx,
+                    builder: (confirmCtx) => AlertDialog(
+                      title: const Text('Delete Card'),
+                      content: Text(
+                        deleteAction.confirm ??
+                            'Are you sure you want to delete this card? This cannot be undone.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () =>
+                              Navigator.of(confirmCtx).pop(false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            foregroundColor: theme.colorScheme.error,
+                          ),
+                          onPressed: () =>
+                              Navigator.of(confirmCtx).pop(true),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    _executeRowAction(engine, deleteAction, row);
+                    if (ctx.mounted) Navigator.of(ctx).pop();
+                    setState(() {
+                      _cachedRows = null;
+                    });
+                  }
+                },
+                child: const Text('Delete'),
+              ),
+            const Spacer(),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (!formKey.currentState!.validate()) return;
+
+                // Build the updated row data.
+                final data = <String, dynamic>{
+                  widget.model.statusField: selectedStatus ?? '',
+                };
+                for (final fieldName in fields) {
+                  final def = fieldDefs[fieldName];
+                  final fieldType = def?.type ?? 'text';
+                  if (fieldType == 'select' &&
+                      def?.options != null &&
+                      def!.options!.isNotEmpty) {
+                    final val = dropdownValues[fieldName];
+                    if (val != null && val.isNotEmpty) {
+                      data[fieldName] = val;
+                    }
+                  } else {
+                    final val = controllers[fieldName]?.text ?? '';
+                    if (val.isNotEmpty) {
+                      data[fieldName] = val;
+                    }
+                  }
+                }
+
+                // Update via the PUT dataSource, matching on _id.
+                final matchValue = row['_id']?.toString() ?? '';
+                if (matchValue.isNotEmpty) {
+                  final putDsId = _findPutDataSourceId(engine);
+                  await engine.executeRowAction(
+                    dataSourceId: putDsId ?? widget.model.dataSource,
+                    matchField: '_id',
+                    matchValue: matchValue,
+                    values: data.map((k, v) => MapEntry(k, v.toString())),
+                  );
+                }
+
+                if (ctx.mounted) Navigator.of(ctx).pop();
+
+                // Clear cache and trigger rebuild.
+                setState(() {
+                  _cachedRows = null;
+                });
+              },
+              child: const Text('Save'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close'),
-          ),
-        ],
       ),
     );
   }
@@ -989,7 +1215,7 @@ class _OdsKanbanWidgetState extends State<OdsKanbanWidget> {
                               ),
                               child: GestureDetector(
                                 onTap: () =>
-                                    _showDetailDialog(context, row),
+                                    _showEditCardDialog(context, engine, row),
                                 child: _buildCard(
                                   row,
                                   engine: engine,

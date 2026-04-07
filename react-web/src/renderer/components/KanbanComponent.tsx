@@ -297,8 +297,11 @@ export function KanbanComponent({ model }: KanbanComponentProps) {
   // Search
   const [searchQuery, setSearchQuery] = useState('')
 
-  // Detail dialog
-  const [detailRow, setDetailRow] = useState<Row | null>(null)
+  // Edit dialog
+  const [editRow, setEditRow] = useState<Row | null>(null)
+  const [editFormValues, setEditFormValues] = useState<Record<string, string>>({})
+  const [editSubmitting, setEditSubmitting] = useState(false)
+  const [editDeleteConfirm, setEditDeleteConfirm] = useState(false)
 
   // Confirm dialog
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null)
@@ -450,8 +453,18 @@ export function KanbanComponent({ model }: KanbanComponentProps) {
       dragStartedRef.current = false
       return
     }
-    setDetailRow(row)
-  }, [])
+    // Pre-populate edit form with the card's current values.
+    const values: Record<string, string> = {}
+    for (const field of model.cardFields) {
+      const val = row[field]
+      if (val != null) values[field] = String(val)
+    }
+    // Also include the status field.
+    const statusVal = row[model.statusField]
+    if (statusVal != null) values[model.statusField] = String(statusVal)
+    setEditFormValues(values)
+    setEditRow(row)
+  }, [model.cardFields, model.statusField])
 
   const handleDragEnd = useCallback(() => {
     // Reset drag state after a short delay to allow click handler to check it.
@@ -570,6 +583,77 @@ export function KanbanComponent({ model }: KanbanComponentProps) {
       setAddSubmitting(false)
     }
   }, [postDataSourceId, addingToColumn, addFormValues, model.statusField, model.dataSource, isMultiUser, authService, closeQuickAdd])
+
+  // ---------------------------------------------------------------------------
+  // Edit dialog handlers
+  // ---------------------------------------------------------------------------
+
+  const closeEditDialog = useCallback(() => {
+    setEditRow(null)
+    setEditFormValues({})
+    setEditSubmitting(false)
+    setEditDeleteConfirm(false)
+  }, [])
+
+  const handleEditFieldChange = useCallback((fieldName: string, value: string) => {
+    setEditFormValues((prev) => ({ ...prev, [fieldName]: value }))
+  }, [])
+
+  const handleEditSubmit = useCallback(async () => {
+    if (!editRow || !putDataSourceId) return
+
+    const rowId = String(editRow['_id'] ?? '')
+    if (!rowId) return
+
+    setEditSubmitting(true)
+    try {
+      // Build withData from all form fields.
+      const withData: Record<string, unknown> = {}
+      for (const field of model.cardFields) {
+        if (editFormValues[field] !== undefined) {
+          withData[field] = editFormValues[field]
+        }
+      }
+      // Include status field.
+      if (editFormValues[model.statusField] !== undefined) {
+        withData[model.statusField] = editFormValues[model.statusField]
+      }
+
+      await executeActions([
+        {
+          action: 'update',
+          dataSource: putDataSourceId,
+          matchField: '_id',
+          target: rowId,
+          withData,
+          computedFields: [],
+          preserveFields: [],
+        },
+      ])
+
+      closeEditDialog()
+    } catch (err) {
+      console.error('ODS: Edit card failed', err)
+    } finally {
+      setEditSubmitting(false)
+    }
+  }, [editRow, putDataSourceId, editFormValues, model.cardFields, model.statusField, executeActions, closeEditDialog])
+
+  // Find delete row action for the edit dialog delete button.
+  const deleteRowAction = useMemo(
+    () => visibleRowActions.find((a) => a.action === 'delete') ?? null,
+    [visibleRowActions],
+  )
+
+  const handleEditDelete = useCallback(async () => {
+    if (!editRow || !deleteRowAction) return
+
+    const rowId = String(editRow[deleteRowAction.matchField] ?? editRow['_id'] ?? '')
+    if (!rowId) return
+
+    await executeDeleteRowAction(deleteRowAction.dataSource, deleteRowAction.matchField, rowId)
+    closeEditDialog()
+  }, [editRow, deleteRowAction, executeDeleteRowAction, closeEditDialog])
 
   // ---------------------------------------------------------------------------
   // Render: Loading
@@ -751,34 +835,111 @@ export function KanbanComponent({ model }: KanbanComponentProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Detail dialog */}
-      <Dialog open={detailRow != null} onOpenChange={(open) => { if (!open) setDetailRow(null) }}>
-        <DialogContent className="sm:max-w-md">
+      {/* Edit dialog */}
+      <Dialog open={editRow != null} onOpenChange={(open) => { if (!open) closeEditDialog() }}>
+        <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>
-              {detailRow ? String(detailRow[titleField] ?? 'Card Details') : 'Card Details'}
+            <DialogTitle className="text-base">
+              Edit {editRow ? String(editRow[titleField] ?? 'Card') : 'Card'}
             </DialogTitle>
           </DialogHeader>
-          {detailRow && (
-            <div className="space-y-3 pt-2">
-              {model.cardFields.map((field) => {
-                const val = detailRow[field]
-                if (val == null || String(val) === '') return null
-                return (
-                  <div key={field} className="flex flex-col gap-0.5">
-                    <span className="text-xs font-medium text-muted-foreground">
-                      {getFieldLabel(model.dataSource, field)}
-                    </span>
-                    <span className="text-sm">{String(val)}</span>
-                  </div>
-                )
-              })}
-              {/* Status field in detail */}
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs font-medium text-muted-foreground">
+          {editRow && (
+            <div className="space-y-3 pt-1">
+              {/* Card fields */}
+              {model.cardFields
+                .filter((f) => f !== model.statusField)
+                .map((fieldName) => {
+                  const def = fieldDefs.get(fieldName)
+                  const label = def?.label ?? getFieldLabel(model.dataSource, fieldName)
+                  const fieldType = def?.type ?? 'text'
+                  const value = editFormValues[fieldName] ?? ''
+
+                  return (
+                    <div key={fieldName} className="space-y-1">
+                      <Label className="text-xs">{label}</Label>
+                      <QuickAddField
+                        fieldName={fieldName}
+                        fieldType={fieldType}
+                        value={value}
+                        options={def?.options}
+                        placeholder={def?.placeholder}
+                        onChange={handleEditFieldChange}
+                      />
+                    </div>
+                  )
+                })}
+
+              {/* Status field as editable select */}
+              <div className="space-y-1">
+                <Label className="text-xs">
                   {getFieldLabel(model.dataSource, model.statusField)}
-                </span>
-                <span className="text-sm">{String(detailRow[model.statusField] ?? '')}</span>
+                </Label>
+                <Select
+                  value={editFormValues[model.statusField] ?? ''}
+                  onValueChange={(v) => handleEditFieldChange(model.statusField, v)}
+                >
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue placeholder="Select status..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {statusOptions.map((opt) => (
+                      <SelectItem key={opt} value={opt}>
+                        {opt}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-between pt-2">
+                {/* Delete button (left side) */}
+                <div>
+                  {deleteRowAction && !editDeleteConfirm && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => setEditDeleteConfirm(true)}
+                    >
+                      Delete
+                    </Button>
+                  )}
+                  {deleteRowAction && editDeleteConfirm && (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={handleEditDelete}
+                      >
+                        Confirm Delete
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => setEditDeleteConfirm(false)}
+                      >
+                        No
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Save / Cancel (right side) */}
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={closeEditDialog}>
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={editSubmitting || !putDataSourceId}
+                    onClick={handleEditSubmit}
+                  >
+                    {editSubmitting ? 'Saving...' : 'Save'}
+                  </Button>
+                </div>
               </div>
             </div>
           )}
