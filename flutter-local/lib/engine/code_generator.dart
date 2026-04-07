@@ -968,14 +968,14 @@ include: package:flutter_lints/flutter.yaml
         _genButtonComponent(buf, c, app, pageId);
       case OdsChartComponent c:
         _genChartComponent(buf, c);
-      case OdsSummaryComponent _:
-        buf.writeln("          // Summary component — code generation not yet supported");
-      case OdsTabsComponent _:
-        buf.writeln("          // Tabs component — code generation not yet supported");
-      case OdsDetailComponent _:
-        buf.writeln("          // Detail component — code generation not yet supported");
-      case OdsKanbanComponent _:
-        buf.writeln("          // Kanban component — code generation not yet supported");
+      case OdsSummaryComponent c:
+        _genSummaryComponent(buf, c);
+      case OdsTabsComponent c:
+        _genTabsComponent(buf, c, app, pageId);
+      case OdsDetailComponent c:
+        _genDetailComponent(buf, c);
+      case OdsKanbanComponent c:
+        _genKanbanComponent(buf, c);
       case OdsUnknownComponent _:
         buf.writeln("          // Unknown component type — skipped");
     }
@@ -1543,6 +1543,257 @@ include: package:flutter_lints/flutter.yaml
     buf.writeln('                ),');
     buf.writeln('              ),');
     buf.writeln('            ),');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Summary component
+  // ---------------------------------------------------------------------------
+
+  void _genSummaryComponent(StringBuffer buf, OdsSummaryComponent c) {
+    final label = _dartString(c.label);
+    final value = _dartString(c.value);
+
+    // Map common icon names to Flutter Icons constants.
+    String iconExpr = 'Icons.info_outline';
+    if (c.icon != null) {
+      iconExpr = 'Icons.${c.icon}';
+    }
+
+    buf.writeln('          Card(');
+    buf.writeln('            child: Padding(');
+    buf.writeln('              padding: const EdgeInsets.all(16),');
+    buf.writeln('              child: Row(');
+    buf.writeln('                children: [');
+    if (c.icon != null) {
+      buf.writeln('                  Icon($iconExpr, size: 36, color: Theme.of(context).colorScheme.primary),');
+      buf.writeln('                  const SizedBox(width: 16),');
+    }
+    buf.writeln('                  Expanded(');
+    buf.writeln('                    child: Column(');
+    buf.writeln('                      crossAxisAlignment: CrossAxisAlignment.start,');
+    buf.writeln('                      children: [');
+    buf.writeln('                        Text($label, style: Theme.of(context).textTheme.bodySmall),');
+    buf.writeln('                        const SizedBox(height: 4),');
+    buf.writeln('                        Text(');
+    buf.writeln('                          $value, // TODO: Replace with computed aggregate value');
+    buf.writeln('                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),');
+    buf.writeln('                        ),');
+    buf.writeln('                      ],');
+    buf.writeln('                    ),');
+    buf.writeln('                  ),');
+    buf.writeln('                ],');
+    buf.writeln('              ),');
+    buf.writeln('            ),');
+    buf.writeln('          ),');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tabs component
+  // ---------------------------------------------------------------------------
+
+  void _genTabsComponent(StringBuffer buf, OdsTabsComponent c, OdsApp app, String pageId) {
+    final tabCount = c.tabs.length;
+
+    buf.writeln('          DefaultTabController(');
+    buf.writeln('            length: $tabCount,');
+    buf.writeln('            child: Column(');
+    buf.writeln('              mainAxisSize: MainAxisSize.min,');
+    buf.writeln('              children: [');
+    buf.writeln('                TabBar(');
+    buf.writeln('                  isScrollable: $tabCount > 4,');
+    buf.writeln('                  tabs: [');
+    for (final tab in c.tabs) {
+      buf.writeln('                    Tab(text: ${_dartString(tab.label)}),');
+    }
+    buf.writeln('                  ],');
+    buf.writeln('                ),');
+    buf.writeln('                SizedBox(');
+    buf.writeln('                  height: 400, // Adjust height as needed');
+    buf.writeln('                  child: TabBarView(');
+    buf.writeln('                    children: [');
+    for (final tab in c.tabs) {
+      buf.writeln('                      SingleChildScrollView(');
+      buf.writeln('                        padding: const EdgeInsets.all(16),');
+      buf.writeln('                        child: Column(');
+      buf.writeln('                          crossAxisAlignment: CrossAxisAlignment.stretch,');
+      buf.writeln('                          children: [');
+      for (final child in tab.content) {
+        _genComponent(buf, child, app, pageId);
+      }
+      buf.writeln('                          ],');
+      buf.writeln('                        ),');
+      buf.writeln('                      ),');
+    }
+    buf.writeln('                    ],');
+    buf.writeln('                  ),');
+    buf.writeln('                ),');
+    buf.writeln('              ],');
+    buf.writeln('            ),');
+    buf.writeln('          ),');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Detail component
+  // ---------------------------------------------------------------------------
+
+  void _genDetailComponent(StringBuffer buf, OdsDetailComponent c) {
+    final fields = c.fields ?? [];
+    final labels = c.labels ?? {};
+    final source = c.fromForm != null
+        ? 'form "${c.fromForm}"'
+        : 'dataSource "${c.dataSource}"';
+
+    buf.writeln('          // Detail view — data loaded from $source');
+    buf.writeln('          Card(');
+    buf.writeln('            child: Padding(');
+    buf.writeln('              padding: const EdgeInsets.all(16),');
+    buf.writeln('              child: Column(');
+    buf.writeln('                crossAxisAlignment: CrossAxisAlignment.start,');
+    buf.writeln('                children: [');
+
+    if (fields.isEmpty) {
+      buf.writeln('                  // No explicit fields — display all record fields');
+      buf.writeln("                  // TODO: Iterate over your record's keys and display each one");
+      buf.writeln('                  const Text(');
+      buf.writeln("                    'No fields specified — wire up record display here.',");
+      buf.writeln('                    style: TextStyle(fontStyle: FontStyle.italic),');
+      buf.writeln('                  ),');
+    } else {
+      for (final field in fields) {
+        final displayLabel = labels[field] ?? _toDisplayLabel(field);
+        buf.writeln('                  Padding(');
+        buf.writeln('                    padding: const EdgeInsets.symmetric(vertical: 6),');
+        buf.writeln('                    child: Row(');
+        buf.writeln('                      crossAxisAlignment: CrossAxisAlignment.start,');
+        buf.writeln('                      children: [');
+        buf.writeln('                        SizedBox(');
+        buf.writeln('                          width: 140,');
+        buf.writeln('                          child: Text(');
+        buf.writeln('                            ${_dartString(displayLabel)},');
+        buf.writeln('                            style: const TextStyle(fontWeight: FontWeight.bold),');
+        buf.writeln('                          ),');
+        buf.writeln('                        ),');
+        buf.writeln('                        Expanded(');
+        buf.writeln('                          child: Text(');
+        buf.writeln("                            _record[${_dartString(field)}]?.toString() ?? '',");
+        buf.writeln('                          ),');
+        buf.writeln('                        ),');
+        buf.writeln('                      ],');
+        buf.writeln('                    ),');
+        buf.writeln('                  ),');
+      }
+    }
+
+    buf.writeln('                ],');
+    buf.writeln('              ),');
+    buf.writeln('            ),');
+    buf.writeln('          ),');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Kanban component
+  // ---------------------------------------------------------------------------
+
+  void _genKanbanComponent(StringBuffer buf, OdsKanbanComponent c) {
+    final statusField = _dartString(c.statusField);
+    final titleField = c.titleField != null ? _dartString(c.titleField!) : _dartString(c.cardFields.isNotEmpty ? c.cardFields.first : 'title');
+    final dataSource = c.dataSource;
+
+    buf.writeln('          // Kanban board — dataSource: "$dataSource", statusField: ${c.statusField}');
+    buf.writeln('          // Each column represents a status value; cards are rows from the data source.');
+    buf.writeln('          // TODO: Load status options from the data source field definition');
+    buf.writeln('          // TODO: Implement drag-and-drop to update ${c.statusField} on drop');
+    buf.writeln('          SizedBox(');
+    buf.writeln('            height: 500,');
+    buf.writeln('            child: Builder(builder: (context) {');
+    buf.writeln('              // Group rows by status field');
+    buf.writeln('              final columns = <String, List<Map<String, dynamic>>>{};');
+    buf.writeln('              for (final row in _rows) {');
+    buf.writeln('                final status = (row[$statusField] ?? "Unknown").toString();');
+    buf.writeln('                columns.putIfAbsent(status, () => []).add(row);');
+    buf.writeln('              }');
+    buf.writeln('              final statuses = columns.keys.toList();');
+    buf.writeln('              return ListView.builder(');
+    buf.writeln('                scrollDirection: Axis.horizontal,');
+    buf.writeln('                itemCount: statuses.length,');
+    buf.writeln('                itemBuilder: (context, colIndex) {');
+    buf.writeln('                  final status = statuses[colIndex];');
+    buf.writeln('                  final cards = columns[status]!;');
+    buf.writeln('                  return SizedBox(');
+    buf.writeln('                    width: 280,');
+    buf.writeln('                    child: Card(');
+    buf.writeln('                      child: Column(');
+    buf.writeln('                        children: [');
+    buf.writeln('                          // Column header');
+    buf.writeln('                          Container(');
+    buf.writeln('                            width: double.infinity,');
+    buf.writeln('                            padding: const EdgeInsets.all(12),');
+    buf.writeln('                            color: Theme.of(context).colorScheme.primaryContainer,');
+    buf.writeln("                            child: Text(");
+    buf.writeln("                              '\$status (\${cards.length})',");
+    buf.writeln("                              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),");
+    buf.writeln('                            ),');
+    buf.writeln('                          ),');
+    buf.writeln('                          // Cards in this column');
+    buf.writeln('                          Expanded(');
+    buf.writeln('                            child: ListView.builder(');
+    buf.writeln('                              padding: const EdgeInsets.all(8),');
+    buf.writeln('                              itemCount: cards.length,');
+    buf.writeln('                              itemBuilder: (context, cardIndex) {');
+    buf.writeln('                                final row = cards[cardIndex];');
+    buf.writeln('                                return Card(');
+    buf.writeln('                                  elevation: 2,');
+    buf.writeln('                                  margin: const EdgeInsets.only(bottom: 8),');
+    buf.writeln('                                  child: Padding(');
+    buf.writeln('                                    padding: const EdgeInsets.all(12),');
+    buf.writeln('                                    child: Column(');
+    buf.writeln('                                      crossAxisAlignment: CrossAxisAlignment.start,');
+    buf.writeln('                                      children: [');
+    buf.writeln('                                        Text(');
+    buf.writeln("                                          (row[$titleField] ?? '').toString(),");
+    buf.writeln('                                          style: const TextStyle(fontWeight: FontWeight.bold),');
+    buf.writeln('                                        ),');
+
+    // Add additional card fields
+    for (final field in c.cardFields) {
+      if (field == c.titleField) continue; // Skip the title field, already shown
+      final fieldStr = _dartString(field);
+      buf.writeln('                                        const SizedBox(height: 4),');
+      buf.writeln('                                        Text(');
+      buf.writeln("                                          (row[$fieldStr] ?? '').toString(),");
+      buf.writeln('                                          style: Theme.of(context).textTheme.bodySmall,');
+      buf.writeln('                                        ),');
+    }
+
+    buf.writeln('                                      ],');
+    buf.writeln('                                    ),');
+    buf.writeln('                                  ),');
+    buf.writeln('                                );');
+    buf.writeln('                              },');
+    buf.writeln('                            ),');
+    buf.writeln('                          ),');
+    buf.writeln('                        ],');
+    buf.writeln('                      ),');
+    buf.writeln('                    ),');
+    buf.writeln('                  );');
+    buf.writeln('                },');
+    buf.writeln('              );');
+    buf.writeln('            }),');
+    buf.writeln('          ),');
+  }
+
+  /// Converts a camelCase or snake_case field name to a human-readable label.
+  String _toDisplayLabel(String fieldName) {
+    // Insert space before uppercase letters (camelCase → camel Case)
+    final spaced = fieldName.replaceAllMapped(
+      RegExp(r'([a-z])([A-Z])'),
+      (m) => '${m.group(1)} ${m.group(2)}',
+    );
+    // Replace underscores with spaces
+    final cleaned = spaced.replaceAll('_', ' ');
+    // Capitalize first letter
+    if (cleaned.isEmpty) return cleaned;
+    return cleaned[0].toUpperCase() + cleaned.substring(1);
   }
 
   // ---------------------------------------------------------------------------

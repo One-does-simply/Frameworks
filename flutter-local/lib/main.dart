@@ -2458,6 +2458,18 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
+  /// Whether the given app allows guest (unauthenticated) access.
+  ///
+  /// Guest access is allowed when the app is NOT [multiUserOnly] and the
+  /// start page either has no role restriction or explicitly includes 'guest'.
+  bool _shouldAllowGuest(OdsApp app) {
+    if (app.auth.multiUserOnly) return false;
+    final startPage = app.pages[app.startPage];
+    if (startPage == null) return false;
+    final roles = startPage.roles;
+    return roles == null || roles.isEmpty || roles.contains('guest');
+  }
+
   @override
   Widget build(BuildContext context) {
     final engine = context.watch<AppEngine>();
@@ -2486,7 +2498,7 @@ class _AppShellState extends State<AppShell> {
         body: LoginScreen(
           authService: engine.authService,
           onLoginSuccess: () => engine.notifyListeners(),
-          onContinueAsGuest: null, // TODO: implement guest access per startPage roles
+          onContinueAsGuest: _shouldAllowGuest(app) ? () => engine.notifyListeners() : null,
         ),
       );
     }
