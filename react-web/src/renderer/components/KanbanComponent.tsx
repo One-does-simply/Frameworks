@@ -7,13 +7,24 @@ import {
 } from '@/models/ods-component'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { isLocal, tableName } from '@/models/ods-data-source'
+import type { OdsFieldDefinition } from '@/models/ods-field'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -150,6 +161,76 @@ function findPutDataSource(getDataSourceId: string): string | null {
   return null
 }
 
+/**
+ * Find a POST dataSource that points to the same local:// table as the given GET dataSource.
+ * Returns the dataSource id if found.
+ */
+function findPostDataSource(getDataSourceId: string): string | null {
+  const app = useAppStore.getState().app
+  if (!app) return null
+
+  const getDsUrl = app.dataSources[getDataSourceId]?.url
+  if (!getDsUrl) return null
+
+  for (const [id, ds] of Object.entries(app.dataSources)) {
+    if (ds.method === 'POST' && ds.url === getDsUrl) return id
+  }
+  return null
+}
+
+/**
+ * Resolve field definitions for the card fields by inspecting dataSource fields and form fields.
+ * Returns a map from field name to its definition.
+ */
+function resolveFieldDefinitions(
+  dataSourceId: string,
+  fieldNames: string[],
+): Map<string, OdsFieldDefinition> {
+  const app = useAppStore.getState().app
+  if (!app) return new Map()
+
+  const result = new Map<string, OdsFieldDefinition>()
+
+  // Check dataSource fields first.
+  const ds = app.dataSources[dataSourceId]
+  if (ds?.fields) {
+    for (const f of ds.fields) {
+      if (fieldNames.includes(f.name)) result.set(f.name, f)
+    }
+  }
+
+  // Fill in any missing from form fields across pages.
+  const missing = fieldNames.filter((n) => !result.has(n))
+  if (missing.length > 0) {
+    for (const page of Object.values(app.pages)) {
+      for (const component of page.content) {
+        if (component.component === 'form') {
+          for (const f of component.fields) {
+            if (missing.includes(f.name) && !result.has(f.name)) {
+              result.set(f.name, f)
+            }
+          }
+        }
+        if (component.component === 'tabs') {
+          for (const tab of component.tabs) {
+            for (const nested of tab.content) {
+              if (nested.component === 'form') {
+                for (const f of nested.fields) {
+                  if (missing.includes(f.name) && !result.has(f.name)) {
+                    result.set(f.name, f)
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return result
+}
+
 /** Get field label from dataSource fields or form fields. */
 function getFieldLabel(dataSourceId: string, fieldName: string): string {
   const app = useAppStore.getState().app
@@ -237,6 +318,23 @@ export function KanbanComponent({ model }: KanbanComponentProps) {
     () => findPutDataSource(model.dataSource),
     [model.dataSource],
   )
+
+  // POST dataSource for adding new cards.
+  const postDataSourceId = useMemo(
+    () => findPostDataSource(model.dataSource),
+    [model.dataSource],
+  )
+
+  // Field definitions for card fields (used by quick-add dialog).
+  const fieldDefs = useMemo(
+    () => resolveFieldDefinitions(model.dataSource, model.cardFields),
+    [model.dataSource, model.cardFields],
+  )
+
+  // Quick-add state.
+  const [addingToColumn, setAddingToColumn] = useState<string | null>(null)
+  const [addFormValues, setAddFormValues] = useState<Record<string, string>>({})
+  const [addSubmitting, setAddSubmitting] = useState(false)
 
   // Title field: explicit or first cardFields entry.
   const titleField = model.titleField ?? model.cardFields[0] ?? ''
@@ -408,6 +506,72 @@ export function KanbanComponent({ model }: KanbanComponentProps) {
   }, [pendingConfirm, executeRowAction])
 
   // ---------------------------------------------------------------------------
+  // Quick-add handlers
+  // ---------------------------------------------------------------------------
+
+  const openQuickAdd = useCallback((columnStatus: string) => {
+    setAddFormValues({})
+    setAddingToColumn(columnStatus)
+  }, [])
+
+  const closeQuickAdd = useCallback(() => {
+    setAddingToColumn(null)
+    setAddFormValues({})
+    setAddSubmitting(false)
+  }, [])
+
+  const handleAddFieldChange = useCallback((fieldName: string, value: string) => {
+    setAddFormValues((prev) => ({ ...prev, [fieldName]: value }))
+  }, [])
+
+  const handleQuickAddSubmit = useCallback(async () => {
+    if (!postDataSourceId || addingToColumn == null) return
+
+    const app = useAppStore.getState().app
+    const dataService = useAppStore.getState().dataService
+    if (!app || !dataService) return
+
+    const ds = app.dataSources[postDataSourceId]
+    if (!ds || !isLocal(ds)) return
+
+    setAddSubmitting(true)
+    try {
+      // Build the record: merge form values + status field.
+      const record: Record<string, unknown> = {
+        ...addFormValues,
+        [model.statusField]: addingToColumn,
+      }
+
+      // Inject owner if multi-user.
+      if (isMultiUser && authService) {
+        const ownership = ds.ownership
+        if (ownership?.enabled && ownership.ownerField) {
+          record[ownership.ownerField] = authService.currentUserId ?? ''
+        }
+      }
+
+      // Ensure the collection exists (use field defs from POST dataSource or GET).
+      const postDs = app.dataSources[postDataSourceId]
+      const getDs = app.dataSources[model.dataSource]
+      const fields = postDs?.fields ?? getDs?.fields
+      if (fields && fields.length > 0) {
+        await dataService.ensureCollection(tableName(ds), fields)
+      }
+
+      await dataService.insert(tableName(ds), record)
+
+      // Bump record generation to trigger re-fetch.
+      useAppStore.setState((s) => ({ recordGeneration: s.recordGeneration + 1 }))
+
+      closeQuickAdd()
+    } catch (err) {
+      console.error('ODS: Quick-add failed', err)
+    } finally {
+      setAddSubmitting(false)
+    }
+  }, [postDataSourceId, addingToColumn, addFormValues, model.statusField, model.dataSource, isMultiUser, authService, closeQuickAdd])
+
+  // ---------------------------------------------------------------------------
   // Render: Loading
   // ---------------------------------------------------------------------------
 
@@ -503,6 +667,20 @@ export function KanbanComponent({ model }: KanbanComponentProps) {
                   )
                 })}
               </div>
+
+              {/* Quick-add button */}
+              {postDataSourceId && (
+                <div className="border-t px-2.5 py-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-full justify-start text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => openQuickAdd(status)}
+                  >
+                    + Add
+                  </Button>
+                </div>
+              )}
             </div>
           )
         })}
@@ -514,6 +692,64 @@ export function KanbanComponent({ model }: KanbanComponentProps) {
           Showing {processedRows.length} of {rows.length} cards
         </p>
       )}
+
+      {/* Quick-add dialog */}
+      <Dialog open={addingToColumn != null} onOpenChange={(open) => { if (!open) closeQuickAdd() }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base">Add to {addingToColumn}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            {/* Status field shown as read-only badge */}
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-muted-foreground">{getFieldLabel(model.dataSource, model.statusField)}</Label>
+              <Badge variant="secondary" className="text-xs">{addingToColumn}</Badge>
+            </div>
+
+            {/* Card fields */}
+            {model.cardFields
+              .filter((f) => f !== model.statusField)
+              .map((fieldName, idx) => {
+                const def = fieldDefs.get(fieldName)
+                const label = def?.label ?? getFieldLabel(model.dataSource, fieldName)
+                const fieldType = def?.type ?? 'text'
+                const isRequired = idx === 0 || fieldName === titleField
+                const value = addFormValues[fieldName] ?? ''
+
+                return (
+                  <div key={fieldName} className="space-y-1">
+                    <Label className="text-xs">
+                      {label}
+                      {isRequired && <span className="text-destructive ml-0.5">*</span>}
+                    </Label>
+                    <QuickAddField
+                      fieldName={fieldName}
+                      fieldType={fieldType}
+                      value={value}
+                      options={def?.options}
+                      placeholder={def?.placeholder}
+                      onChange={handleAddFieldChange}
+                    />
+                  </div>
+                )
+              })}
+
+            {/* Actions */}
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" size="sm" onClick={closeQuickAdd}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                disabled={addSubmitting || !(addFormValues[titleField] ?? '').trim()}
+                onClick={handleQuickAddSubmit}
+              >
+                {addSubmitting ? 'Adding...' : 'Add'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Detail dialog */}
       <Dialog open={detailRow != null} onOpenChange={(open) => { if (!open) setDetailRow(null) }}>
@@ -673,4 +909,122 @@ function KanbanCard({
       )}
     </div>
   )
+}
+
+// ---------------------------------------------------------------------------
+// QuickAddField sub-component — renders the appropriate input for a field type
+// ---------------------------------------------------------------------------
+
+interface QuickAddFieldProps {
+  fieldName: string
+  fieldType: string
+  value: string
+  options?: string[]
+  placeholder?: string
+  onChange: (fieldName: string, value: string) => void
+}
+
+function QuickAddField({
+  fieldName,
+  fieldType,
+  value,
+  options,
+  placeholder,
+  onChange,
+}: QuickAddFieldProps) {
+  switch (fieldType) {
+    case 'select':
+      return (
+        <Select value={value} onValueChange={(v) => onChange(fieldName, v)}>
+          <SelectTrigger className="h-8 text-sm">
+            <SelectValue placeholder={placeholder ?? 'Select...'} />
+          </SelectTrigger>
+          <SelectContent>
+            {(options ?? []).map((opt) => (
+              <SelectItem key={opt} value={opt}>
+                {opt}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )
+
+    case 'multiline':
+      return (
+        <Textarea
+          value={value}
+          onChange={(e) => onChange(fieldName, e.target.value)}
+          placeholder={placeholder}
+          rows={2}
+          className="text-sm"
+        />
+      )
+
+    case 'number':
+      return (
+        <Input
+          type="number"
+          value={value}
+          onChange={(e) => onChange(fieldName, e.target.value)}
+          placeholder={placeholder}
+          className="h-8 text-sm"
+        />
+      )
+
+    case 'date':
+      return (
+        <Input
+          type="date"
+          value={value}
+          onChange={(e) => onChange(fieldName, e.target.value)}
+          className="h-8 text-sm"
+        />
+      )
+
+    case 'datetime':
+      return (
+        <Input
+          type="datetime-local"
+          value={value}
+          onChange={(e) => onChange(fieldName, e.target.value)}
+          className="h-8 text-sm"
+        />
+      )
+
+    case 'checkbox':
+      return (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={value === 'true'}
+            onChange={(e) => onChange(fieldName, e.target.checked ? 'true' : 'false')}
+            className="size-4 rounded border"
+          />
+          <span className="text-muted-foreground">Yes</span>
+        </label>
+      )
+
+    case 'email':
+      return (
+        <Input
+          type="email"
+          value={value}
+          onChange={(e) => onChange(fieldName, e.target.value)}
+          placeholder={placeholder}
+          className="h-8 text-sm"
+        />
+      )
+
+    default:
+      // text and any unknown type
+      return (
+        <Input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(fieldName, e.target.value)}
+          placeholder={placeholder}
+          className="h-8 text-sm"
+        />
+      )
+  }
 }

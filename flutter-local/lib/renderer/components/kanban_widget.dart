@@ -94,6 +94,26 @@ class _OdsKanbanWidgetState extends State<OdsKanbanWidget> {
     return [];
   }
 
+  /// Finds a POST data source that points to the same local:// table as the
+  /// kanban's GET data source. Used for inline card creation.
+  String? _findPostDataSourceId(AppEngine engine) {
+    final app = engine.app;
+    if (app == null) return null;
+
+    final getDs = app.dataSources[widget.model.dataSource];
+    if (getDs == null || !getDs.isLocal) return null;
+
+    final targetTable = getDs.tableName;
+    for (final entry in app.dataSources.entries) {
+      if (entry.value.method.toUpperCase() == 'POST' &&
+          entry.value.isLocal &&
+          entry.value.tableName == targetTable) {
+        return entry.key;
+      }
+    }
+    return null;
+  }
+
   /// Finds a PUT data source that points to the same local:// table as the
   /// kanban's GET data source. Used for drag-and-drop status updates.
   String? _findPutDataSourceId(AppEngine engine) {
@@ -112,6 +132,266 @@ class _OdsKanbanWidgetState extends State<OdsKanbanWidget> {
       }
     }
     return null;
+  }
+
+  /// Discovers field definitions for the card fields by searching forms and
+  /// dataSource field declarations. Returns a map of fieldName -> OdsFieldDefinition.
+  Map<String, OdsFieldDefinition> _discoverFieldDefinitions(AppEngine engine) {
+    final app = engine.app;
+    if (app == null) return {};
+
+    final result = <String, OdsFieldDefinition>{};
+    final targetFields = {...widget.model.cardFields, widget.model.statusField};
+
+    // Search forms first (richer definitions with options, labels, etc.).
+    for (final page in app.pages.values) {
+      for (final component in page.content) {
+        if (component is OdsFormComponent) {
+          for (final field in component.fields) {
+            if (targetFields.contains(field.name) &&
+                !result.containsKey(field.name)) {
+              result[field.name] = field;
+            }
+          }
+        }
+      }
+    }
+
+    // Fall back to dataSource field definitions for any still missing.
+    final ds = app.dataSources[widget.model.dataSource];
+    if (ds?.fields != null) {
+      for (final field in ds!.fields!) {
+        if (targetFields.contains(field.name) &&
+            !result.containsKey(field.name)) {
+          result[field.name] = field;
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /// Shows a quick-add dialog for creating a new card in the given column.
+  void _showAddCardDialog(
+    BuildContext context,
+    AppEngine engine,
+    String columnStatus,
+  ) {
+    final theme = Theme.of(context);
+    final fieldDefs = _discoverFieldDefinitions(engine);
+    final fields = widget.model.cardFields
+        .where((f) => f != widget.model.statusField)
+        .toList();
+
+    // Build controllers for each field.
+    final controllers = <String, TextEditingController>{};
+    for (final fieldName in fields) {
+      controllers[fieldName] = TextEditingController();
+    }
+
+    // Track selected values for dropdowns.
+    final dropdownValues = <String, String?>{};
+
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(
+            'Add to $columnStatus',
+            style: theme.textTheme.titleMedium,
+          ),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Status badge (read-only).
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      children: [
+                        Text(
+                          _prettifyFieldName(widget.model.statusField),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Chip(
+                          label: Text(columnStatus),
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Dynamic fields.
+                  ...fields.map((fieldName) {
+                    final def = fieldDefs[fieldName];
+                    final label = def?.label ?? _prettifyFieldName(fieldName);
+                    final fieldType = def?.type ?? 'text';
+                    final isTitle = fieldName == _titleField;
+                    final isRequired = isTitle || (def?.required ?? false);
+
+                    if (fieldType == 'select' &&
+                        def?.options != null &&
+                        def!.options!.isNotEmpty) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: DropdownButtonFormField<String>(
+                          initialValue: dropdownValues[fieldName],
+                          decoration: InputDecoration(
+                            labelText: label,
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: def.options!
+                              .map((opt) => DropdownMenuItem(
+                                    value: opt,
+                                    child: Text(opt),
+                                  ))
+                              .toList(),
+                          onChanged: (val) {
+                            setDialogState(
+                                () => dropdownValues[fieldName] = val);
+                          },
+                          validator: isRequired
+                              ? (val) => (val == null || val.isEmpty)
+                                  ? '$label is required'
+                                  : null
+                              : null,
+                        ),
+                      );
+                    }
+
+                    if (fieldType == 'checkbox') {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value:
+                                  controllers[fieldName]?.text == 'true',
+                              onChanged: (val) {
+                                setDialogState(() {
+                                  controllers[fieldName]!.text =
+                                      val == true ? 'true' : 'false';
+                                });
+                              },
+                            ),
+                            Text(label),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: TextFormField(
+                        controller: controllers[fieldName],
+                        decoration: InputDecoration(
+                          labelText: label,
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        keyboardType: fieldType == 'number'
+                            ? TextInputType.number
+                            : fieldType == 'email'
+                                ? TextInputType.emailAddress
+                                : TextInputType.text,
+                        maxLines: fieldType == 'multiline' ? 3 : 1,
+                        validator: isRequired
+                            ? (val) => (val == null || val.trim().isEmpty)
+                                ? '$label is required'
+                                : null
+                            : null,
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                if (!formKey.currentState!.validate()) return;
+
+                // Build the row data.
+                final data = <String, dynamic>{
+                  widget.model.statusField: columnStatus,
+                };
+                for (final fieldName in fields) {
+                  final def = fieldDefs[fieldName];
+                  final fieldType = def?.type ?? 'text';
+                  if (fieldType == 'select' &&
+                      def?.options != null &&
+                      def!.options!.isNotEmpty) {
+                    final val = dropdownValues[fieldName];
+                    if (val != null && val.isNotEmpty) {
+                      data[fieldName] = val;
+                    }
+                  } else {
+                    final val = controllers[fieldName]?.text ?? '';
+                    if (val.isNotEmpty) {
+                      data[fieldName] = val;
+                    }
+                  }
+                }
+
+                // Find the POST dataSource and insert.
+                final postDsId = _findPostDataSourceId(engine);
+                final app = engine.app;
+                if (app != null) {
+                  final dsId = postDsId ?? widget.model.dataSource;
+                  final ds = app.dataSources[dsId] ??
+                      app.dataSources[widget.model.dataSource];
+                  if (ds != null && ds.isLocal) {
+                    // Ensure the table schema is up to date.
+                    final allFieldDefs = fields
+                        .map((f) =>
+                            fieldDefs[f] ??
+                            OdsFieldDefinition(name: f, type: 'text'))
+                        .toList();
+                    // Include the status field definition.
+                    final statusDef = fieldDefs[widget.model.statusField] ??
+                        OdsFieldDefinition(
+                            name: widget.model.statusField, type: 'text');
+                    allFieldDefs.add(statusDef);
+
+                    await engine.dataStore
+                        .ensureTable(ds.tableName, allFieldDefs);
+                    await engine.dataStore.insert(ds.tableName, data);
+                  }
+                }
+
+                if (ctx.mounted) Navigator.of(ctx).pop();
+
+                // Clear cache and trigger rebuild.
+                setState(() {
+                  _cachedRows = null;
+                });
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    // Dispose controllers when the dialog route is removed.
+    // We rely on the dialog being popped, which triggers a rebuild.
+    // Since controllers are local to this invocation, they'll be GC'd.
   }
 
   /// Updates the status of a card when it is dropped onto a new column.
@@ -719,6 +999,25 @@ class _OdsKanbanWidgetState extends State<OdsKanbanWidget> {
                           );
                         },
                       ),
+              ),
+              // "+ Add" button at the bottom of each column.
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: theme.colorScheme.onSurfaceVariant,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      textStyle: const TextStyle(fontSize: 13),
+                    ),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add'),
+                    onPressed: () =>
+                        _showAddCardDialog(context, engine, status),
+                  ),
+                ),
               ),
             ],
           ),
