@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// The "Learn More" screen — introduces ODS to new users.
 ///
@@ -120,13 +121,7 @@ class OdsAboutScreen extends StatelessWidget {
                             'database helpers, and UI widgets — and customize without limits.\n\n'
                             'ODS is the on-ramp to real development, not a dead end.',
                       ),
-                      _SectionCard(
-                        colorScheme: colorScheme,
-                        icon: Icons.code,
-                        title: 'Open Source',
-                        body: 'ODS is open source and community-driven.\n\n'
-                            'GitHub: github.com/One-does-simply',
-                      ),
+                      _LinksSectionCard(colorScheme: colorScheme),
                       const SizedBox(height: 16),
                     ],
                   ),
@@ -188,6 +183,97 @@ class _SectionCard extends StatelessWidget {
               Text(body, style: theme.textTheme.bodyMedium?.copyWith(height: 1.5)),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LinksSectionCard extends StatelessWidget {
+  final ColorScheme colorScheme;
+  const _LinksSectionCard({required this.colorScheme});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(Icons.code, size: 20, color: colorScheme.onPrimaryContainer),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Open Source',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'ODS is open source and community-driven.',
+                style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+              ),
+              const SizedBox(height: 12),
+              _LinkTile(
+                icon: Icons.code,
+                label: 'GitHub Repository',
+                url: 'https://github.com/One-does-simply',
+              ),
+              _LinkTile(
+                icon: Icons.language,
+                label: 'Project Homepage',
+                url: 'https://one-does-simply.github.io/Specification/index.html',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LinkTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String url;
+  const _LinkTile({required this.icon, required this.label, required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: colorScheme.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.w500),
+              ),
+            ),
+            Icon(Icons.open_in_new, size: 14, color: colorScheme.onSurfaceVariant),
+          ],
         ),
       ),
     );

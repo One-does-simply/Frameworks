@@ -5,6 +5,30 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+/// Default sub-folder inside the user's Documents directory where all ODS
+/// files (databases, settings, backups, etc.) are stored.
+const odsDefaultFolderName = 'One Does Simply';
+
+/// Returns the ODS data directory.
+///
+/// If [customPath] is non-null and non-empty it is used as-is; otherwise
+/// a folder named [odsDefaultFolderName] inside the platform Documents
+/// directory is returned. The directory is created if it doesn't exist.
+Future<Directory> getOdsDirectory({String? customPath}) async {
+  final String root;
+  if (customPath != null && customPath.isNotEmpty) {
+    root = customPath;
+  } else {
+    final docs = await getApplicationDocumentsDirectory();
+    root = p.join(docs.path, odsDefaultFolderName);
+  }
+  final dir = Directory(root);
+  if (!await dir.exists()) {
+    await dir.create(recursive: true);
+  }
+  return dir;
+}
+
 /// Persists framework-level settings: theme mode, toured apps, etc.
 ///
 /// Separate from LoadedAppsStore because settings are framework concerns,
@@ -22,6 +46,7 @@ class SettingsStore extends ChangeNotifier {
   bool _isMultiUserEnabled = false;
   String? _defaultAppId;
   String _defaultTheme = 'indigo';
+  String? _storageFolder;
 
   /// Per-app branding overrides: appName -> {primaryColor, cornerStyle}
   final Map<String, Map<String, String>> _brandingOverrides = {};
@@ -34,6 +59,10 @@ class SettingsStore extends ChangeNotifier {
   bool get isMultiUserEnabled => _isMultiUserEnabled;
   String? get defaultAppId => _defaultAppId;
   String get defaultTheme => _defaultTheme;
+
+  /// Custom storage folder for all ODS data. When null, defaults to
+  /// `Documents/One Does Simply/`.
+  String? get storageFolder => _storageFolder;
 
   /// Returns true if the tour has already been shown for this app ID.
   bool hasSeenTour(String appId) => _touredAppIds.contains(appId);
@@ -121,8 +150,23 @@ class SettingsStore extends ChangeNotifier {
     await _save();
   }
 
+  /// Set a custom storage folder for all ODS data (admin-only).
+  /// Pass null to reset to the default `Documents/One Does Simply/`.
+  Future<void> setStorageFolder(String? path) async {
+    if (_storageFolder == path) return;
+    _storageFolder = path;
+    notifyListeners();
+    await _save();
+  }
+
+  /// Convenience: returns the current ODS data directory, respecting the
+  /// custom storage folder setting.
+  Future<Directory> get odsDirectory => getOdsDirectory(customPath: _storageFolder);
+
+  /// Settings file always lives in the default ODS folder (not the custom
+  /// storage folder) so we can bootstrap without a chicken-and-egg problem.
   Future<File> _getFile() async {
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await getOdsDirectory();
     return File(p.join(dir.path, _fileName));
   }
 
@@ -152,6 +196,7 @@ class SettingsStore extends ChangeNotifier {
         if (loadedTheme == 'light') loadedTheme = 'indigo';
         if (loadedTheme == 'dark') loadedTheme = 'slate';
         _defaultTheme = loadedTheme;
+        _storageFolder = data['storageFolder'] as String?;
         final brandOverrides = data['brandingOverrides'] as Map<String, dynamic>?;
         if (brandOverrides != null) {
           for (final entry in brandOverrides.entries) {
@@ -179,6 +224,7 @@ class SettingsStore extends ChangeNotifier {
       'isMultiUserEnabled': _isMultiUserEnabled,
       if (_defaultAppId != null) 'defaultAppId': _defaultAppId,
       'defaultTheme': _defaultTheme,
+      if (_storageFolder != null) 'storageFolder': _storageFolder,
       if (_brandingOverrides.isNotEmpty) 'brandingOverrides': _brandingOverrides,
     }));
   }

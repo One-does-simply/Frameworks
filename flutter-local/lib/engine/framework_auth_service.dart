@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'password_hasher.dart';
+import 'settings_store.dart';
 
 /// Framework-level authentication service with its own SQLite database.
 ///
@@ -33,11 +33,14 @@ class FrameworkAuthService extends ChangeNotifier {
   List<String> get currentRoles => isGuest ? const ['guest'] : _currentRoles;
 
   /// Initialize: open the framework auth database and check if admin exists.
-  Future<void> initialize() async {
+  ///
+  /// If [storageFolder] is provided, the database is placed there instead of
+  /// the default ODS data directory.
+  Future<void> initialize({String? storageFolder}) async {
     if (_isInitialized) return;
 
     sqfliteFfiInit();
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await getOdsDirectory(customPath: storageFolder);
     final dbPath = p.join(dir.path, 'ods_framework_auth.db');
 
     _db = await databaseFactoryFfi.openDatabase(dbPath);

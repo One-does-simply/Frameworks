@@ -177,6 +177,14 @@ class ThemeResolver {
 
     Color c(String key, Color fallback) => parseOklch(colors[key] as String? ?? '') ?? fallback;
 
+    // Derive onSurfaceVariant from baseContent (muted toward surface) instead of
+    // neutralContent. DaisyUI's neutralContent is text-on-neutral (light text for
+    // dark neutral BG in light themes) — the opposite of Material's onSurfaceVariant
+    // which is muted text on the main (light) surface.
+    final onSurface = c('baseContent', brightness == Brightness.dark ? Colors.white : const Color(0xFF1E293B));
+    final surface = c('base100', brightness == Brightness.dark ? const Color(0xFF1E293B) : Colors.white);
+    final onSurfaceVariant = Color.lerp(onSurface, surface, 0.35)!;
+
     return ColorScheme(
       brightness: brightness,
       primary: c('primary', const Color(0xFF4F46E5)),
@@ -187,10 +195,10 @@ class ThemeResolver {
       onTertiary: c('accentContent', Colors.black),
       error: c('error', const Color(0xFFEF4444)),
       onError: c('errorContent', Colors.white),
-      surface: c('base100', brightness == Brightness.dark ? const Color(0xFF1E293B) : Colors.white),
-      onSurface: c('baseContent', brightness == Brightness.dark ? Colors.white : const Color(0xFF1E293B)),
+      surface: surface,
+      onSurface: onSurface,
       surfaceContainerHighest: c('neutral', const Color(0xFF334155)),
-      onSurfaceVariant: c('neutralContent', const Color(0xFF94A3B8)),
+      onSurfaceVariant: onSurfaceVariant,
       surfaceContainer: c('base200', brightness == Brightness.dark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9)),
       surfaceContainerHigh: c('base300', brightness == Brightness.dark ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0)),
       outline: c('base300', const Color(0xFFE2E8F0)),

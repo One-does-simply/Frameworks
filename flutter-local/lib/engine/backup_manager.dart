@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
 import 'app_engine.dart';
+import 'settings_store.dart';
 
 /// Manages automatic backups: creates backups on app launch and prunes old ones.
 class BackupManager {
@@ -13,17 +13,12 @@ class BackupManager {
   static const _backupDir = 'ods_backups';
 
   /// Returns the backup directory for the given app, creating it if needed.
-  /// If [customFolder] is provided, uses that as the root instead of Documents.
+  /// If [customFolder] is provided, uses that as the root instead of the ODS
+  /// data directory.
   static Future<Directory> _getBackupDir(String appName, {String? customFolder}) async {
-    final String root;
-    if (customFolder != null && customFolder.isNotEmpty) {
-      root = customFolder;
-    } else {
-      final docs = await getApplicationDocumentsDirectory();
-      root = docs.path;
-    }
+    final odsDir = await getOdsDirectory(customPath: customFolder);
     final sanitized = appName.replaceAll(RegExp(r'[^\w\s-]'), '').trim();
-    final dir = Directory(p.join(root, _backupDir, sanitized));
+    final dir = Directory(p.join(odsDir.path, _backupDir, sanitized));
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }

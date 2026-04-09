@@ -26,6 +26,11 @@ class FrameworkSettingsScreen extends StatefulWidget {
 class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
   SettingsStore get settings => widget.settings;
 
+  bool get _isAdmin {
+    final fwAuth = context.read<FrameworkAuthService>();
+    return !settings.isMultiUserEnabled || fwAuth.isAdmin;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -137,9 +142,52 @@ class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
               },
             ),
           ],
-          const Divider(),
+          // -- Storage (admin-only) --
+          if (_isAdmin) ...[
+            const Divider(),
+            _SectionHeader(label: 'STORAGE'),
+            ListTile(
+              leading: const Icon(Icons.folder_outlined),
+              title: const Text('Data Folder'),
+              subtitle: Text(
+                settings.storageFolder ?? 'Default (Documents / One Does Simply)',
+                overflow: TextOverflow.ellipsis,
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              trailing: settings.storageFolder != null
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      tooltip: 'Reset to default',
+                      onPressed: () {
+                        settings.setStorageFolder(null);
+                        setState(() {});
+                      },
+                    )
+                  : null,
+              onTap: () async {
+                final picked = await FilePicker.platform.getDirectoryPath(
+                  dialogTitle: 'Choose ODS Data Folder',
+                );
+                if (picked != null) {
+                  settings.setStorageFolder(picked);
+                  setState(() {});
+                }
+              },
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                'All app databases, user data, backups, and settings are stored in this folder. '
+                'Changing this will not move existing data.',
+                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
 
-          // -- Users & Multi-User --
+          // -- Users & Multi-User (admin-only) --
+          if (_isAdmin) ...[
+          const Divider(),
           _SectionHeader(label: 'USERS'),
           SwitchListTile(
             secondary: const Icon(Icons.people_outline),
@@ -175,7 +223,7 @@ class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
 
                     await settings.setMultiUserEnabled(true);
                     final fwAuth = context.read<FrameworkAuthService>();
-                    await fwAuth.initialize();
+                    await fwAuth.initialize(storageFolder: settings.storageFolder);
 
                     if (!mounted) return;
                     await Navigator.push(
@@ -207,6 +255,7 @@ class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
               },
             ),
           ],
+          ], // end _isAdmin
           const Divider(),
 
           // -- About --

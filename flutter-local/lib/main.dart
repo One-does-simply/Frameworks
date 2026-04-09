@@ -216,7 +216,7 @@ class _OdsFrameworkAppState extends State<OdsFrameworkApp> {
     // Initialize framework auth if multi-user is enabled
     if (settings.isMultiUserEnabled) {
       final fwAuth = context.read<FrameworkAuthService>();
-      await fwAuth.initialize();
+      await fwAuth.initialize(storageFolder: settings.storageFolder);
     }
 
     if (mounted) setState(() => _settingsReady = true);
@@ -294,9 +294,147 @@ class _OdsFrameworkAppState extends State<OdsFrameworkApp> {
     // Admin logged in: show WelcomeScreen (admin home)
     if (fwAuth.isAdmin) return const WelcomeScreen();
 
-    // Regular user logged in: auto-load default app
-    // (handled by WelcomeScreen which will auto-launch)
-    return const WelcomeScreen();
+    // Regular user logged in: auto-load the default app
+    return _RegularUserHome(
+      onLogout: () {
+        fwAuth.logout();
+        setState(() {});
+      },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Regular User Home — auto-loads the default app for non-admin users
+// ---------------------------------------------------------------------------
+
+class _RegularUserHome extends StatefulWidget {
+  final VoidCallback onLogout;
+  const _RegularUserHome({required this.onLogout});
+
+  @override
+  State<_RegularUserHome> createState() => _RegularUserHomeState();
+}
+
+class _RegularUserHomeState extends State<_RegularUserHome> {
+  final _store = LoadedAppsStore();
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _autoLaunch();
+  }
+
+  Future<void> _autoLaunch() async {
+    final settings = context.read<SettingsStore>();
+    _store.storageFolder = settings.storageFolder;
+    await _store.initialize(syncCatalog: false);
+
+    final defaultId = settings.defaultAppId;
+    LoadedAppEntry? target;
+    if (defaultId != null) {
+      target = _store.activeApps.cast<LoadedAppEntry?>().firstWhere(
+            (a) => a!.id == defaultId,
+            orElse: () => null,
+          );
+    }
+    // Fallback: load the first active app
+    target ??= _store.activeApps.isNotEmpty ? _store.activeApps.first : null;
+
+    if (target == null) {
+      if (mounted) setState(() { _loading = false; _error = 'No apps available. Ask an admin to set a default app.'; });
+      return;
+    }
+
+    final engine = context.read<AppEngine>();
+    engine.storageFolder = settings.storageFolder;
+
+    // Framework auth is active — bypass per-app auth, inject framework roles.
+    final fwAuth = context.read<FrameworkAuthService>();
+    engine.skipAppAuth = true;
+    engine.frameworkRoles = fwAuth.currentRoles;
+    engine.frameworkUsername = fwAuth.currentUsername;
+    engine.frameworkDisplayName = fwAuth.currentDisplayName;
+
+    final ok = await engine.loadSpec(target.specJson);
+    if (!ok && mounted) {
+      setState(() { _loading = false; _error = engine.loadError ?? 'Failed to load app'; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final fwAuth = context.watch<FrameworkAuthService>();
+
+    if (_loading && _error == null) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text('Loading...', style: theme.textTheme.bodyMedium),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Error or no default app
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('One Does Simply'),
+        actions: [
+          PopupMenuButton<String>(
+            icon: CircleAvatar(
+              radius: 14,
+              child: Text(
+                fwAuth.currentDisplayName.isNotEmpty ? fwAuth.currentDisplayName[0].toUpperCase() : '?',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ),
+            onSelected: (v) { if (v == 'logout') widget.onLogout(); },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                enabled: false,
+                child: Text('Signed in as ${fwAuth.currentDisplayName}'),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'logout', child: Text('Logout')),
+            ],
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.info_outline, size: 48, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(height: 16),
+              Text(
+                _error ?? 'No default app configured.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Contact your administrator.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -324,6 +462,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 
   Future<void> _initStore() async {
+    final settings = context.read<SettingsStore>();
+    _loadedAppsStore.storageFolder = settings.storageFolder;
     await _loadedAppsStore.initialize();
     if (mounted) setState(() => _storeReady = true);
   }
@@ -335,11 +475,23 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     });
 
     final engine = context.read<AppEngine>();
+    final settings = context.read<SettingsStore>();
+    engine.storageFolder = settings.storageFolder;
+
+    // When framework multi-user is active, bypass per-app auth and inject
+    // the framework user's roles so the app uses them for RBAC + startPage.
+    if (settings.isMultiUserEnabled) {
+      final fwAuth = context.read<FrameworkAuthService>();
+      if (fwAuth.isLoggedIn) {
+        engine.skipAppAuth = true;
+        engine.frameworkRoles = fwAuth.currentRoles;
+      }
+    }
+
     final success = await engine.loadSpec(jsonString);
 
     if (success) {
       // Run auto-backup in the background if enabled.
-      final settings = context.read<SettingsStore>();
       if (settings.autoBackup) {
         BackupManager.runAutoBackup(
           engine,
@@ -556,8 +708,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
     try {
       // Open a temporary DataStore to read existing data.
+      final settings = context.read<SettingsStore>();
       final dataStore = DataStore();
-      await dataStore.initialize(appName);
+      await dataStore.initialize(appName, storageFolder: settings.storageFolder);
       final tables = await dataStore.exportAllData();
       await dataStore.close();
 
@@ -799,6 +952,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                             onChanged: (mode) => settings.setThemeMode(mode),
                           ),
                           const SizedBox(width: 8),
+                          if (!settings.isMultiUserEnabled || context.read<FrameworkAuthService>().isAdmin)
                           IconButton(
                             icon: const Icon(Icons.settings, color: Colors.white70),
                             tooltip: 'Framework Settings',
@@ -2429,31 +2583,32 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  bool _tourChecked = false;
+  bool _tourCheckedAndShown = false;
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_tourChecked) {
-      _tourChecked = true;
-      final engine = context.read<AppEngine>();
-      final settings = context.read<SettingsStore>();
-      final app = engine.app;
-      if (app != null && app.tour.isNotEmpty) {
-        // Build a stable ID from the app name for tour tracking
-        final appId = app.appName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
-        if (!settings.hasSeenTour(appId)) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            settings.markTourSeen(appId);
-            AppTourDialog.show(
-              context,
-              steps: app.tour,
-              appName: app.appName,
-              onNavigateToPage: (pageId) => engine.navigateTo(pageId),
-            );
-          });
-        }
+  /// Show the guided tour after the auth gate is clear.
+  /// Called from build() so it re-evaluates after login/admin-setup.
+  void _maybeShowTour() {
+    if (_tourCheckedAndShown) return;
+    final engine = context.read<AppEngine>();
+    // Don't show tour while auth gate is active.
+    if (engine.needsAdminSetup || engine.needsLogin) return;
+    _tourCheckedAndShown = true;
+
+    final settings = context.read<SettingsStore>();
+    final app = engine.app;
+    if (app != null && app.tour.isNotEmpty) {
+      final appId = app.appName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+      if (!settings.hasSeenTour(appId)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          settings.markTourSeen(appId);
+          AppTourDialog.show(
+            context,
+            steps: app.tour,
+            appName: app.appName,
+            onNavigateToPage: (pageId) => engine.navigateTo(pageId),
+          );
+        });
       }
     }
   }
@@ -2484,10 +2639,23 @@ class _AppShellState extends State<AppShell> {
         appBar: AppBar(title: Text(app.appName)),
         body: AdminSetupScreen(
           authService: engine.authService,
-          onSetupComplete: () => engine.notifyListeners(),
+          onSetupComplete: (username, password) async {
+            // Also create a framework admin and enable framework multi-user
+            // so the login gate is active on future launches.
+            if (!settings.isMultiUserEnabled) {
+              await settings.setMultiUserEnabled(true);
+              final fwAuth = context.read<FrameworkAuthService>();
+              await fwAuth.initialize(storageFolder: settings.storageFolder);
+              await fwAuth.setupAdmin(
+                username: username,
+                password: password,
+              );
+            }
+            engine.resolveStartPage();
+          },
           onSkip: app.auth.multiUserOnly
               ? null
-              : () => engine.notifyListeners(),
+              : () => engine.resolveStartPage(),
         ),
       );
     }
@@ -2497,11 +2665,36 @@ class _AppShellState extends State<AppShell> {
         appBar: AppBar(title: Text(app.appName)),
         body: LoginScreen(
           authService: engine.authService,
-          onLoginSuccess: () => engine.notifyListeners(),
-          onContinueAsGuest: _shouldAllowGuest(app) ? () => engine.notifyListeners() : null,
+          onLoginSuccess: () => engine.resolveStartPage(),
+          onContinueAsGuest: _shouldAllowGuest(app) ? () => engine.resolveStartPage() : null,
         ),
       );
     }
+
+    // If the current page is role-restricted and the user doesn't have access,
+    // redirect to the first accessible page (e.g., non-admin on an admin-only startPage).
+    if (engine.isMultiUser) {
+      final page = engine.currentPageId != null ? app.pages[engine.currentPageId] : null;
+      if (page != null && !engine.authService.hasAccess(page.roles)) {
+        // Find the first accessible menu page, or first accessible page.
+        final accessiblePageId = app.menu
+            .where((m) => engine.authService.hasAccess(m.roles))
+            .map((m) => m.mapsTo)
+            .firstOrNull
+          ?? app.pages.entries
+            .where((e) => engine.authService.hasAccess(e.value.roles))
+            .map((e) => e.key)
+            .firstOrNull;
+        if (accessiblePageId != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) engine.navigateTo(accessiblePageId);
+          });
+        }
+      }
+    }
+
+    // Auth gate is clear — show guided tour if first time.
+    _maybeShowTour();
 
     final currentPageId = engine.currentPageId;
     final currentPage = currentPageId != null ? app.pages[currentPageId] : null;
@@ -2537,33 +2730,77 @@ class _AppShellState extends State<AppShell> {
           ),
         ),
         actions: [
-          // User/guest indicator
+          // User/guest indicator with popup menu
           if (engine.isMultiUser)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: engine.authService.isLoggedIn
-                  ? Chip(
-                      avatar: Icon(
-                        engine.authService.isAdmin ? Icons.shield : Icons.person,
-                        size: 16,
+            engine.authService.isLoggedIn
+                ? PopupMenuButton<String>(
+                    tooltip: engine.authService.currentDisplayName,
+                    offset: const Offset(0, 40),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                            radius: 14,
+                            backgroundColor: Colors.white,
+                            child: Text(
+                              engine.authService.currentDisplayName.isNotEmpty ? engine.authService.currentDisplayName[0].toUpperCase() : '?',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Icon(Icons.arrow_drop_down, size: 18, color: Colors.white70),
+                        ],
                       ),
-                      label: Text(
-                        engine.authService.currentDisplayName,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      visualDensity: VisualDensity.compact,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    )
-                  : TextButton.icon(
-                      icon: const Icon(Icons.login, size: 16),
-                      label: const Text('Sign In', style: TextStyle(fontSize: 12)),
-                      onPressed: () {
-                        engine.authService.logout();
-                        engine.clearFormStates();
-                        engine.notifyListeners();
-                      },
                     ),
-            ),
+                    onSelected: (value) async {
+                      if (value == 'logout') {
+                        if (settings.isMultiUserEnabled) {
+                          await engine.reset();
+                          final fwAuth = context.read<FrameworkAuthService>();
+                          fwAuth.logout();
+                        } else {
+                          engine.authService.logout();
+                          engine.clearFormStates();
+                          engine.notifyListeners();
+                        }
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      PopupMenuItem(
+                        enabled: false,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              engine.authService.currentDisplayName,
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            Text(
+                              engine.authService.currentRoles.join(', '),
+                              style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(value: 'logout', child: Text('Logout')),
+                    ],
+                  )
+                : TextButton.icon(
+                    icon: const Icon(Icons.login, size: 16),
+                    label: const Text('Sign In', style: TextStyle(fontSize: 12)),
+                    onPressed: () {
+                      engine.authService.logout();
+                      engine.clearFormStates();
+                      engine.notifyListeners();
+                    },
+                  ),
           // Help button
           if (app.help != null)
             IconButton(
@@ -2725,17 +2962,20 @@ class _AppShellState extends State<AppShell> {
                       ));
                     },
                   ),
-                ListTile(
-                  leading: const Icon(Icons.logout),
-                  title: const Text('Sign Out'),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-                  onTap: () {
-                    Navigator.pop(context);
-                    engine.authService.logout();
-                    engine.clearFormStates();
-                    engine.notifyListeners();
-                  },
-                ),
+                // Only show per-app Sign Out when framework multi-user is off
+                // (otherwise the framework Logout at the bottom covers both).
+                if (!settings.isMultiUserEnabled)
+                  ListTile(
+                    leading: const Icon(Icons.logout),
+                    title: const Text('Sign Out'),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+                    onTap: () {
+                      Navigator.pop(context);
+                      engine.authService.logout();
+                      engine.clearFormStates();
+                      engine.notifyListeners();
+                    },
+                  ),
               ] else ...[
                 // Guest — show sign in option
                 Padding(

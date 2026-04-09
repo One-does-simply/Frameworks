@@ -26,6 +26,21 @@ class AuthService extends ChangeNotifier {
 
   AuthService(this._dataStore);
 
+  /// Inject framework-level auth state so per-app auth checks (hasAccess,
+  /// isAdmin, etc.) work without a separate per-app login.
+  void injectFrameworkAuth({
+    required String username,
+    required String displayName,
+    required List<String> roles,
+  }) {
+    _currentUserId = -1; // Sentinel: signals "logged in" without a real per-app user
+    _currentUsername = username.isNotEmpty ? username : 'user';
+    _currentDisplayName = displayName.isNotEmpty ? displayName : username.isNotEmpty ? username : 'User';
+    _currentRoles = roles.isNotEmpty ? roles : const ['user'];
+    _isAdminSetUp = true;
+    _isInitialized = true;
+  }
+
   // ---------------------------------------------------------------------------
   // Public getters
   // ---------------------------------------------------------------------------

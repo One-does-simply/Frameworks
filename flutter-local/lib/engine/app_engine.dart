@@ -84,6 +84,18 @@ class AppEngine extends ChangeNotifier {
   /// reads this after `executeActions` completes to show a SnackBar.
   String? _lastMessage;
 
+  /// Custom storage folder override. Set by the framework before loading.
+  String? storageFolder;
+
+  /// When true, per-app auth is bypassed because the framework already handles
+  /// authentication. The framework's roles are used for role-based features.
+  bool skipAppAuth = false;
+
+  /// Framework-level user info injected when [skipAppAuth] is true.
+  List<String> frameworkRoles = const [];
+  String frameworkUsername = '';
+  String frameworkDisplayName = '';
+
   AppEngine() {
     _authService = AuthService(_dataStore);
     _actionHandler = ActionHandler(dataStore: _dataStore);
@@ -125,14 +137,29 @@ class AppEngine extends ChangeNotifier {
 
   /// Whether the admin setup wizard needs to be shown.
   /// True when multi-user is enabled but no admin account exists yet.
-  bool get needsAdminSetup => isMultiUser && !_authService.isAdminSetUp;
+  /// Always false when [skipAppAuth] is true (framework handles auth).
+  bool get needsAdminSetup => !skipAppAuth && isMultiUser && !_authService.isAdminSetUp;
 
   /// Whether the login screen needs to be shown.
   /// True when multi-user is enabled, admin is set up, but no user is logged in.
-  bool get needsLogin => isMultiUser && _authService.isAdminSetUp && !_authService.isLoggedIn;
+  /// Always false when [skipAppAuth] is true (framework handles auth).
+  bool get needsLogin => !skipAppAuth && isMultiUser && _authService.isAdminSetUp && !_authService.isLoggedIn;
 
   /// Whether the app requires multi-user and cannot run without it.
   bool get isMultiUserOnly => _app?.auth.multiUserOnly ?? false;
+
+  /// The effective roles for the current user — framework roles when
+  /// framework auth is active, per-app roles otherwise.
+  List<String> get effectiveRoles =>
+      skipAppAuth ? frameworkRoles : _authService.currentRoles;
+
+  /// Re-resolves the start page for the current user's roles.
+  /// Called after login/admin-setup when the user's roles have changed.
+  void resolveStartPage() {
+    if (_app == null) return;
+    _currentPageId = _app!.startPageForRoles(effectiveRoles);
+    notifyListeners();
+  }
 
   /// The most recent action error, if any. Used by the UI to show feedback
   /// (e.g., SnackBar) when required fields are missing on submit.
@@ -195,7 +222,7 @@ class AppEngine extends ChangeNotifier {
 
     // Initialize local storage: create tables, run seed data, load settings.
     try {
-      await _dataStore.initialize(_app!.appName);
+      await _dataStore.initialize(_app!.appName, storageFolder: storageFolder);
       await _dataStore.setupDataSources(_app!.dataSources);
 
       // Load app settings from the database, falling back to spec defaults.
@@ -208,7 +235,17 @@ class AppEngine extends ChangeNotifier {
 
       // Initialize auth if multi-user mode is enabled.
       if (_app!.auth.multiUser) {
-        await _authService.initialize();
+        if (skipAppAuth && frameworkRoles.isNotEmpty) {
+          // Framework already authenticated — inject its state into per-app
+          // auth so hasAccess, isAdmin, etc. work without a second login.
+          _authService.injectFrameworkAuth(
+            username: frameworkUsername,
+            displayName: frameworkDisplayName,
+            roles: frameworkRoles,
+          );
+        } else {
+          await _authService.initialize();
+        }
       }
     } catch (e) {
       _loadError = 'Database initialization failed: $e';
@@ -217,8 +254,8 @@ class AppEngine extends ChangeNotifier {
       return false;
     }
 
-    // Ready — navigate to the start page.
-    _currentPageId = _app!.startPage;
+    // Ready — navigate to the start page (role-aware).
+    _currentPageId = _app!.startPageForRoles(effectiveRoles);
     _navigationStack.clear();
     _formStates.clear();
     _recordCursors.clear();
@@ -959,6 +996,10 @@ class AppEngine extends ChangeNotifier {
     _appSettings.clear();
     _validation = null;
     _loadError = null;
+    skipAppAuth = false;
+    frameworkRoles = const [];
+    frameworkUsername = '';
+    frameworkDisplayName = '';
     notifyListeners();
   }
 

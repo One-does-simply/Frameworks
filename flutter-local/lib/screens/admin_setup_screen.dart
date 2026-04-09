@@ -9,7 +9,8 @@ import '../engine/auth_service.dart';
 /// just sets `"multiUser": true` and the framework takes care of the rest.
 class AdminSetupScreen extends StatefulWidget {
   final AuthService authService;
-  final VoidCallback onSetupComplete;
+  /// Called with (username, password) after the admin account is created.
+  final void Function(String username, String password) onSetupComplete;
   final VoidCallback? onSkip;
 
   const AdminSetupScreen({
@@ -71,7 +72,7 @@ class _AdminSetupScreenState extends State<AdminSetupScreen> {
     if (!mounted) return;
 
     if (success) {
-      widget.onSetupComplete();
+      widget.onSetupComplete(username, password);
     } else {
       setState(() {
         _isLoading = false;

@@ -4,7 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+
+import 'settings_store.dart';
 
 /// Base URL for the ODS example catalog on GitHub Pages.
 const _catalogBaseUrl =
@@ -109,14 +110,21 @@ class LoadedAppsStore {
   /// The UI layer checks this to show the onboarding flow.
   bool get isFirstRun => _isFirstRun;
 
+  /// Custom storage folder override. Set by the framework before initialize().
+  String? storageFolder;
+
   Future<File> _getIndexFile() async {
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await getOdsDirectory(customPath: storageFolder);
     return File(p.join(dir.path, _indexFileName));
   }
 
   /// Loads the saved app list from disk. On first run, sets [isFirstRun]
   /// so the UI can show onboarding instead of auto-seeding all examples.
-  Future<void> initialize() async {
+  ///
+  /// When [syncCatalog] is false, the remote catalog sync is skipped. Use
+  /// this for read-only access (e.g., auto-launching a default app for a
+  /// regular user) to avoid adding new examples behind the admin's back.
+  Future<void> initialize({bool syncCatalog = true}) async {
     if (_initialized) return;
 
     final file = await _getIndexFile();
@@ -131,8 +139,8 @@ class LoadedAppsStore {
         _apps = [];
       }
 
-      // Returning user — sync catalog in the background.
-      _syncExamplesFromCatalog();
+      // Returning user — sync catalog in the background (unless read-only).
+      if (syncCatalog) _syncExamplesFromCatalog();
     } else {
       // First run — let the UI handle onboarding.
       _isFirstRun = true;
@@ -204,16 +212,9 @@ class LoadedAppsStore {
 
       final existing = existingById[entryId];
 
-      if (existing == null) {
-        _apps.add(LoadedAppEntry(
-          id: entryId,
-          name: entry.name,
-          description: entry.description,
-          specJson: specJson,
-          isBundled: true,
-        ));
-        changed = true;
-      } else if (existing.isBundled && existing.specJson != specJson) {
+      // Only update existing bundled examples — never add new ones silently.
+      // New examples are added explicitly during onboarding.
+      if (existing != null && existing.isBundled && existing.specJson != specJson) {
         final index = _apps.indexOf(existing);
         _apps[index] = LoadedAppEntry(
           id: entryId,

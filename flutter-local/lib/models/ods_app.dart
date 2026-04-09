@@ -22,8 +22,13 @@ import 'ods_page.dart';
 class OdsApp {
   final String appName;
 
-  /// The page ID loaded when the app starts.
+  /// The default start page ID (used when no role-specific page matches).
   final String startPage;
+
+  /// Role-based start page overrides. When the spec's `startPage` is an
+  /// object, each key is a role and the value is the page ID for that role.
+  /// The `default` key is stored in [startPage].
+  final Map<String, String> startPageByRole;
 
   /// Navigation menu entries shown in the drawer.
   /// Optional: apps with a single page may omit the menu.
@@ -52,9 +57,20 @@ class OdsApp {
   /// Visual branding and theming configuration.
   final OdsBranding branding;
 
+  /// Resolves the start page for the given roles. Returns the first
+  /// role-specific match, or falls back to [startPage].
+  String startPageForRoles(List<String> roles) {
+    for (final role in roles) {
+      final page = startPageByRole[role];
+      if (page != null) return page;
+    }
+    return startPage;
+  }
+
   const OdsApp({
     required this.appName,
     required this.startPage,
+    this.startPageByRole = const {},
     required this.menu,
     required this.pages,
     required this.dataSources,
@@ -66,9 +82,25 @@ class OdsApp {
   });
 
   factory OdsApp.fromJson(Map<String, dynamic> json) {
+    // startPage can be a string or an object with role-based mappings
+    final rawStartPage = json['startPage'];
+    final String startPage;
+    final Map<String, String> startPageByRole;
+    if (rawStartPage is Map) {
+      final map = Map<String, String>.from(rawStartPage.map(
+        (k, v) => MapEntry(k as String, v as String),
+      ));
+      startPage = map.remove('default') ?? map.values.first;
+      startPageByRole = map;
+    } else {
+      startPage = rawStartPage as String;
+      startPageByRole = const {};
+    }
+
     return OdsApp(
       appName: json['appName'] as String,
-      startPage: json['startPage'] as String,
+      startPage: startPage,
+      startPageByRole: startPageByRole,
       // Menu is optional — default to empty list if not provided.
       menu: (json['menu'] as List<dynamic>?)
               ?.map((m) => OdsMenuItem.fromJson(m as Map<String, dynamic>))

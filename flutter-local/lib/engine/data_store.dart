@@ -1,11 +1,11 @@
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../models/ods_data_source.dart';
 import '../models/ods_field_definition.dart';
+import 'settings_store.dart';
 
 /// SQLite-backed local storage for ODS applications.
 ///
@@ -44,13 +44,16 @@ class DataStore {
   ///
   /// On desktop platforms (Windows, macOS, Linux), initializes the FFI-based
   /// SQLite driver since the default mobile driver is not available.
-  Future<void> initialize(String appName) async {
+  ///
+  /// If [storageFolder] is provided, the database is placed there instead of
+  /// the default ODS data directory.
+  Future<void> initialize(String appName, {String? storageFolder}) async {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
     }
 
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await getOdsDirectory(customPath: storageFolder);
     // Sanitize the app name to produce a safe filename.
     final safeAppName = appName.replaceAll(RegExp(r'[^\w]'), '_').toLowerCase();
     final dbPath = p.join(dir.path, 'ods_$safeAppName.db');
