@@ -895,7 +895,7 @@ export function KanbanComponent({ model }: KanbanComponentProps) {
                 </Label>
                 <Select
                   value={editFormValues[model.statusField] ?? ''}
-                  onValueChange={(v) => handleEditFieldChange(model.statusField, v)}
+                  onValueChange={(v) => handleEditFieldChange(model.statusField, v ?? '')}
                 >
                   <SelectTrigger className="h-8 text-sm">
                     <SelectValue placeholder="Select status..." />
@@ -1119,7 +1119,7 @@ function QuickAddField({
   switch (fieldType) {
     case 'select':
       return (
-        <Select value={value} onValueChange={(v) => onChange(fieldName, v)}>
+        <Select value={value} onValueChange={(v) => onChange(fieldName, v ?? '')}>
           <SelectTrigger className="h-8 text-sm">
             <SelectValue placeholder={placeholder ?? 'Select...'} />
           </SelectTrigger>

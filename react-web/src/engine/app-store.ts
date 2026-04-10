@@ -200,16 +200,28 @@ export const useAppStore = create<AppState>()((set, get) => ({
         await authService.initialize()
       }
 
-      // PocketBase superadmin is available — skip admin setup requirement
-      // but still show the login screen so they can choose their role.
+      // PocketBase superadmin is available — mark auth service accordingly
+      // so role checks and menu filtering work immediately.
       const pbSuperAdminAvailable = dataService.isAdminAuthenticated
+      if (pbSuperAdminAvailable) {
+        authService.setSuperAdmin(true)
+      }
+
+      // Resolve role-based start page from startPageMap.
+      let startPageId = app.startPage
+      if (pbSuperAdminAvailable && app.startPageMap.admin) {
+        startPageId = app.startPageMap.admin
+      } else if (authService.isLoggedIn) {
+        const matchedRole = authService.currentRoles.find(r => app.startPageMap[r])
+        if (matchedRole) startPageId = app.startPageMap[matchedRole]
+      }
 
       set({
         app,
         dataService,
         authService,
         appSettings,
-        currentPageId: app.startPage,
+        currentPageId: startPageId,
         navigationStack: [],
         formStates: {},
         recordCursors: {},

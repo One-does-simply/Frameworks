@@ -8,13 +8,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import {
   ArrowLeft,
-  Clipboard,
   ClipboardCheck,
   Check,
   Loader2,
   MessageSquare,
   FileJson,
-  ClipboardPaste,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------

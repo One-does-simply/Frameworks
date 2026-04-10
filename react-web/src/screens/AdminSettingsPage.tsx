@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router'
 import { AuthService } from '@/engine/auth-service.ts'
-import { DataService } from '@/engine/data-service.ts'
 import pb from '@/lib/pocketbase.ts'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -413,7 +412,7 @@ export function AdminSettingsPage() {
               {apps.length > 0 ? (
                 <Select
                   value={defaultSlug ?? ''}
-                  onValueChange={handleDefaultAppChange}
+                  onValueChange={(v) => { if (v !== null) handleDefaultAppChange(v) }}
                 >
                   <SelectTrigger className="w-48">
                     <SelectValue placeholder="Select app..." />

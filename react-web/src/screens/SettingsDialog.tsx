@@ -62,7 +62,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [customizeOpen, setCustomizeOpen] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewMode, setPreviewMode] = useState<'light' | 'dark'>('light')
-  const [themeDefaults, setThemeDefaults] = useState<Record<string, string>>({})
+  const [_themeDefaults, _setThemeDefaults] = useState<Record<string, string>>({})
   const [tokenOverrides, setTokenOverrides] = useState<Record<string, string>>(
     savedOverrides.overrides ?? app.branding.overrides ?? {}
   )
@@ -89,7 +89,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       const mode = document.documentElement.classList.contains('dark') ? 'dark' : 'light'
       const variant = data[mode] as Record<string, unknown> | undefined
       const colors = variant?.['colors'] as Record<string, string> | undefined
-      if (colors) setThemeDefaults(colors)
+      if (colors) _setThemeDefaults(colors)
     }).catch(() => {})
   }, [customizeOpen, previewOpen, selectedTheme])
 

@@ -143,7 +143,7 @@ export class AuthService {
     // Discover OAuth2 providers configured in PocketBase
     try {
       const methods = await this.pb.collection('users').listAuthMethods({ requestKey: null } as Record<string, unknown>)
-      this._oauthProviders = (methods.oauth2?.providers ?? []).map((p: Record<string, unknown>) => ({
+      this._oauthProviders = (methods.oauth2?.providers ?? []).map((p) => ({
         name: p.name as string,
         displayName: p.displayName as string ?? p.name as string,
         state: p.state as string,
@@ -183,7 +183,7 @@ export class AuthService {
     try {
       const methods = await this.pb.collection('users').listAuthMethods({ requestKey: null } as Record<string, unknown>)
       const provider = (methods.oauth2?.providers ?? []).find(
-        (p: Record<string, unknown>) => p.name === providerName,
+        (p) => p.name === providerName,
       )
       if (!provider) {
         console.error(`ODS AuthService: OAuth2 provider "${providerName}" not found`)

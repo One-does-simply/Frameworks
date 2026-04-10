@@ -10,6 +10,8 @@ import { parsePage, type OdsPage } from './ods-page.ts'
 export interface OdsApp {
   appName: string
   startPage: string
+  /** Role-based start pages (e.g. { default: 'formPage', admin: 'dashPage' }). */
+  startPageMap: Record<string, string>
   menu: OdsMenuItem[]
   pages: Record<string, OdsPage>
   dataSources: Record<string, OdsDataSource>
@@ -20,6 +22,26 @@ export interface OdsApp {
   branding: OdsBranding
 }
 
+/** Resolve startPage to a string. Accepts "pageName" or { default: "pageName", admin: "other" }. */
+function parseStartPage(raw: unknown): string {
+  if (typeof raw === 'string') return raw
+  if (raw && typeof raw === 'object' && 'default' in raw) return (raw as Record<string, string>).default
+  return ''
+}
+
+/** Build the full role→page map. For a plain string, returns { default: value }. */
+function parseStartPageMap(raw: unknown): Record<string, string> {
+  if (typeof raw === 'string') return { default: raw }
+  if (raw && typeof raw === 'object') {
+    return Object.fromEntries(
+      Object.entries(raw as Record<string, unknown>)
+        .filter(([, v]) => typeof v === 'string')
+        .map(([k, v]) => [k, v as string])
+    )
+  }
+  return {}
+}
+
 export function parseApp(json: unknown): OdsApp {
   const j = json as Record<string, unknown>
   const pagesRaw = j['pages'] as Record<string, unknown> | undefined
@@ -28,7 +50,8 @@ export function parseApp(json: unknown): OdsApp {
 
   return {
     appName: j['appName'] as string,
-    startPage: j['startPage'] as string,
+    startPage: parseStartPage(j['startPage']),
+    startPageMap: parseStartPageMap(j['startPage']),
     menu: Array.isArray(j['menu'])
       ? (j['menu'] as unknown[]).map(parseMenuItem)
       : [],

@@ -150,7 +150,7 @@ export async function downloadBackup(
 /** Validate and restore data from a backup JSON string. Returns error string or null on success. */
 export async function restoreBackup(
   jsonString: string,
-  app: OdsApp,
+  _app: OdsApp,
   dataService: DataService,
 ): Promise<string | null> {
   let backup: BackupSnapshot

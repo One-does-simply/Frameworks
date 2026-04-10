@@ -29,16 +29,12 @@ import {
 import { toast } from 'sonner'
 import {
   FileUp,
-  Globe,
-  ClipboardPaste,
   Loader2,
-  ExternalLink,
   Pencil,
   Sparkles,
   Archive,
   ArchiveRestore,
   Trash2,
-  Users,
   ChevronDown,
   ChevronRight,
   Plus,
@@ -54,7 +50,6 @@ import {
   Download,
   Code,
   Star,
-  StarOff,
   Info,
   Settings as SettingsIcon,
   LogOut,
@@ -695,7 +690,7 @@ function AppCard({ app, archived, isDefault, onOpen, onEdit, onEditWithAi, onExp
         </div>
 
         {/* Play button */}
-        <Play className="size-6 shrink-0 text-primary opacity-0 transition-opacity group-hover:opacity-100" />
+        <Play className="size-6 shrink-0 text-primary" />
       </CardContent>
 
       {/* Context menu — rendered as fixed portal to escape overflow clipping */}

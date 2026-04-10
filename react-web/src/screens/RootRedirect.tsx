@@ -82,7 +82,7 @@ export function RootRedirect() {
     if (mode !== 'user') return
     pb.collection('users').listAuthMethods({ requestKey: null } as Record<string, unknown>)
       .then((methods) => {
-        const providers = (methods.oauth2?.providers ?? []).map((p: Record<string, unknown>) => ({
+        const providers = (methods.oauth2?.providers ?? []).map((p) => ({
           name: p.name as string,
           displayName: (p.displayName as string) ?? (p.name as string),
         }))

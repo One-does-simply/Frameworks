@@ -16,7 +16,6 @@
 // Sentinel value for removed elements (from failed $if with no else).
 const REMOVED = Symbol('removed')
 
-type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
 type Context = Record<string, unknown>
 
 // ---------------------------------------------------------------------------

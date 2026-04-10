@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { Code, FileJson, FolderArchive } from 'lucide-react'
+import { Code, FolderArchive } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // GenerateCodeDialog — generate a standalone React project from the ODS spec

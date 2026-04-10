@@ -218,7 +218,7 @@ export function WhyAccessiblePopover() {
 export function GridColorPicker({
   currentColor,
   pairedColor,
-  token,
+  _token,
   onSelect,
   onCancel,
 }: {

@@ -8,7 +8,6 @@ import {
   Sheet,
   SheetContent,
   SheetClose,
-  SheetHeader,
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet'

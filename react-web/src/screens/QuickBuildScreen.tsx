@@ -877,7 +877,7 @@ function FieldRefSelector({
   }
 
   return (
-    <Select value={value ?? ''} onValueChange={onChange}>
+    <Select value={value ?? ''} onValueChange={(v) => { if (v !== null) onChange(v) }}>
       <SelectTrigger>
         <SelectValue placeholder={placeholder ?? 'Select a field...'} />
       </SelectTrigger>
@@ -1418,7 +1418,7 @@ function AddFieldDialog({
           </div>
           <div className="space-y-2">
             <Label>Type</Label>
-            <Select value={type} onValueChange={setType}>
+            <Select value={type} onValueChange={(v) => { if (v !== null) setType(v) }}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>

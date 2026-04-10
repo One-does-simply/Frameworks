@@ -1,5 +1,5 @@
 import type { OdsApp } from '@/models/ods-app.ts'
-import type { OdsComponent, OdsFormComponent, OdsListComponent, OdsButtonComponent, OdsChartComponent, OdsTextComponent, OdsSummaryComponent, OdsDetailComponent } from '@/models/ods-component.ts'
+import type { OdsFormComponent, OdsListComponent, OdsButtonComponent, OdsChartComponent, OdsTextComponent, OdsSummaryComponent, OdsDetailComponent } from '@/models/ods-component.ts'
 import type { OdsFieldDefinition } from '@/models/ods-field.ts'
 import { isLocal, tableName } from '@/models/ods-data-source.ts'
 
@@ -846,8 +846,8 @@ function genTextJsx(comp: OdsTextComponent): string {
 
 function genFormParts(
   comp: OdsFormComponent,
-  page: import('@/models/ods-page.ts').OdsPage,
-  app: OdsApp,
+  _page: import('@/models/ods-page.ts').OdsPage,
+  _app: OdsApp,
   stateLines: string[],
   handlerLines: string[],
   jsxParts: string[],
@@ -1056,9 +1056,9 @@ function genListParts(
 
 function genButtonParts(
   comp: OdsButtonComponent,
-  page: import('@/models/ods-page.ts').OdsPage,
-  app: OdsApp,
-  stateLines: string[],
+  _page: import('@/models/ods-page.ts').OdsPage,
+  _app: OdsApp,
+  _stateLines: string[],
   handlerLines: string[],
   jsxParts: string[],
 ): void {
@@ -1149,7 +1149,7 @@ function genButtonParts(
 function genChartParts(
   comp: OdsChartComponent,
   app: OdsApp,
-  imports: Set<string>,
+  _imports: Set<string>,
   stateLines: string[],
   effectLines: string[],
   jsxParts: string[],
@@ -1366,10 +1366,10 @@ export async function packAsZip(files: GeneratedFiles, rootFolder: string): Prom
   // Concatenate everything
   const allParts: BlobPart[] = []
   for (let i = 0; i < localHeaders.length; i++) {
-    allParts.push(localHeaders[i])
-    allParts.push(parts[i].data)
+    allParts.push(localHeaders[i] as unknown as BlobPart)
+    allParts.push(parts[i].data as unknown as BlobPart)
   }
-  for (const cp of centralParts) allParts.push(cp)
+  for (const cp of centralParts) allParts.push(cp as unknown as BlobPart)
   allParts.push(endRecord)
 
   return new Blob(allParts, { type: 'application/zip' })
