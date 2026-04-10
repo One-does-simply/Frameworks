@@ -12,7 +12,14 @@ import {
   TableCell,
 } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
-import { RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
+import { RefreshCw, ChevronDown, ChevronUp, Download } from 'lucide-react'
+import {
+  getLogs,
+  downloadLogs,
+  type LogEntry,
+  type LogLevel,
+  LEVEL_ORDER,
+} from '@/engine/log-service.ts'
 
 // ---------------------------------------------------------------------------
 // DebugPanel — collapsible panel at the bottom of the app
@@ -59,6 +66,7 @@ export function DebugPanel() {
               <TabsTrigger value="validation">Validation</TabsTrigger>
               <TabsTrigger value="navigation">Navigation</TabsTrigger>
               <TabsTrigger value="data">Data</TabsTrigger>
+              <TabsTrigger value="logs">Logs</TabsTrigger>
             </TabsList>
 
             <TabsContent value="validation" className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">
@@ -71,6 +79,10 @@ export function DebugPanel() {
 
             <TabsContent value="data" className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">
               <DataTab />
+            </TabsContent>
+
+            <TabsContent value="logs" className="min-h-0 flex-1 overflow-y-auto px-4 pb-2">
+              <LogsTab />
             </TabsContent>
           </Tabs>
         </div>
@@ -340,6 +352,108 @@ function DataTab() {
               ))}
             </TableBody>
           </Table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Logs Tab
+// ---------------------------------------------------------------------------
+
+const LEVEL_COLORS: Record<LogLevel, string> = {
+  error: 'text-red-400',
+  warn: 'text-yellow-400',
+  info: 'text-blue-400',
+  debug: 'text-zinc-500',
+}
+
+const LEVEL_BADGE: Record<LogLevel, 'destructive' | 'secondary' | 'outline'> = {
+  error: 'destructive',
+  warn: 'secondary',
+  info: 'outline',
+  debug: 'outline',
+}
+
+function LogsTab() {
+  const [entries, setEntries] = useState<LogEntry[]>([])
+  const [filter, setFilter] = useState<LogLevel>('debug')
+
+  const refresh = useCallback(() => {
+    const all = getLogs() as LogEntry[]
+    const minOrder = LEVEL_ORDER[filter]
+    setEntries(
+      all
+        .filter(e => LEVEL_ORDER[e.level] >= minOrder)
+        .reverse() // newest first
+    )
+  }, [filter])
+
+  useEffect(() => { refresh() }, [refresh])
+
+  return (
+    <div className="flex h-full flex-col gap-2 py-2">
+      {/* Controls */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-zinc-400">Filter:</span>
+        {(['debug', 'info', 'warn', 'error'] as const).map((lvl) => (
+          <button
+            key={lvl}
+            onClick={() => setFilter(lvl)}
+            className={`rounded px-2 py-0.5 text-xs transition-colors ${
+              filter === lvl
+                ? 'bg-blue-600 text-white'
+                : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+            }`}
+          >
+            {lvl}
+          </button>
+        ))}
+        <span className="text-xs text-zinc-500">({entries.length})</span>
+        <div className="flex-1" />
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => downloadLogs()}
+          className="text-zinc-400 hover:text-zinc-200"
+          title="Download logs"
+        >
+          <Download className="size-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={refresh}
+          className="text-zinc-400 hover:text-zinc-200"
+          title="Refresh"
+        >
+          <RefreshCw className="size-3.5" />
+        </Button>
+      </div>
+
+      {/* Log entries */}
+      <div className="min-h-0 flex-1 overflow-auto">
+        {entries.length === 0 ? (
+          <p className="py-4 text-center text-xs text-zinc-500">No log entries</p>
+        ) : (
+          <ul className="space-y-0.5">
+            {entries.map((entry, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs font-mono">
+                <span className="shrink-0 text-zinc-600">
+                  {entry.timestamp.slice(11, 23)}
+                </span>
+                <Badge
+                  variant={LEVEL_BADGE[entry.level]}
+                  className="mt-0.5 shrink-0 text-[9px] uppercase w-12 justify-center"
+                >
+                  {entry.level}
+                </Badge>
+                <span className="shrink-0 text-zinc-500">[{entry.category}]</span>
+                <span className={LEVEL_COLORS[entry.level]}>{entry.message}</span>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </div>

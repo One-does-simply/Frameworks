@@ -344,7 +344,11 @@ class _FrameworkUserListState extends State<_FrameworkUserList> {
               TextField(
                 controller: passwordCtrl,
                 obscureText: true,
-                decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: 'Password',
+                  helperText: 'Min. 8 characters',
+                  border: OutlineInputBorder(),
+                ),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
@@ -366,13 +370,21 @@ class _FrameworkUserListState extends State<_FrameworkUserList> {
     );
 
     if (result == true && usernameCtrl.text.trim().isNotEmpty && passwordCtrl.text.isNotEmpty) {
-      await widget.authService.registerUser(
-        username: usernameCtrl.text.trim(),
-        password: passwordCtrl.text,
-        role: selectedRole,
-        displayName: displayNameCtrl.text.trim().isNotEmpty ? displayNameCtrl.text.trim() : null,
-      );
-      _loadUsers();
+      if (passwordCtrl.text.length < 8) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Password must be at least 8 characters.')),
+          );
+        }
+      } else {
+        await widget.authService.registerUser(
+          username: usernameCtrl.text.trim(),
+          password: passwordCtrl.text,
+          role: selectedRole,
+          displayName: displayNameCtrl.text.trim().isNotEmpty ? displayNameCtrl.text.trim() : null,
+        );
+        _loadUsers();
+      }
     }
   }
 
@@ -434,7 +446,11 @@ class _FrameworkUserListState extends State<_FrameworkUserList> {
           controller: controller,
           obscureText: true,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'New Password', border: OutlineInputBorder()),
+          decoration: const InputDecoration(
+            labelText: 'New Password',
+            helperText: 'Must be at least 8 characters',
+            border: OutlineInputBorder(),
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
@@ -443,7 +459,15 @@ class _FrameworkUserListState extends State<_FrameworkUserList> {
       ),
     );
     if (newPassword != null && newPassword.isNotEmpty) {
-      await widget.authService.changePassword(user['_id'] as int, newPassword);
+      if (newPassword.length < 8) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Password must be at least 8 characters.')),
+          );
+        }
+      } else {
+        await widget.authService.changePassword(user['_id'] as int, newPassword);
+      }
     }
   }
 

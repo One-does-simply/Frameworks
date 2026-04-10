@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useAppStore } from '@/engine/app-store'
+import { error } from '@/engine/log-service.ts'
 import {
   hideWhenMatches,
   type OdsKanbanComponent,
@@ -593,7 +594,7 @@ export function KanbanComponent({ model }: KanbanComponentProps) {
 
       closeQuickAdd()
     } catch (err) {
-      console.error('ODS: Quick-add failed', err)
+      error('KanbanComponent', 'Quick-add failed', err)
     } finally {
       setAddSubmitting(false)
     }
@@ -648,7 +649,7 @@ export function KanbanComponent({ model }: KanbanComponentProps) {
 
       closeEditDialog()
     } catch (err) {
-      console.error('ODS: Edit card failed', err)
+      error('KanbanComponent', 'Edit card failed', err)
     } finally {
       setEditSubmitting(false)
     }

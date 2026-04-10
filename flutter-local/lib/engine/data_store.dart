@@ -5,6 +5,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../models/ods_data_source.dart';
 import '../models/ods_field_definition.dart';
+import 'log_service.dart';
 import 'settings_store.dart';
 
 /// SQLite-backed local storage for ODS applications.
@@ -31,15 +32,6 @@ class DataStore {
   /// avoiding repeated sqlite_master queries.
   final Set<String> _knownTables = {};
 
-  /// Timestamped log of all database operations, shown in the debug panel.
-  final List<String> _debugLog = [];
-
-  List<String> get debugLog => List.unmodifiable(_debugLog);
-
-  void _log(String message) {
-    _debugLog.add('[${DateTime.now().toIso8601String()}] $message');
-  }
-
   /// Opens (or creates) the SQLite database for the given app.
   ///
   /// On desktop platforms (Windows, macOS, Linux), initializes the FFI-based
@@ -62,7 +54,7 @@ class DataStore {
     _knownTables.clear();
 
     _db = await databaseFactory.openDatabase(dbPath);
-    _log('Database opened at $dbPath');
+    logInfo('DataStore', 'Database opened at $dbPath');
   }
 
   /// Creates a table if it doesn't exist, or adds any missing columns.
@@ -89,7 +81,7 @@ class DataStore {
     if (existing.isNotEmpty) {
       _knownTables.add(tableName);
       await _addMissingColumns(tableName, fields);
-      _log('Table "$tableName" already exists, ensured columns');
+      logDebug('DataStore', 'Table "$tableName" already exists, ensured columns');
       return;
     }
 
@@ -99,7 +91,7 @@ class DataStore {
         'CREATE TABLE "$tableName" (_id INTEGER PRIMARY KEY AUTOINCREMENT, $columnDefs, _createdAt TEXT)';
     await db.execute(sql);
     _knownTables.add(tableName);
-    _log('Created table "$tableName" with fields: ${fields.map((f) => f.name).join(', ')}');
+    logInfo('DataStore', 'Created table "$tableName" with fields: ${fields.map((f) => f.name).join(', ')}');
   }
 
   /// Adds columns for any fields not yet present in the table.
@@ -115,7 +107,7 @@ class DataStore {
     for (final field in fields) {
       if (!existingColumns.contains(field.name)) {
         await db.execute('ALTER TABLE "$tableName" ADD COLUMN "${field.name}" TEXT');
-        _log('Added column "${field.name}" to table "$tableName"');
+        logInfo('DataStore', 'Added column "${field.name}" to table "$tableName"');
       }
     }
   }
@@ -142,7 +134,7 @@ class DataStore {
           for (final row in ds.seedData!) {
             await insert(ds.tableName, row);
           }
-          _log('Seeded ${ds.seedData!.length} rows into "${ds.tableName}"');
+          logInfo('DataStore', 'Seeded ${ds.seedData!.length} rows into "${ds.tableName}"');
         }
       }
     }
@@ -154,7 +146,7 @@ class DataStore {
     final row = Map<String, dynamic>.from(data);
     row['_createdAt'] = DateTime.now().toIso8601String();
     final id = await db.insert(tableName, row);
-    _log('INSERT into "$tableName": $data → id=$id');
+    logDebug('DataStore', 'INSERT into "$tableName": $data → id=$id');
     return id;
   }
 
@@ -180,7 +172,7 @@ class DataStore {
       where: '"$matchField" = ?',
       whereArgs: [matchValue],
     );
-    _log('UPDATE "$tableName" SET $row WHERE $matchField=$matchValue → $count rows');
+    logDebug('DataStore', 'UPDATE "$tableName" SET $row WHERE $matchField=$matchValue → $count rows');
     return count;
   }
 
@@ -199,7 +191,7 @@ class DataStore {
       where: '"$matchField" = ?',
       whereArgs: [matchValue],
     );
-    _log('DELETE from "$tableName" WHERE $matchField=$matchValue → $count rows');
+    logDebug('DataStore', 'DELETE from "$tableName" WHERE $matchField=$matchValue → $count rows');
     return count;
   }
 
@@ -211,7 +203,7 @@ class DataStore {
     final db = _db!;
     final hasId = await _tableHasColumn(tableName, '_id');
     final rows = await db.query(tableName, orderBy: hasId ? '_id DESC' : null);
-    _log('SELECT from "$tableName": ${rows.length} rows');
+    logDebug('DataStore', 'SELECT from "$tableName": ${rows.length} rows');
     return rows;
   }
 
@@ -246,7 +238,7 @@ class DataStore {
       orderBy: '_id ASC',
     );
 
-    _log('SELECT FILTERED from "$tableName" WHERE $filter → ${rows.length} rows');
+    logDebug('DataStore', 'SELECT FILTERED from "$tableName" WHERE $filter → ${rows.length} rows');
     return rows;
   }
 
@@ -275,7 +267,7 @@ class DataStore {
       whereArgs: whereArgs,
       orderBy: '_id DESC',
     );
-    _log('SELECT from "$tableName"${where != null ? ' WHERE $ownerField=$ownerId' : ''}: ${rows.length} rows');
+    logDebug('DataStore', 'SELECT from "$tableName"${where != null ? ' WHERE $ownerField=$ownerId' : ''}: ${rows.length} rows');
     return rows;
   }
 
@@ -322,7 +314,7 @@ class DataStore {
       await db.execute(
         'CREATE TABLE "_ods_settings" (key TEXT PRIMARY KEY, value TEXT)',
       );
-      _log('Created internal settings table');
+      logInfo('DataStore', 'Created internal settings table');
     }
     _knownTables.add('_ods_settings');
   }
@@ -348,7 +340,7 @@ class DataStore {
       'INSERT OR REPLACE INTO "_ods_settings" (key, value) VALUES (?, ?)',
       [key, value],
     );
-    _log('Setting "$key" = "$value"');
+    logDebug('DataStore', 'Setting "$key" = "$value"');
   }
 
   /// Gets all app settings as a map.
@@ -373,7 +365,7 @@ class DataStore {
       final rows = await db.query(table, orderBy: '_id ASC');
       result[table] = rows;
     }
-    _log('Exported ${result.length} tables');
+    logInfo('DataStore', 'Exported ${result.length} tables');
     return result;
   }
 
@@ -412,7 +404,7 @@ class DataStore {
       }
     }
 
-    _log('Imported ${tables.length} tables');
+    logInfo('DataStore', 'Imported ${tables.length} tables');
   }
 
   /// Appends rows to a specific table without clearing existing data.
@@ -440,7 +432,7 @@ class DataStore {
       count++;
     }
 
-    _log('Imported $count rows into "$tableName"');
+    logInfo('DataStore', 'Imported $count rows into "$tableName"');
     return count;
   }
 
@@ -468,7 +460,7 @@ class DataStore {
             _createdAt TEXT
           )
         ''');
-        _log('Created auth table "_ods_users"');
+        logInfo('DataStore', 'Created auth table "_ods_users"');
       }
       _knownTables.add('_ods_users');
     }
@@ -487,7 +479,7 @@ class DataStore {
             UNIQUE(user_id, role)
           )
         ''');
-        _log('Created auth table "_ods_user_roles"');
+        logInfo('DataStore', 'Created auth table "_ods_user_roles"');
       }
       _knownTables.add('_ods_user_roles');
     }
@@ -508,7 +500,7 @@ class DataStore {
       'display_name': displayName ?? username,
       '_createdAt': DateTime.now().toIso8601String(),
     });
-    _log('Created user "$username" (id=$id)');
+    logInfo('DataStore', 'Created user "$username" (id=$id)');
     return id;
   }
 
@@ -543,7 +535,7 @@ class DataStore {
         'role': role,
         '_createdAt': DateTime.now().toIso8601String(),
       });
-      _log('Assigned role "$role" to user $userId');
+      logDebug('DataStore', 'Assigned role "$role" to user $userId');
     } catch (_) {
       // UNIQUE constraint — role already assigned, ignore.
     }
@@ -557,7 +549,7 @@ class DataStore {
       where: 'user_id = ? AND role = ?',
       whereArgs: [userId, role],
     );
-    _log('Removed role "$role" from user $userId');
+    logDebug('DataStore', 'Removed role "$role" from user $userId');
   }
 
   /// Returns all users with their roles.
@@ -578,7 +570,7 @@ class DataStore {
     final db = _db!;
     await db.delete('_ods_user_roles', where: 'user_id = ?', whereArgs: [userId]);
     await db.delete('_ods_users', where: '_id = ?', whereArgs: [userId]);
-    _log('Deleted user $userId');
+    logInfo('DataStore', 'Deleted user $userId');
   }
 
   /// Updates a user's password hash and salt.
@@ -590,7 +582,7 @@ class DataStore {
       where: '_id = ?',
       whereArgs: [userId],
     );
-    _log('Updated password for user $userId');
+    logInfo('DataStore', 'Updated password for user $userId');
   }
 
   /// Updates a user's display name.
@@ -602,7 +594,7 @@ class DataStore {
       where: '_id = ?',
       whereArgs: [userId],
     );
-    _log('Updated display name for user $userId');
+    logInfo('DataStore', 'Updated display name for user $userId');
   }
 
   /// Checks whether any user with the 'admin' role exists.

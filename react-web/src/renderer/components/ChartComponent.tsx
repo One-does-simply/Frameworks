@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { warn } from '@/engine/log-service.ts'
 import {
   BarChart,
   Bar,
@@ -187,7 +188,7 @@ export function ChartComponent({ model }: { model: OdsChartComponent }) {
         const aggregated = aggregateData(rows, model.labelField, model.valueField, model.aggregate)
         setData(aggregated)
       } catch (err) {
-        console.warn('ODS ChartComponent: failed to load data', err)
+        warn('ChartComponent', 'Failed to load data', err)
         if (!cancelled) setData([])
       } finally {
         if (!cancelled) setLoading(false)

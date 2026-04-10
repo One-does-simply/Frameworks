@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'data_store.dart';
+import 'log_service.dart';
 import 'password_hasher.dart';
 
 /// Manages authentication state and role-based access control for ODS apps.
@@ -147,7 +148,7 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      debugPrint('ODS AuthService: Admin setup failed: $e');
+      logError('AuthService', 'Admin setup failed', e);
       return false;
     }
   }
@@ -180,7 +181,7 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
       return userId;
     } catch (e) {
-      debugPrint('ODS AuthService: Registration failed: $e');
+      logError('AuthService', 'Registration failed', e);
       return null;
     }
   }
@@ -193,7 +194,7 @@ class AuthService extends ChangeNotifier {
       await _dataStore.updateUserPassword(userId, hash, salt);
       return true;
     } catch (e) {
-      debugPrint('ODS AuthService: Password change failed: $e');
+      logError('AuthService', 'Password change failed', e);
       return false;
     }
   }

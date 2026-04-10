@@ -3,10 +3,12 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../engine/app_engine.dart';
 import '../engine/auth_service.dart';
+import '../engine/log_service.dart';
 import '../engine/color_helpers.dart';
 import '../engine/theme_resolver.dart';
 import '../engine/settings_store.dart';
@@ -439,6 +441,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     setState(() {});
                   },
                 ),
+                const Divider(),
+
+                // -- Logging --
+                _SectionHeader(label: 'LOGGING'),
+                _LoggingSection(onChanged: () => setState(() {})),
                 const SizedBox(height: 24),
               ],
             ),
@@ -1452,6 +1459,180 @@ class _ImportTargetDialogState extends State<_ImportTargetDialog> {
         FilledButton(
           onPressed: _selected != null ? () => Navigator.pop(context, _selected) : null,
           child: const Text('Import'),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Logging section
+// ---------------------------------------------------------------------------
+
+class _LoggingSection extends StatefulWidget {
+  final VoidCallback onChanged;
+  const _LoggingSection({required this.onChanged});
+
+  @override
+  State<_LoggingSection> createState() => _LoggingSectionState();
+}
+
+class _LoggingSectionState extends State<_LoggingSection> {
+  LogSettings get _settings => LogService.instance.settings;
+
+  Future<void> _updateLevel(LogLevel level) async {
+    await LogService.instance.updateSettings(LogSettings(
+      level: level,
+      retentionDays: _settings.retentionDays,
+    ));
+    setState(() {});
+    widget.onChanged();
+  }
+
+  Future<void> _updateRetention(int days) async {
+    await LogService.instance.updateSettings(LogSettings(
+      level: _settings.level,
+      retentionDays: days,
+    ));
+    setState(() {});
+    widget.onChanged();
+  }
+
+  Future<void> _copyLogs() async {
+    final text = LogService.instance.exportLogsAsText();
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) {
+      showOdsSnackBar(context, message: 'Logs copied to clipboard');
+    }
+  }
+
+  Future<void> _downloadLogs() async {
+    try {
+      final path = await LogService.instance.downloadLogs();
+      if (mounted) {
+        showOdsSnackBar(context, message: 'Logs saved to $path');
+      }
+    } catch (e) {
+      if (mounted) {
+        showOdsSnackBar(context, message: 'Download failed: $e');
+      }
+    }
+  }
+
+  Future<void> _clearLogs() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear Logs'),
+        content: const Text(
+          'This will permanently delete all stored log entries.\n\nContinue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    await LogService.instance.clearLogs();
+    setState(() {});
+    widget.onChanged();
+    if (mounted) {
+      showOdsSnackBar(context, message: 'Logs cleared');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final logCount = LogService.instance.logCount;
+
+    return Column(
+      children: [
+        // Log Level
+        ListTile(
+          leading: const Icon(Icons.filter_list),
+          title: const Text('Log Level'),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+          trailing: DropdownButton<LogLevel>(
+            value: _settings.level,
+            underline: const SizedBox.shrink(),
+            items: LogLevel.values.map((level) {
+              return DropdownMenuItem(
+                value: level,
+                child: Text(level.name[0].toUpperCase() + level.name.substring(1)),
+              );
+            }).toList(),
+            onChanged: (v) {
+              if (v != null) _updateLevel(v);
+            },
+          ),
+        ),
+        // Retention
+        ListTile(
+          leading: const Icon(Icons.schedule),
+          title: const Text('Retention'),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+          trailing: DropdownButton<int>(
+            value: [1, 3, 7, 14, 30].contains(_settings.retentionDays)
+                ? _settings.retentionDays
+                : 7,
+            underline: const SizedBox.shrink(),
+            items: [1, 3, 7, 14, 30].map((n) {
+              return DropdownMenuItem(
+                value: n,
+                child: Text('$n ${n == 1 ? 'day' : 'days'}'),
+              );
+            }).toList(),
+            onChanged: (v) {
+              if (v != null) _updateRetention(v);
+            },
+          ),
+        ),
+        // Export Logs
+        ListTile(
+          leading: const Icon(Icons.description_outlined),
+          title: const Text('Export Logs'),
+          subtitle: Text('$logCount entries'),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton.icon(
+                icon: const Icon(Icons.copy, size: 18),
+                label: const Text('Copy'),
+                onPressed: logCount > 0 ? _copyLogs : null,
+              ),
+              const SizedBox(width: 4),
+              TextButton.icon(
+                icon: const Icon(Icons.download, size: 18),
+                label: const Text('Download'),
+                onPressed: logCount > 0 ? _downloadLogs : null,
+              ),
+            ],
+          ),
+        ),
+        // Clear Logs
+        ListTile(
+          leading: Icon(Icons.delete_outline, color: colorScheme.error),
+          title: Text(
+            'Clear Logs',
+            style: TextStyle(color: colorScheme.error),
+          ),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+          onTap: logCount > 0 ? _clearLogs : null,
         ),
       ],
     );

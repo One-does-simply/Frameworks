@@ -1,9 +1,9 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import '../engine/log_service.dart';
 import '../engine/template_engine.dart';
 import '../engine/theme_resolver.dart';
 import '../widgets/color_picker_widgets.dart';
@@ -222,7 +222,7 @@ class _QuickBuildScreenState extends State<QuickBuildScreen> {
       }
       spec['branding'] = branding;
 
-      debugPrint('ODS Quick Build rendered spec:\n${const JsonEncoder.withIndent('  ').convert(spec)}');
+      logDebug('QuickBuild', 'Rendered spec', const JsonEncoder.withIndent('  ').convert(spec));
 
       // Extract reviewable text strings and move to Phase 3.
       final texts = _extractReviewableTexts(spec);

@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
+import 'log_service.dart';
 import 'settings_store.dart';
 
 /// Base URL for the ODS example catalog on GitHub Pages.
@@ -164,7 +164,7 @@ class LoadedAppsStore {
           .map((e) => CatalogEntry.fromJson(e as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      debugPrint('ODS: Failed to fetch example catalog: $e');
+      logError('LoadedAppsStore', 'Failed to fetch example catalog', e);
       return null;
     }
   }
@@ -240,7 +240,7 @@ class LoadedAppsStore {
       if (response.statusCode != 200) return null;
       return response.body;
     } catch (e) {
-      debugPrint('ODS: Failed to fetch example spec $fileName: $e');
+      logError('LoadedAppsStore', 'Failed to fetch example spec $fileName', e);
       return null;
     }
   }

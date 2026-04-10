@@ -1,4 +1,5 @@
 import type PocketBase from 'pocketbase'
+import { warn, error } from './log-service.ts'
 
 /**
  * Authentication and role-based access control using PocketBase auth.
@@ -59,9 +60,7 @@ export class AuthService {
 
   get currentEmail(): string {
     if (this._isSuperAdmin) {
-      return (this.pb.authStore.record?.['email'] as string)
-        ?? localStorage.getItem('ods_pb_admin_email')
-        ?? ''
+      return (this.pb.authStore.record?.['email'] as string) ?? ''
     }
     return (this.pb.authStore.record?.['email'] as string) ?? ''
   }
@@ -186,7 +185,7 @@ export class AuthService {
         (p) => p.name === providerName,
       )
       if (!provider) {
-        console.error(`ODS AuthService: OAuth2 provider "${providerName}" not found`)
+        warn('AuthService', `OAuth2 provider "${providerName}" not found`)
         return
       }
 
@@ -202,7 +201,7 @@ export class AuthService {
 
       window.location.href = authUrl
     } catch (e) {
-      console.error('ODS AuthService: OAuth2 redirect failed:', e)
+      error('AuthService', 'OAuth2 redirect failed', e)
     }
   }
 
@@ -218,7 +217,7 @@ export class AuthService {
       const codeVerifier = localStorage.getItem('ods_oauth2_codeVerifier') ?? ''
 
       if (state !== savedState) {
-        console.error('ODS AuthService: OAuth2 state mismatch')
+        warn('AuthService', 'OAuth2 state mismatch')
         return false
       }
 
@@ -250,7 +249,7 @@ export class AuthService {
 
       return true
     } catch (e) {
-      console.error('ODS AuthService: OAuth2 code exchange failed:', e)
+      error('AuthService', 'OAuth2 code exchange failed', e)
       return false
     }
   }
@@ -274,9 +273,9 @@ export class AuthService {
   async setupAdmin(email: string, password: string, displayName?: string): Promise<boolean> {
     try {
       // Reject if email matches PocketBase superadmin — they are separate identity stores
-      const pbAdminEmail = localStorage.getItem('ods_pb_admin_email') ?? ''
+      const pbAdminEmail = (this.pb.authStore.record?.['email'] as string) ?? ''
       if (pbAdminEmail && email.toLowerCase() === pbAdminEmail.toLowerCase()) {
-        console.error('ODS AuthService: Cannot create app user with same email as PocketBase superadmin')
+        warn('AuthService', 'Cannot create app user with same email as PocketBase superadmin')
         return false
       }
 
@@ -297,7 +296,7 @@ export class AuthService {
       this._isAdminSetUp = true
       return true
     } catch (e) {
-      console.error('ODS AuthService: Admin setup failed:', e)
+      error('AuthService', 'Admin setup failed', e)
       return false
     }
   }
@@ -311,9 +310,9 @@ export class AuthService {
   }): Promise<string | null> {
     try {
       // Reject if email matches PocketBase superadmin
-      const pbAdminEmail = localStorage.getItem('ods_pb_admin_email') ?? ''
+      const pbAdminEmail = (this.pb.authStore.record?.['email'] as string) ?? ''
       if (pbAdminEmail && params.email.toLowerCase() === pbAdminEmail.toLowerCase()) {
-        console.error('ODS AuthService: Cannot register with PocketBase superadmin email')
+        warn('AuthService', 'Cannot register with PocketBase superadmin email')
         return null
       }
 
@@ -337,9 +336,19 @@ export class AuthService {
 
       return record.id
     } catch (e) {
-      console.error('ODS AuthService: Registration failed:', e)
+      error('AuthService', 'Registration failed', e)
       return null
     }
+  }
+
+  /**
+   * Validate a password against PocketBase requirements.
+   * Returns null if valid, or an error message string.
+   */
+  static validatePassword(password: string): string | null {
+    if (password.length < 8) return 'Password must be at least 8 characters.'
+    if (password.length > 72) return 'Password must be 72 characters or fewer.'
+    return null
   }
 
   /** Change password for a user. */

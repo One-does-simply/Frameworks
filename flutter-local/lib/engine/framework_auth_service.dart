@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'log_service.dart';
 import 'password_hasher.dart';
 import 'settings_store.dart';
 
@@ -105,7 +106,7 @@ class FrameworkAuthService extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      debugPrint('FrameworkAuthService: setupAdmin failed: $e');
+      logError('FrameworkAuthService', 'setupAdmin failed', e);
       return false;
     }
   }
@@ -174,7 +175,7 @@ class FrameworkAuthService extends ChangeNotifier {
       }
       return id;
     } catch (e) {
-      debugPrint('FrameworkAuthService: registerUser failed: $e');
+      logError('FrameworkAuthService', 'registerUser failed', e);
       return null;
     }
   }
@@ -227,7 +228,7 @@ class FrameworkAuthService extends ChangeNotifier {
       }
       return true;
     } catch (e) {
-      debugPrint('FrameworkAuthService: updateUser failed: $e');
+      logError('FrameworkAuthService', 'updateUser failed', e);
       return false;
     }
   }

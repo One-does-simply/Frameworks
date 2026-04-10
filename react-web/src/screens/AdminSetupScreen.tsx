@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAppStore } from '@/engine/app-store.ts'
+import pb from '@/lib/pocketbase.ts'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -40,7 +41,7 @@ export function AdminSetupScreen() {
     }
 
     // Check for PB superadmin email conflict
-    const pbAdminEmail = localStorage.getItem('ods_pb_admin_email') ?? ''
+    const pbAdminEmail = (pb.authStore.record?.['email'] as string) ?? ''
     if (pbAdminEmail && email.trim().toLowerCase() === pbAdminEmail.toLowerCase()) {
       setError('This email is used by the PocketBase superadmin. Please use a different email for the app admin account.')
       return

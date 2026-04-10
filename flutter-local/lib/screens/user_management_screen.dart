@@ -62,7 +62,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
               const SizedBox(height: 12),
               TextField(
                 controller: passwordController,
-                decoration: const InputDecoration(labelText: 'Password'),
+                decoration: const InputDecoration(
+                  labelText: 'Password',
+                  helperText: 'Min. 8 characters',
+                ),
                 obscureText: true,
               ),
               const SizedBox(height: 12),
@@ -94,7 +97,15 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     if (result == true && mounted) {
       final username = usernameController.text.trim();
       final password = passwordController.text;
-      if (username.isNotEmpty && password.isNotEmpty) {
+      if (username.isEmpty || password.isEmpty) {
+        // Do nothing
+      } else if (password.length < 8) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Password must be at least 8 characters.')),
+          );
+        }
+      } else {
         final userId = await widget.authService.registerUser(
           username: username,
           password: password,
@@ -163,11 +174,19 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Reset Password for $username'),
-        content: TextField(
-          controller: passwordController,
-          decoration: const InputDecoration(labelText: 'New Password'),
-          obscureText: true,
-          autofocus: true,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: passwordController,
+              decoration: const InputDecoration(
+                labelText: 'New Password',
+                helperText: 'Must be at least 8 characters',
+              ),
+              obscureText: true,
+              autofocus: true,
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -184,7 +203,15 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
 
     if (result == true && mounted) {
       final password = passwordController.text;
-      if (password.isNotEmpty) {
+      if (password.isEmpty) {
+        // Do nothing
+      } else if (password.length < 8) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Password must be at least 8 characters.')),
+          );
+        }
+      } else {
         await widget.authService.changePassword(userId, password);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

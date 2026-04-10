@@ -2,6 +2,7 @@ import type PocketBase from 'pocketbase'
 import type { OdsFieldDefinition } from '../models/ods-field.ts'
 import type { OdsDataSource } from '../models/ods-data-source.ts'
 import { isLocal, tableName } from '../models/ods-data-source.ts'
+import { debug, info, warn, error } from './log-service.ts'
 
 /**
  * PocketBase-backed data service for ODS apps.
@@ -16,7 +17,6 @@ import { isLocal, tableName } from '../models/ods-data-source.ts'
 export class DataService {
   private pb: PocketBase
   private knownCollections = new Set<string>()
-  private debugLog: string[] = []
   /** App name prefix for collection isolation between apps. */
   private appPrefix = ''
   /** Whether we've authenticated as PocketBase superadmin for schema management. */
@@ -34,8 +34,7 @@ export class DataService {
   initialize(appName: string) {
     this.appPrefix = appName.replace(/[^\w]/g, '_').toLowerCase()
     this.knownCollections.clear()
-    this.debugLog = []
-    this.log(`DataService initialized for app "${appName}" (prefix: ${this.appPrefix})`)
+    info('DataService', `Initialized for app "${appName}" (prefix: ${this.appPrefix})`)
   }
 
   /**
@@ -46,26 +45,41 @@ export class DataService {
     try {
       await this.pb.collection('_superusers').authWithPassword(email, password)
       this._isAdminAuthenticated = true
-      // Save credentials for next session
-      localStorage.setItem('ods_pb_admin_email', email)
-      localStorage.setItem('ods_pb_admin_password', password)
-      this.log('PocketBase admin authenticated')
+      info('DataService', 'PocketBase admin authenticated')
       return true
     } catch (e) {
-      this.log(`PocketBase admin auth failed: ${e}`)
+      warn('DataService', `PocketBase admin auth failed: ${e}`)
       return false
     }
   }
 
   /**
-   * Try to restore admin authentication from saved credentials.
-   * Returns true if successfully authenticated.
+   * Check if the current PocketBase session has valid superadmin auth.
+   * Does NOT restore from stored credentials — login is required each session.
    */
   async tryRestoreAdminAuth(): Promise<boolean> {
-    const email = localStorage.getItem('ods_pb_admin_email')
-    const password = localStorage.getItem('ods_pb_admin_password')
-    if (!email || !password) return false
-    return this.authenticateAdmin(email, password)
+    if (!this.pb.authStore.isValid) return false
+
+    // Check if the current auth token belongs to a superadmin.
+    // PocketBase SDK stores the collection name on the auth record.
+    const record = this.pb.authStore.record
+    const collectionName = record?.['collectionName'] ?? record?.['collectionId'] ?? ''
+    if (collectionName === '_superusers' || collectionName === '_admins') {
+      this._isAdminAuthenticated = true
+      info('DataService', 'PocketBase superadmin session detected from auth store')
+      return true
+    }
+
+    // Fallback: try refreshing the superadmin token
+    try {
+      await this.pb.collection('_superusers').authRefresh()
+      this._isAdminAuthenticated = true
+      info('DataService', 'PocketBase admin session refreshed')
+      return true
+    } catch {
+      info('DataService', 'tryRestoreAdminAuth: authRefresh failed, not a superadmin session')
+      return false
+    }
   }
 
   /** Returns the prefixed collection name for isolation between apps. */
@@ -90,7 +104,7 @@ export class DataService {
       // Check if collection exists AND is usable (try a simple query).
       await this.pb.collection(name).getList(1, 1, { requestKey: null })
       this.knownCollections.add(name)
-      this.log(`Collection "${name}" already exists and is usable`)
+      debug('DataService', `Collection "${name}" already exists`)
     } catch {
       // Collection doesn't exist or is broken — (re)create it.
       try {
@@ -116,9 +130,9 @@ export class DataService {
           deleteRule: '',
         })
         this.knownCollections.add(name)
-        this.log(`Created collection "${name}" with ${fields.length} fields`)
+        info('DataService', `Created collection "${name}" with ${fields.length} fields`)
       } catch (createErr) {
-        this.log(`Failed to create collection "${name}": ${createErr}`)
+        error('DataService', `Failed to create collection "${name}"`, createErr)
         throw createErr
       }
     }
@@ -143,7 +157,7 @@ export class DataService {
           for (const row of ds.seedData) {
             await this.insert(table, row)
           }
-          this.log(`Seeded ${ds.seedData.length} rows into "${table}"`)
+          info('DataService', `Seeded ${ds.seedData.length} rows into "${table}"`)
         }
       }
     }
@@ -158,11 +172,10 @@ export class DataService {
     const name = this.collectionName(table)
     try {
       const record = await this.pb.collection(name).create(data)
-      this.log(`INSERT into "${name}": id=${record.id}`)
+      debug('DataService', `INSERT into "${name}": id=${record.id}`)
       return record.id
     } catch (e) {
-      this.log(`INSERT FAILED into "${name}": ${e}`)
-      console.error(`ODS DataService: INSERT failed for "${name}"`, e, data)
+      error('DataService', `INSERT failed for "${name}"`, { error: e, data })
       throw e
     }
   }
@@ -188,10 +201,10 @@ export class DataService {
       for (const record of records) {
         await this.pb.collection(name).update(record.id, updateData)
       }
-      this.log(`UPDATE "${name}" SET ... WHERE ${matchField}="${matchValue}" → ${records.length} rows`)
+      debug('DataService', `UPDATE "${name}" WHERE ${matchField}="${matchValue}" → ${records.length} rows`)
       return records.length
     } catch (e) {
-      this.log(`UPDATE error on "${name}": ${e}`)
+      warn('DataService', `UPDATE error on "${name}"`, e)
       return 0
     }
   }
@@ -210,10 +223,10 @@ export class DataService {
       for (const record of records) {
         await this.pb.collection(name).delete(record.id)
       }
-      this.log(`DELETE from "${name}" WHERE ${matchField}="${matchValue}" → ${records.length} rows`)
+      debug('DataService', `DELETE from "${name}" WHERE ${matchField}="${matchValue}" → ${records.length} rows`)
       return records.length
     } catch (e) {
-      this.log(`DELETE error on "${name}": ${e}`)
+      warn('DataService', `DELETE error on "${name}"`, e)
       return 0
     }
   }
@@ -225,11 +238,10 @@ export class DataService {
       const records = await this.pb.collection(name).getFullList({
         requestKey: null,
       })
-      this.log(`SELECT from "${name}": ${records.length} rows`)
+      debug('DataService', `SELECT from "${name}": ${records.length} rows`)
       return records.map(r => this.normalizeRecord(r))
     } catch (e) {
-      this.log(`SELECT FAILED from "${name}": ${e}`)
-      console.error(`ODS DataService: query failed for "${name}"`, e)
+      error('DataService', `SELECT failed for "${name}"`, e)
       return []
     }
   }
@@ -249,7 +261,7 @@ export class DataService {
         filter: filterStr,
         requestKey: null,
       })
-      this.log(`SELECT FILTERED from "${name}" WHERE ${filterStr}: ${records.length} rows`)
+      debug('DataService', `SELECT FILTERED from "${name}" WHERE ${filterStr}: ${records.length} rows`)
       return records.map(r => this.normalizeRecord(r))
     } catch {
       return []
@@ -274,7 +286,7 @@ export class DataService {
         filter: `${ownerField} = "${this.escapeFilter(ownerId)}"`,
         requestKey: null,
       })
-      this.log(`SELECT OWNED from "${name}" WHERE ${ownerField}="${ownerId}": ${records.length} rows`)
+      debug('DataService', `SELECT OWNED from "${name}" WHERE ${ownerField}="${ownerId}": ${records.length} rows`)
       return records.map(r => this.normalizeRecord(r))
     } catch {
       return []
@@ -338,18 +350,6 @@ export class DataService {
     } catch {
       return {}
     }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Debug log
-  // ---------------------------------------------------------------------------
-
-  getDebugLog(): readonly string[] {
-    return this.debugLog
-  }
-
-  private log(message: string) {
-    this.debugLog.push(`[${new Date().toISOString()}] ${message}`)
   }
 
   // ---------------------------------------------------------------------------

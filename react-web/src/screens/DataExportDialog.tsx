@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
+import { error } from '@/engine/log-service.ts'
 import { FileJson, Table, Database } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -77,7 +78,7 @@ export function DataExportDialog({ open, onOpenChange, app: appProp, dataService
       toast.success(`Data exported as ${format.toUpperCase()}.`)
       onOpenChange(false)
     } catch (err) {
-      console.error('Export failed:', err)
+      error('DataExport', 'Export failed', err)
       toast.error('Export failed. Check the console for details.')
     } finally {
       setIsExporting(false)

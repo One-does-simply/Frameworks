@@ -55,9 +55,9 @@ export function AppLoader() {
     loadingRef.current = true
 
     async function load() {
-      // Authenticate with PocketBase if needed
+      // Check if we have a valid PocketBase session from admin login
       const ds = new DataService(pb)
-      if (!ds.isAdminAuthenticated) {
+      if (pb.authStore.isValid) {
         await ds.tryRestoreAdminAuth()
       }
 

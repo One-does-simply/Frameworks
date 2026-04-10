@@ -10,6 +10,7 @@
  */
 
 import type { DataService } from './data-service.ts'
+import { warn } from './log-service.ts'
 import type { OdsApp } from '@/models/ods-app.ts'
 import { isLocal, tableName } from '@/models/ods-data-source.ts'
 
@@ -72,7 +73,7 @@ export async function runAutoBackup(
     pruneBackups(app.appName, settings.retention)
   } catch (e) {
     // Best-effort — don't break the app if backup fails
-    console.warn('ODS auto-backup failed:', e)
+    warn('BackupService', 'Auto-backup failed', e)
   }
 }
 

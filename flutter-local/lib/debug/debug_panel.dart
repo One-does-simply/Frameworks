@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../engine/app_engine.dart';
+import '../engine/log_service.dart';
 
 /// A three-tab debug panel that renders at the bottom of the screen when
 /// the user toggles debug mode via the bug icon in the app bar.
@@ -19,6 +20,7 @@ import '../engine/app_engine.dart';
 ///   1. Validation — shows spec validation messages (errors, warnings, info).
 ///   2. Navigation — shows current page, navigation stack, and all page IDs.
 ///   3. Data — lets the user browse SQLite tables and their rows.
+///   4. Logs — shows structured log entries with level filtering and export.
 class DebugPanel extends StatefulWidget {
   const DebugPanel({super.key});
 
@@ -33,7 +35,7 @@ class _DebugPanelState extends State<DebugPanel>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -61,6 +63,7 @@ class _DebugPanelState extends State<DebugPanel>
               Tab(text: 'Validation'),
               Tab(text: 'Navigation'),
               Tab(text: 'Data'),
+              Tab(text: 'Logs'),
             ],
           ),
           Expanded(
@@ -70,6 +73,7 @@ class _DebugPanelState extends State<DebugPanel>
                 _ValidationTab(engine: engine),
                 _NavigationTab(engine: engine),
                 _DataTab(engine: engine),
+                const _LogsTab(),
               ],
             ),
           ),
@@ -315,6 +319,212 @@ class _DataTabState extends State<_DataTab> {
                             .toList(),
                       ),
                     ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Logs tab
+// ---------------------------------------------------------------------------
+
+/// Displays structured log entries from [LogService] with level-based
+/// filtering, color-coded severity, and a download/export button.
+///
+/// Entries are shown newest-first. The filter row lets the user choose
+/// a minimum log level (debug/info/warn/error) — everything at or above
+/// the selected level is shown.
+class _LogsTab extends StatefulWidget {
+  const _LogsTab();
+
+  @override
+  State<_LogsTab> createState() => _LogsTabState();
+}
+
+class _LogsTabState extends State<_LogsTab> {
+  LogLevel _minLevel = LogLevel.debug;
+  List<LogEntry> _entries = [];
+  String? _statusMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  void _refresh() {
+    final all = LogService.instance.getLogs();
+    setState(() {
+      _entries = all.where((e) => e.level.index >= _minLevel.index).toList()
+        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      _statusMessage = null;
+    });
+  }
+
+  Future<void> _download() async {
+    try {
+      final path = await LogService.instance.downloadLogs();
+      setState(() => _statusMessage = 'Saved to $path');
+    } catch (e) {
+      setState(() => _statusMessage = 'Download failed: $e');
+    }
+  }
+
+  /// Extract HH:MM:SS.mmm from an ISO-8601 timestamp string.
+  String _formatTime(String timestamp) {
+    final dt = DateTime.tryParse(timestamp);
+    if (dt == null) return timestamp;
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    final s = dt.second.toString().padLeft(2, '0');
+    final ms = dt.millisecond.toString().padLeft(3, '0');
+    return '$h:$m:$s.$ms';
+  }
+
+  Color _colorForLevel(LogLevel level) => switch (level) {
+        LogLevel.error => Colors.red,
+        LogLevel.warn => Colors.orange,
+        LogLevel.info => Colors.blue,
+        LogLevel.debug => Colors.grey,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // -- Controls row --
+          Row(
+            children: [
+              const Text(
+                'Level: ',
+                style: TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+              const SizedBox(width: 4),
+              ...LogLevel.values.map((level) => Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ActionChip(
+                      label: Text(
+                        level.name,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      backgroundColor: _minLevel == level
+                          ? _colorForLevel(level)
+                          : Colors.grey.shade700,
+                      labelStyle: const TextStyle(color: Colors.white),
+                      onPressed: () {
+                        _minLevel = level;
+                        _refresh();
+                      },
+                    ),
+                  )),
+              IconButton(
+                icon: const Icon(Icons.refresh, color: Colors.grey, size: 18),
+                tooltip: 'Refresh',
+                onPressed: _refresh,
+              ),
+              IconButton(
+                icon: const Icon(Icons.download, color: Colors.grey, size: 18),
+                tooltip: 'Download logs',
+                onPressed: _download,
+              ),
+            ],
+          ),
+          if (_statusMessage != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                _statusMessage!,
+                style: const TextStyle(color: Colors.green, fontSize: 11),
+              ),
+            ),
+          const SizedBox(height: 8),
+
+          // -- Log entries list --
+          Expanded(
+            child: _entries.isEmpty
+                ? const Center(
+                    child: Text(
+                      'No log entries',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _entries.length,
+                    itemBuilder: (context, index) {
+                      final entry = _entries[index];
+                      final color = _colorForLevel(entry.level);
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Time
+                            Text(
+                              _formatTime(entry.timestamp),
+                              style: const TextStyle(
+                                color: Colors.white60,
+                                fontSize: 11,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            // Level badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: color.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: Text(
+                                entry.level.name.toUpperCase(),
+                                style: TextStyle(
+                                  color: color,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            // Category + message
+                            Expanded(
+                              child: Text.rich(
+                                TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: '[${entry.category}] ',
+                                      style: const TextStyle(
+                                        color: Colors.white54,
+                                        fontSize: 12,
+                                        fontFamily: 'monospace',
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: entry.message,
+                                      style: TextStyle(
+                                        color: color,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
           ),
         ],

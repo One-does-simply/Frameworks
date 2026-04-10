@@ -1,4 +1,5 @@
 import type PocketBase from 'pocketbase'
+import { info, error } from './log-service.ts'
 
 /**
  * Manages the `_ods_apps` PocketBase collection — the central registry
@@ -61,15 +62,15 @@ export class AppRegistry {
           updateRule: '',
           deleteRule: '',
         })
-        console.log('Created _ods_apps collection')
+        info('AppRegistry', 'Created _ods_apps collection')
       } catch (e) {
-        console.error('Failed to create _ods_apps collection:', e)
+        error('AppRegistry', 'Failed to create _ods_apps collection', e)
         // May already exist from a previous session — try to verify
         try {
           await this.pb.collection(COLLECTION_NAME).getList(1, 1, { requestKey: null })
-          console.log('_ods_apps collection already exists (creation failed but collection is usable)')
+          info('AppRegistry', '_ods_apps collection already exists')
         } catch (e2) {
-          console.error('_ods_apps collection is unusable:', e2)
+          error('AppRegistry', '_ods_apps collection is unusable', e2)
         }
       }
     }
@@ -78,24 +79,26 @@ export class AppRegistry {
   /** List all apps (active first, then archived). */
   async listApps(): Promise<AppRecord[]> {
     try {
-      const records = await this.pb.collection(COLLECTION_NAME).getFullList({
+      const result = await this.pb.collection(COLLECTION_NAME).getList(1, 200, {
         requestKey: null,
       })
-      return records.map(r => ({
+      const records = result.items
+      return (records ?? []).map(r => ({
         id: r.id,
         name: r['name'] as string,
         slug: r['slug'] as string,
         specJson: typeof r['specJson'] === 'string' ? r['specJson'] : JSON.stringify(r['specJson']),
         status: (r['status'] as string) === 'archived' ? 'archived' as const : 'active' as const,
         description: r['description'] as string ?? '',
-        created: r.created,
-        updated: r.updated,
+        created: r['created'] as string ?? '',
+        updated: r['updated'] as string ?? '',
       })).sort((a, b) => {
         // Active first, then archived. Within each group, newest first.
         if (a.status !== b.status) return a.status === 'active' ? -1 : 1
-        return b.created.localeCompare(a.created)
+        return (b.created || '').localeCompare(a.created || '')
       })
-    } catch {
+    } catch (e) {
+      error('AppRegistry', 'listApps failed', e)
       return []
     }
   }
@@ -114,8 +117,8 @@ export class AppRegistry {
         specJson: typeof record['specJson'] === 'string' ? record['specJson'] : JSON.stringify(record['specJson']),
         status: (record['status'] as string) === 'archived' ? 'archived' : 'active',
         description: record['description'] as string ?? '',
-        created: record.created,
-        updated: record.updated,
+        created: record['created'] as string ?? '',
+        updated: record['updated'] as string ?? '',
       }
     } catch {
       return null
@@ -156,15 +159,13 @@ export class AppRegistry {
         specJson: typeof record['specJson'] === 'string' ? record['specJson'] : JSON.stringify(record['specJson']),
         status: 'active',
         description: record['description'] as string ?? '',
-        created: record.created,
-        updated: record.updated,
+        created: record['created'] as string ?? '',
+        updated: record['updated'] as string ?? '',
       }
     } catch (e: unknown) {
       // PocketBase ClientResponseError has a `data` field with per-field errors
       const pbErr = e as { data?: Record<string, unknown>; response?: unknown }
-      console.error('Failed to save app:', e)
-      console.error('PB error data:', pbErr.data)
-      console.error('PB error response:', pbErr.response)
+      error('AppRegistry', 'Failed to save app', { error: e, data: pbErr.data, response: pbErr.response })
       throw e
     }
   }
@@ -175,7 +176,7 @@ export class AppRegistry {
       await this.pb.collection(COLLECTION_NAME).update(appId, { specJson: JSON.parse(specJson) })
       return true
     } catch (e) {
-      console.error('Failed to update app:', e)
+      error('AppRegistry', 'Failed to update app', e)
       return false
     }
   }

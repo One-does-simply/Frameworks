@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAppStore } from '@/engine/app-store.ts'
+import pb from '@/lib/pocketbase.ts'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -94,7 +95,7 @@ export function LoginScreen() {
     }
 
     // Check for PB superadmin email conflict
-    const pbAdminEmail = localStorage.getItem('ods_pb_admin_email') ?? ''
+    const pbAdminEmail = (pb.authStore.record?.['email'] as string) ?? ''
     if (pbAdminEmail && email.trim().toLowerCase() === pbAdminEmail.toLowerCase()) {
       setError('This email is reserved for the system administrator. Please use a different email.')
       return
@@ -130,9 +131,12 @@ export function LoginScreen() {
       // PB superadmin — bypass directly
       authService.setSuperAdmin(true)
       useAppStore.setState({ needsLogin: false, needsAdminSetup: false })
-    } else if (needsAdminSetup) {
-      // No admin exists — show admin setup form
+    } else if (needsAdminSetup && !authService.isAdminSetUp) {
+      // No admin user exists anywhere — show admin creation form
       setIsAdminSetup(true)
+      setError(null)
+    } else {
+      // Admin user exists but we're not authenticated — show login form
       setError(null)
     }
   }
@@ -145,7 +149,7 @@ export function LoginScreen() {
     if (password.length < 8) { setError('Password must be at least 8 characters'); return }
     if (password !== confirmPassword) { setError('Passwords do not match'); return }
 
-    const pbAdminEmail = localStorage.getItem('ods_pb_admin_email') ?? ''
+    const pbAdminEmail = (pb.authStore.record?.['email'] as string) ?? ''
     if (pbAdminEmail && email.trim().toLowerCase() === pbAdminEmail.toLowerCase()) {
       setError('This email is used by the PocketBase superadmin. Please use a different email.')
       return

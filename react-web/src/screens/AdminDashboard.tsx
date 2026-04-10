@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router'
 import { AppRegistry, type AppRecord } from '@/engine/app-registry.ts'
+import { error } from '@/engine/log-service.ts'
 import { parseSpec, isOk } from '@/parser/spec-parser.ts'
 import { loadFromFile, loadFromUrl, loadFromText } from '@/engine/spec-loader.ts'
 import pb from '@/lib/pocketbase.ts'
@@ -188,7 +189,7 @@ export function AdminDashboard() {
     } catch (e) {
       setSaving(false)
       const msg = e instanceof Error ? e.message : String(e)
-      console.error('Save app error:', e)
+      error('AdminDashboard', 'Save app error', e)
       setLocalError(`Failed to save app: ${msg}`)
     }
   }
@@ -290,12 +291,8 @@ export function AdminDashboard() {
   }
 
   function handleLogout() {
-    // Clear admin auth from localStorage and PocketBase
-    localStorage.removeItem('ods_pb_admin_email')
-    localStorage.removeItem('ods_pb_admin_password')
     pb.authStore.clear()
     navigate('/')
-    // Force page reload to clear all state
     window.location.reload()
   }
 

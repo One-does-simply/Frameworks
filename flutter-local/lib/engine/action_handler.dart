@@ -1,11 +1,10 @@
-import 'package:flutter/foundation.dart';
-
 import '../models/ods_action.dart';
 import '../models/ods_app.dart';
 import '../models/ods_component.dart';
 import '../models/ods_field_definition.dart';
 import 'data_store.dart';
 import 'expression_evaluator.dart';
+import 'log_service.dart';
 
 /// Executes ODS actions (navigate, submit, update) on behalf of the [AppEngine].
 ///
@@ -56,7 +55,7 @@ class ActionHandler {
 
       default:
         // Graceful degradation: unknown action types are logged, not crashed.
-        debugPrint('ODS: Unknown action type "${action.action}"');
+        logWarn('ActionHandler', 'Unknown action type "${action.action}"');
         return const ActionResult();
     }
   }

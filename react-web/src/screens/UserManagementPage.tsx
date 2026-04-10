@@ -106,6 +106,8 @@ export function UserManagementPage() {
 
   async function handleAddUser() {
     if (!newEmail.trim() || !newPassword) return
+    const pwError = AuthService.validatePassword(newPassword)
+    if (pwError) { toast.error(pwError); return }
 
     const userId = await authService.registerUser({
       email: newEmail.trim(),
@@ -148,6 +150,8 @@ export function UserManagementPage() {
 
   async function handleResetPassword() {
     if (!resetTarget || !resetPassword) return
+    const pwError = AuthService.validatePassword(resetPassword)
+    if (pwError) { toast.error(pwError); return }
 
     const success = await authService.changePassword(resetTarget._id, resetPassword)
     if (success) {
@@ -363,11 +367,13 @@ export function UserManagementPage() {
               type="password"
               value={resetPassword}
               onChange={(e) => setResetPassword(e.target.value)}
+              placeholder="Min. 8 characters"
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleResetPassword()
               }}
             />
+            <p className="text-xs text-muted-foreground">Must be at least 8 characters.</p>
           </div>
           <DialogFooter>
             <Button

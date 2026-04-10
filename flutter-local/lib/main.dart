@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'debug/debug_panel.dart';
 import 'engine/app_engine.dart';
+import 'engine/log_service.dart';
 import 'engine/backup_manager.dart';
 import 'engine/framework_auth_service.dart';
 import 'engine/theme_resolver.dart';
@@ -38,12 +39,16 @@ import 'screens/user_management_screen.dart';
 // Entry point
 // ---------------------------------------------------------------------------
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
-    debugPrint('FlutterError: ${details.exception}');
-    debugPrint('Stack: ${details.stack}');
+    logError('Flutter', 'Unhandled error: ${details.exception}', details.stack?.toString());
   };
+
+  // Initialize logging service before app starts
+  await LogService.instance.initialize();
 
   runApp(
     MultiProvider(

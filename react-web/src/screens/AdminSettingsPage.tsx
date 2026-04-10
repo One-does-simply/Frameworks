@@ -42,6 +42,18 @@ import {
   type BackupSettings,
 } from '@/engine/backup-service.ts'
 import {
+  getLogSettings,
+  setLogSettings,
+  downloadLogs,
+  clearLogs,
+  exportLogsAsText,
+  getLogCount,
+  warn,
+  error,
+  type LogSettings,
+  type LogLevel,
+} from '@/engine/log-service.ts'
+import {
   getDefaultAppSlug,
   setDefaultAppSlug,
 } from '@/engine/default-app-store.ts'
@@ -91,6 +103,10 @@ export function AdminSettingsPage() {
 
   // Backup
   const [backupSettings, setBackupState] = useState<BackupSettings>(getBackupSettings)
+
+  // Logging
+  const [logSettingsState, setLogSettingsState] = useState<LogSettings>(getLogSettings)
+  const [logCount, setLogCount] = useState(getLogCount)
 
   // PocketBase
   const pbUrl = import.meta.env.VITE_POCKETBASE_URL ?? 'http://127.0.0.1:8090'
@@ -174,7 +190,7 @@ export function AdminSettingsPage() {
       })
       setOauthProviders(providers)
     } catch (e) {
-      console.error('Failed to load OAuth2 providers:', e)
+      error('AdminSettings', 'Failed to load OAuth2 providers', e)
       setOauthProviders([])
     }
     setIsLoadingOAuth(false)
@@ -272,7 +288,7 @@ export function AdminSettingsPage() {
       setProviderClientSecret('')
       await loadOAuthProviders()
     } catch (e) {
-      console.error('OAuth2 save error:', e)
+      error('AdminSettings', 'OAuth2 save error', e)
       toast.error(`Failed to configure provider: ${e instanceof Error ? e.message : e}`)
     }
   }
@@ -288,7 +304,7 @@ export function AdminSettingsPage() {
       toast.success(`${providerId} ${enabled ? 'enabled' : 'disabled'}`)
       await loadOAuthProviders()
     } catch (e) {
-      console.error('OAuth2 toggle error:', e)
+      error('AdminSettings', 'OAuth2 toggle error', e)
       toast.error(`Failed to update provider: ${e instanceof Error ? e.message : e}`)
     }
   }
@@ -296,6 +312,8 @@ export function AdminSettingsPage() {
   // User management handlers
   async function handleAddUser() {
     if (!newEmail.trim() || !newPassword) return
+    const pwError = AuthService.validatePassword(newPassword)
+    if (pwError) { toast.error(pwError); return }
     const userId = await authService.registerUser({
       email: newEmail.trim(),
       password: newPassword,
@@ -328,6 +346,8 @@ export function AdminSettingsPage() {
 
   async function handleResetPassword() {
     if (!resetTarget || !resetPassword) return
+    const pwError = AuthService.validatePassword(resetPassword)
+    if (pwError) { toast.error(pwError); return }
     const success = await authService.changePassword(resetTarget._id, resetPassword)
     if (success) {
       toast.success(`Password reset for ${resetTarget.username}.`)
@@ -339,7 +359,7 @@ export function AdminSettingsPage() {
   }
 
   // Check if a user looks like the PocketBase superadmin
-  const pbAdminEmail = localStorage.getItem('ods_pb_admin_email') ?? ''
+  const pbAdminEmail = (pb.authStore.record?.['email'] as string) ?? ''
 
   return (
     <div className="min-h-screen bg-background">
@@ -472,6 +492,125 @@ export function AdminSettingsPage() {
                 </Select>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* ---- Logging ---- */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Logging</CardTitle>
+            <CardDescription>
+              Configure diagnostic logging. Logs can be exported and shared for troubleshooting.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Log Level */}
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label>Log Level</Label>
+                <p className="text-xs text-muted-foreground">Minimum severity to capture</p>
+              </div>
+              <Select
+                value={logSettingsState.level}
+                onValueChange={(v) => {
+                  const updated = { ...logSettingsState, level: v as LogLevel }
+                  setLogSettingsState(updated)
+                  setLogSettings(updated)
+                  toast.success(`Log level set to ${v}`)
+                }}
+              >
+                <SelectTrigger className="w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(['debug', 'info', 'warn', 'error'] as const).map((lvl) => (
+                    <SelectItem key={lvl} value={lvl}>
+                      {lvl.charAt(0).toUpperCase() + lvl.slice(1)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Retention */}
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label>Retention</Label>
+                <p className="text-xs text-muted-foreground">Auto-delete logs older than</p>
+              </div>
+              <Select
+                value={String(logSettingsState.retentionDays)}
+                onValueChange={(v) => {
+                  const updated = { ...logSettingsState, retentionDays: Number(v) }
+                  setLogSettingsState(updated)
+                  setLogSettings(updated)
+                  toast.success(`Log retention set to ${v} days`)
+                }}
+              >
+                <SelectTrigger className="w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1, 3, 7, 14, 30].map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      {n} {n === 1 ? 'day' : 'days'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Separator />
+
+            {/* Export actions */}
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label>Export Logs</Label>
+                <p className="text-xs text-muted-foreground">{logCount} entries stored</p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(exportLogsAsText())
+                    toast.success('Logs copied to clipboard')
+                  }}
+                >
+                  Copy
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    downloadLogs()
+                    toast.success('Log file downloaded')
+                  }}
+                >
+                  Download
+                </Button>
+              </div>
+            </div>
+
+            {/* Clear */}
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <Label>Clear Logs</Label>
+                <p className="text-xs text-muted-foreground">Permanently delete all stored log entries</p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => {
+                  clearLogs()
+                  setLogCount(0)
+                  toast.success('Logs cleared')
+                }}
+              >
+                Clear All
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -828,11 +967,13 @@ export function AdminSettingsPage() {
               type="password"
               value={resetPassword}
               onChange={(e) => setResetPassword(e.target.value)}
+              placeholder="Min. 8 characters"
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleResetPassword()
               }}
             />
+            <p className="text-xs text-muted-foreground">Must be at least 8 characters.</p>
           </div>
           <DialogFooter>
             <Button

@@ -29,6 +29,7 @@ import { SettingsDialog } from './SettingsDialog.tsx'
 import { HelpScreen } from './HelpScreen.tsx'
 import { UserManagementScreen } from './UserManagementScreen.tsx'
 import { downloadBackup, restoreBackup } from '@/engine/backup-service.ts'
+import { error } from '@/engine/log-service.ts'
 import { TourDialog } from './TourDialog.tsx'
 import { DebugPanel } from './DebugPanel.tsx'
 
@@ -154,7 +155,7 @@ export function AppShell() {
       toast.success('Backup downloaded')
     } catch (e) {
       toast.error('Backup failed')
-      console.error(e)
+      error('AppShell', 'Backup failed', e)
     }
   }
 

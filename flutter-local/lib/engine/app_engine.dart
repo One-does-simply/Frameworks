@@ -8,6 +8,7 @@ import '../parser/spec_validator.dart';
 import 'action_handler.dart';
 import 'auth_service.dart';
 import 'data_store.dart';
+import 'log_service.dart';
 
 /// Holds a filtered dataset and a cursor position for record-source forms.
 ///
@@ -277,7 +278,7 @@ class AppEngine extends ChangeNotifier {
     // Role-based navigation guard.
     final targetPage = _app!.pages[pageId]!;
     if (isMultiUser && !_authService.hasAccess(targetPage.roles)) {
-      debugPrint('ODS: Navigation blocked — user lacks role for page "$pageId"');
+      logWarn('AppEngine', 'Navigation blocked — user lacks role for page "$pageId"');
       return;
     }
 
@@ -396,7 +397,7 @@ class AppEngine extends ChangeNotifier {
       );
 
       if (result.error != null) {
-        debugPrint('ODS Action Error: ${result.error}');
+        logError('AppEngine', 'Action error', result.error);
         _lastActionError = result.error;
         notifyListeners();
         return; // Stop executing further actions in the chain.
@@ -525,7 +526,7 @@ class AppEngine extends ChangeNotifier {
     // Find the form component to get its recordSource.
     final form = _findFormComponent(formId);
     if (form == null || form.recordSource == null) {
-      debugPrint('ODS: firstRecord — form "$formId" has no recordSource');
+      logWarn('AppEngine', 'firstRecord — form "$formId" has no recordSource');
       return null;
     }
 
@@ -544,7 +545,7 @@ class AppEngine extends ChangeNotifier {
         rows = await _dataStore.query(ds.tableName);
       }
     } catch (e) {
-      debugPrint('ODS: firstRecord query failed: $e');
+      logError('AppEngine', 'firstRecord query failed', e);
       return action.onEnd;
     }
 
@@ -674,7 +675,7 @@ class AppEngine extends ChangeNotifier {
       await _dataStore.update(ds.tableName, values, matchField, matchValue);
       notifyListeners(); // Trigger list rebuild to reflect the change.
     } catch (e) {
-      debugPrint('ODS Row Action Error: $e');
+      logError('AppEngine', 'Row action error', e);
     }
   }
 
@@ -691,7 +692,7 @@ class AppEngine extends ChangeNotifier {
       await _dataStore.delete(ds.tableName, matchField, matchValue);
       notifyListeners(); // Trigger list rebuild to reflect the deletion.
     } catch (e) {
-      debugPrint('ODS Delete Row Action Error: $e');
+      logError('AppEngine', 'Delete row action error', e);
     }
   }
 
@@ -733,7 +734,7 @@ class AppEngine extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      debugPrint('ODS Cascade Rename Error: $e');
+      logError('AppEngine', 'Cascade rename error', e);
     }
   }
 
@@ -771,7 +772,7 @@ class AppEngine extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      debugPrint('ODS AutoComplete Error: $e');
+      logError('AppEngine', 'AutoComplete error', e);
     }
   }
 
@@ -835,7 +836,7 @@ class AppEngine extends ChangeNotifier {
       _lastMessage = 'Copied "$originalName" → "$copyName" with ${matchingChildren.length} items';
       notifyListeners();
     } catch (e) {
-      debugPrint('ODS CopyRows Error: $e');
+      logError('AppEngine', 'CopyRows error', e);
     }
   }
 

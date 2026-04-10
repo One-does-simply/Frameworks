@@ -4,6 +4,24 @@ import { BrowserRouter } from 'react-router'
 import './index.css'
 import App from './App.tsx'
 import { applyTheme, listenForSystemThemeChanges } from './engine/theme-store.ts'
+import { initLogService, error as logError } from './engine/log-service.ts'
+
+// Initialize logging before anything else
+initLogService()
+
+// Capture unhandled errors globally
+window.addEventListener('error', (e) => {
+  logError('Window', `Unhandled error: ${e.message}`, {
+    filename: e.filename,
+    lineno: e.lineno,
+    colno: e.colno,
+    error: e.error,
+  })
+})
+
+window.addEventListener('unhandledrejection', (e) => {
+  logError('Window', 'Unhandled promise rejection', e.reason)
+})
 
 // Apply persisted theme before first paint
 applyTheme()

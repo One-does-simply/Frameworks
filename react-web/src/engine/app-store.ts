@@ -11,6 +11,7 @@ import type { AuthService } from './auth-service.ts'
 import type { DataService } from './data-service.ts'
 import { runAutoBackup } from './backup-service.ts'
 import { applyBranding, resetBranding } from './branding-service.ts'
+import { warn, error } from './log-service.ts'
 
 // ---------------------------------------------------------------------------
 // Record cursor — step-through navigation for forms with recordSource
@@ -230,7 +231,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
         isMultiUser: app.auth.multiUser,
         isMultiUserOnly: app.auth.multiUserOnly ?? false,
         needsAdminSetup: app.auth.multiUser && !pbSuperAdminAvailable && !authService.isAdminSetUp,
-        needsLogin: app.auth.multiUser && !authService.isLoggedIn,
+        needsLogin: app.auth.multiUser && !pbSuperAdminAvailable && !authService.isLoggedIn,
       })
 
       // Apply branding — merge spec defaults with any saved user overrides
@@ -266,7 +267,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const targetPage = app.pages[pageId]
     const isMultiUser = app.auth.multiUser
     if (isMultiUser && authService && !authService.hasAccess(targetPage.roles)) {
-      console.warn(`ODS: Navigation blocked — user lacks role for page "${pageId}"`)
+      warn('AppStore', `Navigation blocked — user lacks role for page "${pageId}"`)
       return
     }
 
@@ -415,13 +416,13 @@ export const useAppStore = create<AppState>()((set, get) => ({
           ownerId,
         })
       } catch (e) {
-        console.error('ODS Action Exception:', e)
+        error('ActionHandler', 'Action exception', e)
         set({ lastActionError: `Action failed: ${e instanceof Error ? e.message : String(e)}` })
         return
       }
 
       if (result.error) {
-        console.warn('ODS Action Error:', result.error)
+        warn('ActionHandler', 'Action error', result.error)
         set({ lastActionError: result.error })
         return // Stop executing further actions in the chain.
       }
@@ -485,7 +486,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       await dataService.delete(tableName(ds), matchField, matchValue)
       set({ recordGeneration: get().recordGeneration + 1, lastMessage: `Deleted record` })
     } catch (e) {
-      console.warn('ODS Delete Row Action Error:', e)
+      warn('AppStore', 'Delete row action error', e)
       set({ lastActionError: `Delete failed: ${e}` })
     }
   },
@@ -560,7 +561,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
         lastMessage: `Copied "${originalName}" → "${copyName}" with ${matchingChildren.length} items`,
       })
     } catch (e) {
-      console.warn('ODS CopyRows Error:', e)
+      warn('AppStore', 'CopyRows error', e)
       set({ lastActionError: `Copy failed: ${e}` })
     }
   },
@@ -622,7 +623,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
       set({ recordGeneration: get().recordGeneration + 1 })
     } catch (e) {
-      console.warn('ODS Toggle Error:', e)
+      warn('AppStore', 'Toggle error', e)
       set({ lastActionError: `Toggle failed: ${e}` })
     }
   },
@@ -693,7 +694,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
       set({ recordGeneration: get().recordGeneration + 1 })
     } catch (e) {
-      console.warn('ODS Cascade Rename Error:', e)
+      warn('AppStore', 'Cascade rename error', e)
       set({ lastActionError: `Cascade rename failed: ${e}` })
     }
   },
@@ -756,7 +757,7 @@ async function handleFirstRecord(
   // Find the form component to get its recordSource.
   const form = findFormComponent(formId, app)
   if (!form || !form.recordSource) {
-    console.warn(`ODS: firstRecord — form "${formId}" has no recordSource`)
+    warn('AppStore', `firstRecord — form "${formId}" has no recordSource`)
     return undefined
   }
 
@@ -774,7 +775,7 @@ async function handleFirstRecord(
       rows = await dataService.query(tableName(ds))
     }
   } catch (e) {
-    console.warn('ODS: firstRecord query failed:', e)
+    warn('AppStore', 'firstRecord query failed', e)
     return action.onEnd
   }
 
@@ -942,6 +943,6 @@ async function handleCascade(
       }
     }
   } catch (e) {
-    console.warn('ODS: Cascade rename failed:', e)
+    warn('AppStore', 'Cascade rename failed', e)
   }
 }

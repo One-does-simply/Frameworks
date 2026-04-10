@@ -51,15 +51,12 @@ export function WelcomeScreen() {
     setLocalError(null)
     const dataService = new DataService(pb)
 
-    // Try to restore saved PocketBase admin auth first
-    if (!dataService.isAdminAuthenticated) {
-      const restored = await dataService.tryRestoreAdminAuth()
-      if (!restored) {
-        // Need admin credentials — show the setup dialog
-        setPendingJson(jsonString)
-        setShowPbSetup(true)
-        return
-      }
+    // Check if we have admin auth from the current session
+    if (!dataService.isAdminAuthenticated && !pb.authStore.isValid) {
+      // Need admin credentials — show the setup dialog
+      setPendingJson(jsonString)
+      setShowPbSetup(true)
+      return
     }
 
     await doLoadSpec(jsonString, dataService)
