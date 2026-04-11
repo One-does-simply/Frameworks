@@ -173,9 +173,29 @@ async function handleUpdate(
   formStates: Record<string, Record<string, string>>,
   dataService: DataServiceLike,
 ): Promise<ActionResult> {
-  const formId = action.target
   const dataSourceId = action.dataSource
   const matchField = action.matchField
+
+  // Direct update via withData (e.g., kanban drag-drop) — no form needed.
+  if (action.withData && dataSourceId && matchField && action.target) {
+    const ds = app.dataSources[dataSourceId]
+    if (!ds) return { submitted: false, error: 'Unknown dataSource' }
+    if (!isLocal(ds)) return { submitted: false, error: 'External dataSources not supported in local mode' }
+
+    const rowsAffected = await dataService.update(
+      tableName(ds),
+      action.withData as Record<string, unknown>,
+      matchField,
+      action.target,
+    )
+    if (rowsAffected === 0) {
+      console.warn('ActionHandler: No matching record found for', matchField, '=', action.target)
+      return { submitted: false, error: 'Record not found' }
+    }
+    return { submitted: true }
+  }
+
+  const formId = action.target
 
   if (!formId || !dataSourceId || !matchField) {
     return { submitted: false, error: 'Update action missing target, dataSource, or matchField' }

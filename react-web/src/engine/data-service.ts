@@ -214,10 +214,12 @@ export class DataService {
     matchValue: string,
   ): Promise<number> {
     validateFieldName(matchField)
+    const pbField = this.denormalizeField(matchField)
     const name = this.collectionName(table)
     try {
       const records = await this.pb.collection(name).getFullList({
-        filter: `${matchField} = "${this.escapeFilter(matchValue)}"`,
+        filter: `${pbField} = "${this.escapeFilter(matchValue)}"`,
+        requestKey: null,
       })
       if (records.length === 0) return 0
 
@@ -243,10 +245,12 @@ export class DataService {
     matchValue: string,
   ): Promise<number> {
     validateFieldName(matchField)
+    const pbField = this.denormalizeField(matchField)
     const name = this.collectionName(table)
     try {
       const records = await this.pb.collection(name).getFullList({
-        filter: `${matchField} = "${this.escapeFilter(matchValue)}"`,
+        filter: `${pbField} = "${this.escapeFilter(matchValue)}"`,
+        requestKey: null,
       })
       for (const record of records) {
         await this.pb.collection(name).delete(record.id)
@@ -348,6 +352,7 @@ export class DataService {
     try {
       const records = await this.pb.collection(name).getFullList({
         filter: `key = "${this.escapeFilter(key)}"`,
+        requestKey: null,
       })
       return records.length > 0 ? (records[0]['value'] as string) : undefined
     } catch {
@@ -360,6 +365,7 @@ export class DataService {
     try {
       const existing = await this.pb.collection(name).getFullList({
         filter: `key = "${this.escapeFilter(key)}"`,
+        requestKey: null,
       })
       if (existing.length > 0) {
         await this.pb.collection(name).update(existing[0].id, { value })
@@ -388,6 +394,13 @@ export class DataService {
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+
+  /** Reverse-map ODS field names back to PocketBase names for queries. */
+  private denormalizeField(field: string): string {
+    if (field === '_id') return 'id'
+    if (field === '_createdAt') return 'created'
+    return field
+  }
 
   /** Normalize a PocketBase record to ODS format (id → _id, created → _createdAt). */
   private normalizeRecord(record: Record<string, unknown>): Record<string, unknown> {

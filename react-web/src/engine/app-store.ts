@@ -431,6 +431,11 @@ export const useAppStore = create<AppState>()((set, get) => ({
         set({ lastMessage: result.message })
       }
 
+      // Bump record generation so data-bound components re-fetch.
+      if (result.submitted) {
+        set({ recordGeneration: get().recordGeneration + 1 })
+      }
+
       // Clear the form after a successful submit so fields reset.
       if (result.submitted && action.target) {
         get().clearForm(action.target, action.preserveFields)

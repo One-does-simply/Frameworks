@@ -332,9 +332,10 @@ export function KanbanComponent({ model }: KanbanComponentProps) {
     [model.dataSource, model.statusField],
   )
 
-  // PUT dataSource for drag-and-drop updates.
+  // PUT dataSource for drag-and-drop updates. Falls back to GET dataSource
+  // (the data-service can update via any collection reference).
   const putDataSourceId = useMemo(
-    () => findPutDataSource(model.dataSource),
+    () => findPutDataSource(model.dataSource) ?? model.dataSource,
     [model.dataSource],
   )
 
@@ -1044,7 +1045,6 @@ function KanbanCard({
       onDragEnd={onDragEnd}
       onClick={() => onClick(row)}
       className="cursor-grab rounded-lg border bg-card p-3 shadow-sm transition-shadow hover:shadow-md active:cursor-grabbing"
-      style={{ transform: rotation }}
     >
       {/* Title */}
       <p className="text-sm font-semibold leading-snug text-card-foreground">
