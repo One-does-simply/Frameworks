@@ -130,6 +130,31 @@ class ActionHandler {
     OdsApp app,
     Map<String, Map<String, String>> formStates,
   ) async {
+    // Direct update via withData (e.g., kanban drag-drop) — no form needed.
+    if (action.withData != null &&
+        action.dataSource != null &&
+        action.matchField != null &&
+        action.target != null) {
+      final ds = app.dataSources[action.dataSource];
+      if (ds == null) {
+        return const ActionResult(error: 'Unknown dataSource');
+      }
+      if (!ds.isLocal) {
+        return const ActionResult(error: 'External dataSources not supported in local mode');
+      }
+      final rowsAffected = await dataStore.update(
+        ds.tableName,
+        Map<String, dynamic>.from(action.withData!),
+        action.matchField!,
+        action.target!,
+      );
+      if (rowsAffected == 0) {
+        logDebug('ActionHandler', 'withData update found no match: ${action.matchField} = "${action.target}"');
+        return const ActionResult(error: 'Record not found');
+      }
+      return const ActionResult(submitted: true);
+    }
+
     final formId = action.target;
     final dataSourceId = action.dataSource;
     final matchField = action.matchField;

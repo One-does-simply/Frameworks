@@ -419,6 +419,65 @@ export class DataService {
     return normalized
   }
 
+  // ---------------------------------------------------------------------------
+  // Bulk export / import — used for data backup & restore across frameworks
+  // ---------------------------------------------------------------------------
+
+  /** Export all data from all known collections for this app. */
+  async exportAllData(dataSources: Record<string, OdsDataSource>): Promise<Record<string, Record<string, unknown>[]>> {
+    const result: Record<string, Record<string, unknown>[]> = {}
+    for (const [, ds] of Object.entries(dataSources)) {
+      if (isLocal(ds)) {
+        const name = tableName(ds)
+        try {
+          result[name] = await this.query(name)
+        } catch {
+          result[name] = []
+        }
+      }
+    }
+    return result
+  }
+
+  /** Import data into collections, clearing existing data first. */
+  async importAllData(
+    data: Record<string, Record<string, unknown>[]>,
+    dataSources: Record<string, OdsDataSource>,
+  ): Promise<{ tables: number; rows: number }> {
+    let totalRows = 0
+    let totalTables = 0
+
+    for (const [name, rows] of Object.entries(data)) {
+      // Find matching dataSource to get field definitions for ensureCollection
+      const matchingDs = Object.values(dataSources).find(
+        ds => isLocal(ds) && tableName(ds) === name
+      )
+      if (!matchingDs) continue
+
+      // Delete existing rows
+      const existing = await this.query(name)
+      for (const row of existing) {
+        const id = String(row['_id'] ?? '')
+        if (id) await this.delete(name, '_id', id)
+      }
+
+      // Insert new rows (strip framework fields)
+      for (const row of rows) {
+        const insertRow = { ...row }
+        delete insertRow['_id']
+        delete insertRow['_createdAt']
+        delete insertRow['collectionId']
+        delete insertRow['collectionName']
+        await this.insert(name, insertRow)
+      }
+
+      totalTables++
+      totalRows += rows.length
+    }
+
+    return { tables: totalTables, rows: totalRows }
+  }
+
   /** Escape a value for use in PocketBase filter strings. */
   private escapeFilter(value: string): string {
     return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')

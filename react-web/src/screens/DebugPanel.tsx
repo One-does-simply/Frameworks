@@ -42,9 +42,12 @@ import {
 
 export function DebugPanel() {
   const [collapsed, setCollapsed] = useState(false)
+  const authService = useAppStore((s) => s.authService)
 
-  // Never render the debug panel in production builds.
-  if (!import.meta.env.DEV) return null
+  // In production, only show for admin users.
+  if (!import.meta.env.DEV) {
+    if (!authService?.isSuperAdmin && !authService?.isAdmin) return null
+  }
 
   return (
     <div className="border-t bg-zinc-950 text-zinc-200">

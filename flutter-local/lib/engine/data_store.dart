@@ -36,6 +36,34 @@ String _generateId() {
   );
 }
 
+final _validFieldName = RegExp(r'^[a-zA-Z_][a-zA-Z0-9_]*$');
+const _reservedNames = {'__proto__', 'constructor', 'prototype'};
+const _frameworkFields = {'_id', '_createdAt'};
+const _maxImportRows = 100000;
+
+bool _isValidTableName(String name) {
+  return RegExp(r'^[a-zA-Z_][a-zA-Z0-9_]*$').hasMatch(name) &&
+      !_reservedNames.contains(name);
+}
+
+Map<String, dynamic> _sanitizeRow(Map<String, dynamic> row) {
+  return Map.fromEntries(
+    row.entries.where((e) =>
+        _frameworkFields.contains(e.key) ||
+        (_validFieldName.hasMatch(e.key) && !_reservedNames.contains(e.key))),
+  );
+}
+
+void _validateFieldName(String name) {
+  if (_frameworkFields.contains(name)) return;
+  if (!_validFieldName.hasMatch(name)) {
+    throw ArgumentError('Invalid field name: "$name"');
+  }
+  if (_reservedNames.contains(name)) {
+    throw ArgumentError('Reserved field name: "$name"');
+  }
+}
+
 class DataStore {
   Database? _db;
 
@@ -75,6 +103,11 @@ class DataStore {
   /// submit (when the form's fields define the schema implicitly).
   Future<void> ensureTable(String tableName, List<OdsFieldDefinition> fields) async {
     final db = _db!;
+
+    // Validate all field names before touching the database.
+    for (final f in fields) {
+      _validateFieldName(f.name);
+    }
 
     // Fast path: if we already know the table exists, just check for new columns.
     if (_knownTables.contains(tableName)) {
@@ -175,6 +208,7 @@ class DataStore {
     String matchField,
     String matchValue,
   ) async {
+    _validateFieldName(matchField);
     final db = _db!;
     final row = Map<String, dynamic>.from(data);
     // Remove the match field from the update data — it's the WHERE clause,
@@ -199,6 +233,7 @@ class DataStore {
     String matchField,
     String matchValue,
   ) async {
+    _validateFieldName(matchField);
     final db = _db!;
     final count = await db.delete(
       tableName,
@@ -241,6 +276,7 @@ class DataStore {
     final whereClauses = <String>[];
     final whereArgs = <String>[];
     for (final entry in filter.entries) {
+      _validateFieldName(entry.key);
       whereClauses.add('"${entry.key}" = ?');
       whereArgs.add(entry.value);
     }
@@ -271,6 +307,7 @@ class DataStore {
     List<String>? whereArgs;
 
     if (ownerField != null && ownerId != null && !(isAdmin && adminOverride)) {
+      _validateFieldName(ownerField);
       where = '"$ownerField" = ?';
       whereArgs = [ownerId];
     }
@@ -389,9 +426,26 @@ class DataStore {
   Future<void> importAllData(Map<String, List<Map<String, dynamic>>> tables) async {
     final db = _db!;
 
+    // Validate total row count before importing anything.
+    int totalRows = 0;
+    for (final entry in tables.entries) {
+      if (entry.key.startsWith('_ods_')) continue;
+      totalRows += entry.value.length;
+    }
+    if (totalRows > _maxImportRows) {
+      throw ArgumentError(
+          'Import exceeds maximum of $_maxImportRows rows (got $totalRows)');
+    }
+
     for (final entry in tables.entries) {
       final tableName = entry.key;
       if (tableName.startsWith('_ods_')) continue;
+
+      // Validate table name.
+      if (!_isValidTableName(tableName)) {
+        logWarn('DataStore', 'Skipping invalid table name: "$tableName"');
+        continue;
+      }
 
       // Clear existing data.
       try {
@@ -402,8 +456,8 @@ class DataStore {
 
       // Insert rows, recreating the table schema from column names if needed.
       for (final row in entry.value) {
-        // Strip _id so new IDs are generated on insert.
-        final cleanRow = Map<String, dynamic>.from(row)..remove('_id');
+        // Sanitize field names and strip _id so new IDs are generated.
+        final cleanRow = _sanitizeRow(row)..remove('_id');
 
         // Ensure table exists with all columns from this row.
         if (!_knownTables.contains(tableName)) {
@@ -429,9 +483,21 @@ class DataStore {
       String tableName, List<Map<String, dynamic>> rows) async {
     if (rows.isEmpty) return 0;
 
-    // Ensure table exists with columns from the first row.
+    // Validate table name.
+    if (!_isValidTableName(tableName)) {
+      throw ArgumentError('Invalid table name: "$tableName"');
+    }
+
+    // Enforce row count limit.
+    if (rows.length > _maxImportRows) {
+      throw ArgumentError(
+          'Import exceeds maximum of $_maxImportRows rows (got ${rows.length})');
+    }
+
+    // Ensure table exists with columns from the first sanitized row.
+    final firstSanitized = _sanitizeRow(rows.first);
     if (!_knownTables.contains(tableName)) {
-      final cols = rows.first.keys
+      final cols = firstSanitized.keys
           .where((k) => k != '_id' && k != '_createdAt')
           .map((k) => OdsFieldDefinition(name: k, type: 'text'))
           .toList();
@@ -440,7 +506,7 @@ class DataStore {
 
     int count = 0;
     for (final row in rows) {
-      final cleanRow = Map<String, dynamic>.from(row)
+      final cleanRow = _sanitizeRow(row)
         ..remove('_id')
         ..putIfAbsent('_createdAt', () => DateTime.now().toIso8601String());
       cleanRow['_id'] = _generateId();
