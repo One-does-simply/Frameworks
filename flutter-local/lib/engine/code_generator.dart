@@ -500,7 +500,7 @@ include: package:flutter_lints/flutter.yaml
       if (columns.isNotEmpty) {
         buf.writeln("        await db.execute('''");
         buf.writeln("          CREATE TABLE IF NOT EXISTS ${ds.tableName} (");
-        buf.writeln("            _id INTEGER PRIMARY KEY AUTOINCREMENT,");
+        buf.writeln("            _id TEXT PRIMARY KEY,");
         for (var i = 0; i < columns.length; i++) {
           final comma = i < columns.length - 1 ? ',' : '';
           buf.writeln("            ${columns[i]} TEXT$comma");

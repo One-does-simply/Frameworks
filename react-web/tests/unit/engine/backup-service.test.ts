@@ -84,7 +84,7 @@ describe('restoreBackup', () => {
   const minimalApp = {
     appName: 'Test',
     startPage: 'home',
-    startPageMap: { default: 'home' },
+    startPageByRole: {},
     menu: [],
     pages: {},
     dataSources: {},

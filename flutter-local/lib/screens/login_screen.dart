@@ -23,7 +23,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   String? _error;
@@ -31,17 +31,17 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   Future<void> _handleLogin() async {
-    final username = _usernameController.text.trim();
+    final email = _emailController.text.trim();
     final password = _passwordController.text;
 
-    if (username.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Please enter both username and password');
+    if (email.isEmpty || password.isEmpty) {
+      setState(() => _error = 'Please enter both email and password');
       return;
     }
 
@@ -50,7 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
 
-    final result = await widget.authService.login(username, password);
+    final result = await widget.authService.login(email, password);
 
     if (!mounted) return;
 
@@ -59,7 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } else {
       setState(() {
         _isLoading = false;
-        _error = result.error ?? 'Invalid username or password';
+        _error = result.error ?? 'Invalid email or password';
       });
     }
   }
@@ -106,11 +106,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 32),
                   TextField(
-                    controller: _usernameController,
+                    controller: _emailController,
                     decoration: const InputDecoration(
-                      labelText: 'Username',
-                      prefixIcon: Icon(Icons.person_outline),
+                      labelText: 'Email',
+                      prefixIcon: Icon(Icons.email_outlined),
                     ),
+                    keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
                     autofocus: true,
                   ),

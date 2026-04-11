@@ -1,4 +1,4 @@
-import { warn } from './log-service.ts'
+import { logWarn } from './log-service.ts'
 import type { OdsAction, OdsComputedField } from '../models/ods-action.ts'
 import type { OdsApp } from '../models/ods-app.ts'
 import type { OdsFieldDefinition, OdsValidation } from '../models/ods-field.ts'
@@ -91,7 +91,7 @@ export async function executeAction(params: {
 
     default:
       // Graceful degradation: unknown action types are logged, not crashed.
-      warn('ActionHandler', `Unknown action type "${action.action}"`)
+      logWarn('ActionHandler', `Unknown action type "${action.action}"`)
       return { submitted: false }
   }
 }

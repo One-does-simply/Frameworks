@@ -4,7 +4,7 @@ import { BrowserRouter } from 'react-router'
 import './index.css'
 import App from './App.tsx'
 import { applyTheme, listenForSystemThemeChanges } from './engine/theme-store.ts'
-import { initLogService, error as logError } from './engine/log-service.ts'
+import { initLogService, logError } from './engine/log-service.ts'
 
 // Initialize logging before anything else
 initLogService()

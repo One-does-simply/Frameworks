@@ -18,24 +18,24 @@ class FrameworkLoginScreen extends StatefulWidget {
 }
 
 class _FrameworkLoginScreenState extends State<FrameworkLoginScreen> {
-  final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   String? _error;
   bool _loading = false;
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   Future<void> _handleLogin() async {
-    final username = _usernameController.text.trim();
+    final email = _emailController.text.trim();
     final password = _passwordController.text;
 
-    if (username.isEmpty) {
-      setState(() => _error = 'Username is required');
+    if (email.isEmpty) {
+      setState(() => _error = 'Email is required');
       return;
     }
     if (password.isEmpty) {
@@ -44,14 +44,14 @@ class _FrameworkLoginScreenState extends State<FrameworkLoginScreen> {
     }
 
     setState(() { _error = null; _loading = true; });
-    final result = await widget.authService.login(username, password);
+    final result = await widget.authService.login(email, password);
     if (!mounted) return;
 
     if (result.success) {
       widget.onLoginSuccess();
     } else {
       setState(() {
-        _error = result.error ?? 'Invalid username or password';
+        _error = result.error ?? 'Invalid email or password';
         _loading = false;
       });
     }
@@ -119,8 +119,9 @@ class _FrameworkLoginScreenState extends State<FrameworkLoginScreen> {
                         ],
 
                         TextField(
-                          controller: _usernameController,
-                          decoration: const InputDecoration(labelText: 'Username'),
+                          controller: _emailController,
+                          decoration: const InputDecoration(labelText: 'Email'),
+                          keyboardType: TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
                           autofocus: true,
                           enabled: !_loading,

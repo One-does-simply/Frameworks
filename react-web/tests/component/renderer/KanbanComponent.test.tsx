@@ -21,7 +21,7 @@ function kanbanModel(overrides?: Partial<OdsKanbanComponent>): OdsKanbanComponen
 const minimalApp = {
   appName: 'Test',
   startPage: 'home',
-  startPageMap: { default: 'home' },
+  startPageByRole: {},
   menu: [],
   pages: {
     home: { title: 'Home', content: [] },

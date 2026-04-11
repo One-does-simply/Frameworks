@@ -18,7 +18,7 @@ class AuthService extends ChangeNotifier {
   final DataStore _dataStore;
 
   // Session state
-  int? _currentUserId;
+  String? _currentUserId;
   String? _currentUsername;
   String? _currentDisplayName;
   List<String> _currentRoles = [];
@@ -43,7 +43,7 @@ class AuthService extends ChangeNotifier {
     required String displayName,
     required List<String> roles,
   }) {
-    _currentUserId = -1; // Sentinel: signals "logged in" without a real per-app user
+    _currentUserId = 'framework'; // Sentinel: signals "logged in" without a real per-app user
     _currentUsername = username.isNotEmpty ? username : 'user';
     _currentDisplayName = displayName.isNotEmpty ? displayName : username.isNotEmpty ? username : 'User';
     _currentRoles = roles.isNotEmpty ? roles : const ['user'];
@@ -61,7 +61,7 @@ class AuthService extends ChangeNotifier {
   bool get isAdmin => _currentRoles.contains('admin');
   bool get isAdminSetUp => _isAdminSetUp;
 
-  int? get currentUserId => _currentUserId;
+  String? get currentUserId => _currentUserId;
   String get currentUsername => _currentUsername ?? 'guest';
   String get currentDisplayName => _currentDisplayName ?? 'Guest';
 
@@ -102,10 +102,10 @@ class AuthService extends ChangeNotifier {
   // Authentication operations
   // ---------------------------------------------------------------------------
 
-  /// Checks whether the given username is currently rate-limited.
+  /// Checks whether the given email is currently rate-limited.
   /// Returns the number of minutes remaining if locked out, or 0 if not.
-  int _checkRateLimit(String username) {
-    final key = username.toLowerCase();
+  int _checkRateLimit(String email) {
+    final key = email.toLowerCase();
     final attempts = _failedAttempts[key];
     if (attempts == null) return 0;
 
@@ -123,33 +123,33 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Records a failed login attempt for rate limiting.
-  void _recordFailedAttempt(String username) {
-    final key = username.toLowerCase();
+  void _recordFailedAttempt(String email) {
+    final key = email.toLowerCase();
     _failedAttempts.putIfAbsent(key, () => []).add(DateTime.now());
   }
 
   /// Clears failed login attempts after a successful login.
-  void _clearFailedAttempts(String username) {
-    _failedAttempts.remove(username.toLowerCase());
+  void _clearFailedAttempts(String email) {
+    _failedAttempts.remove(email.toLowerCase());
   }
 
   /// Attempts to log in with the given credentials.
   /// Returns a [LoginResult] indicating success or the reason for failure.
-  Future<LoginResult> login(String username, String password) async {
+  Future<LoginResult> login(String email, String password) async {
     // Rate limit check.
-    final lockoutMinutes = _checkRateLimit(username);
+    final lockoutMinutes = _checkRateLimit(email);
     if (lockoutMinutes > 0) {
-      logWarn('AuthService', '[SECURITY] login_rate_limited: $username');
+      logWarn('AuthService', '[SECURITY] login_rate_limited: $email');
       return LoginResult(
         success: false,
         error: 'Too many failed attempts. Try again in $lockoutMinutes minute${lockoutMinutes == 1 ? '' : 's'}.',
       );
     }
 
-    final user = await _dataStore.getUserByUsername(username);
+    final user = await _dataStore.getUserByEmail(email);
     if (user == null) {
-      _recordFailedAttempt(username);
-      logInfo('AuthService', '[SECURITY] login_failed: $username (user not found)');
+      _recordFailedAttempt(email);
+      logInfo('AuthService', '[SECURITY] login_failed: $email (user not found)');
       return const LoginResult(success: false);
     }
 
@@ -157,18 +157,18 @@ class AuthService extends ChangeNotifier {
     final salt = user['salt'] as String;
 
     if (!PasswordHasher.verify(password, salt, storedHash)) {
-      _recordFailedAttempt(username);
-      logInfo('AuthService', '[SECURITY] login_failed: $username (bad password)');
+      _recordFailedAttempt(email);
+      logInfo('AuthService', '[SECURITY] login_failed: $email (bad password)');
       return const LoginResult(success: false);
     }
 
-    _clearFailedAttempts(username);
-    _currentUserId = user['_id'] as int;
-    _currentUsername = user['username'] as String;
+    _clearFailedAttempts(email);
+    _currentUserId = user['_id'] as String;
+    _currentUsername = user['username'] as String? ?? email;
     _currentDisplayName = user['display_name'] as String?;
     _currentRoles = await _dataStore.getUserRoles(_currentUserId!);
     _lastActivity = DateTime.now();
-    logInfo('AuthService', '[SECURITY] login_success: $username');
+    logInfo('AuthService', '[SECURITY] login_success: $email');
     notifyListeners();
     return const LoginResult(success: true);
   }
@@ -201,16 +201,16 @@ class AuthService extends ChangeNotifier {
 
   /// Creates the initial admin account. Called from the admin setup wizard.
   /// Returns true on success.
-  Future<bool> setupAdmin(String username, String password) async {
+  Future<bool> setupAdmin(String email, String password) async {
     try {
       final salt = PasswordHasher.generateSalt();
       final hash = PasswordHasher.hash(password, salt);
 
       final userId = await _dataStore.createUser(
-        username: username,
+        email: email,
         passwordHash: hash,
         salt: salt,
-        displayName: username,
+        displayName: email,
       );
 
       await _dataStore.assignRole(userId, 'admin');
@@ -220,11 +220,11 @@ class AuthService extends ChangeNotifier {
 
       // Auto-login as the new admin.
       _currentUserId = userId;
-      _currentUsername = username;
-      _currentDisplayName = username;
+      _currentUsername = email;
+      _currentDisplayName = email;
       _currentRoles = ['admin', 'user'];
       _lastActivity = DateTime.now();
-      logInfo('AuthService', '[SECURITY] admin_setup: $username (id=$userId)');
+      logInfo('AuthService', '[SECURITY] admin_setup: $email (id=$userId)');
       notifyListeners();
       return true;
     } catch (e) {
@@ -235,10 +235,11 @@ class AuthService extends ChangeNotifier {
 
   /// Registers a new user with the given role.
   /// Returns the user ID on success, null on failure.
-  Future<int?> registerUser({
-    required String username,
+  Future<String?> registerUser({
+    required String email,
     required String password,
     required String role,
+    String? username,
     String? displayName,
   }) async {
     try {
@@ -246,10 +247,11 @@ class AuthService extends ChangeNotifier {
       final hash = PasswordHasher.hash(password, salt);
 
       final userId = await _dataStore.createUser(
-        username: username,
+        email: email,
         passwordHash: hash,
         salt: salt,
-        displayName: displayName ?? username,
+        username: username,
+        displayName: displayName ?? username ?? email,
       );
 
       await _dataStore.assignRole(userId, role);
@@ -258,17 +260,17 @@ class AuthService extends ChangeNotifier {
         await _dataStore.assignRole(userId, 'user');
       }
 
-      logInfo('AuthService', '[SECURITY] user_created: $username role=$role (id=$userId)');
+      logInfo('AuthService', '[SECURITY] user_created: $email role=$role (id=$userId)');
       notifyListeners();
       return userId;
     } catch (e) {
-      logError('AuthService', '[SECURITY] user_creation_failed: $username', e);
+      logError('AuthService', '[SECURITY] user_creation_failed: $email', e);
       return null;
     }
   }
 
   /// Changes the password for a user.
-  Future<bool> changePassword(int userId, String newPassword) async {
+  Future<bool> changePassword(String userId, String newPassword) async {
     try {
       final salt = PasswordHasher.generateSalt();
       final hash = PasswordHasher.hash(newPassword, salt);
@@ -286,13 +288,13 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Deletes a user by ID.
-  Future<void> deleteUser(int userId) async {
+  Future<void> deleteUser(String userId) async {
     await _dataStore.deleteUser(userId);
     notifyListeners();
   }
 
   /// Assigns a role to a user.
-  Future<void> assignRole(int userId, String role) async {
+  Future<void> assignRole(String userId, String role) async {
     await _dataStore.assignRole(userId, role);
     logInfo('AuthService', '[SECURITY] role_assigned: user=$userId role=$role');
     // Refresh current user's roles if they were affected.
@@ -303,7 +305,7 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Removes a role from a user.
-  Future<void> removeRole(int userId, String role) async {
+  Future<void> removeRole(String userId, String role) async {
     await _dataStore.removeRole(userId, role);
     logInfo('AuthService', '[SECURITY] role_removed: user=$userId role=$role');
     if (userId == _currentUserId) {

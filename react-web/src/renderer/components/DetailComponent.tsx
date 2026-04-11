@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { warn } from '@/engine/log-service.ts'
+import { logWarn } from '@/engine/log-service.ts'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAppStore } from '@/engine/app-store.ts'
@@ -69,7 +69,7 @@ export function DetailComponent({ model }: { model: OdsDetailComponent }) {
           setData(stringified)
         }
       } catch (err) {
-        warn('DetailComponent', 'Failed to load data', err)
+        logWarn('DetailComponent', 'Failed to load data', err)
         if (!cancelled) setData(null)
       } finally {
         if (!cancelled) setLoading(false)

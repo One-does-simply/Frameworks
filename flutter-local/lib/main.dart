@@ -2644,7 +2644,7 @@ class _AppShellState extends State<AppShell> {
         appBar: AppBar(title: Text(app.appName)),
         body: AdminSetupScreen(
           authService: engine.authService,
-          onSetupComplete: (username, password) async {
+          onSetupComplete: (email, password) async {
             // Also create a framework admin and enable framework multi-user
             // so the login gate is active on future launches.
             if (!settings.isMultiUserEnabled) {
@@ -2652,7 +2652,7 @@ class _AppShellState extends State<AppShell> {
               final fwAuth = context.read<FrameworkAuthService>();
               await fwAuth.initialize(storageFolder: settings.storageFolder);
               await fwAuth.setupAdmin(
-                username: username,
+                email: email,
                 password: password,
               );
             }

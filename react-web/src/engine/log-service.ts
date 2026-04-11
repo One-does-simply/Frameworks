@@ -166,21 +166,30 @@ function serializeData(data: unknown): unknown {
 // Convenience functions
 // ---------------------------------------------------------------------------
 
-export function debug(category: string, message: string, data?: unknown): void {
+export function logDebug(category: string, message: string, data?: unknown): void {
   log('debug', category, message, data)
 }
 
-export function info(category: string, message: string, data?: unknown): void {
+export function logInfo(category: string, message: string, data?: unknown): void {
   log('info', category, message, data)
 }
 
-export function warn(category: string, message: string, data?: unknown): void {
+export function logWarn(category: string, message: string, data?: unknown): void {
   log('warn', category, message, data)
 }
 
-export function error(category: string, message: string, data?: unknown): void {
+export function logError(category: string, message: string, data?: unknown): void {
   log('error', category, message, data)
 }
+
+/** @deprecated Use logDebug instead */
+export const debug = logDebug
+/** @deprecated Use logInfo instead */
+export const info = logInfo
+/** @deprecated Use logWarn instead */
+export const warn = logWarn
+/** @deprecated Use logError instead */
+export const error = logError
 
 // ---------------------------------------------------------------------------
 // Reading & export
@@ -268,5 +277,5 @@ export function initLogService(): void {
   if (pruned.length !== stored.length) {
     localStorage.setItem(LOGS_KEY, JSON.stringify(pruned))
   }
-  info('LogService', `Initialized — ${pruned.length} stored entries, level=${getLogSettings().level}`)
+  logInfo('LogService', `Initialized — ${pruned.length} stored entries, level=${getLogSettings().level}`)
 }

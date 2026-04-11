@@ -241,6 +241,18 @@ class PasswordHasher {
     return result;
   }
 
+  // -------------------------------------------------------------------------
+  // Password validation (shared utility, matching React version)
+  // -------------------------------------------------------------------------
+
+  /// Validate a password against requirements.
+  /// Returns null if valid, or an error message string.
+  static String? validatePassword(String password) {
+    if (password.length < 8) return 'Password must be at least 8 characters.';
+    if (password.length > 72) return 'Password must be 72 characters or fewer.';
+    return null;
+  }
+
   static int _rotr(int x, int n) => ((x >> n) | (x << (32 - n))) & 0xFFFFFFFF;
 
   static int _add32(int a, int b, [int c = 0, int d = 0, int e = 0]) {

@@ -34,22 +34,22 @@ describe('parseApp', () => {
     expect(result.startPage).toBe('page1')
   })
 
-  it('builds startPageMap from role-based startPage object', () => {
+  it('builds startPageByRole from role-based startPage object (excludes default)', () => {
     const result = parseApp({
       appName: 'RoleApp',
       startPage: { default: 'page1', admin: 'page2' },
       pages: {},
     })
-    expect(result.startPageMap).toEqual({ default: 'page1', admin: 'page2' })
+    expect(result.startPageByRole).toEqual({ admin: 'page2' })
   })
 
-  it('returns { default: value } for string startPage', () => {
+  it('returns empty map for string startPage', () => {
     const result = parseApp({
       appName: 'App',
       startPage: 'landing',
       pages: {},
     })
-    expect(result.startPageMap).toEqual({ default: 'landing' })
+    expect(result.startPageByRole).toEqual({})
   })
 
   it('returns empty map for null startPage', () => {
@@ -58,7 +58,7 @@ describe('parseApp', () => {
       startPage: null,
       pages: {},
     })
-    expect(result.startPageMap).toEqual({})
+    expect(result.startPageByRole).toEqual({})
   })
 
   it('returns empty map for undefined startPage', () => {
@@ -66,7 +66,7 @@ describe('parseApp', () => {
       appName: 'App',
       pages: {},
     })
-    expect(result.startPageMap).toEqual({})
+    expect(result.startPageByRole).toEqual({})
   })
 
   it('returns empty string for startPage when startPage is null', () => {
@@ -177,15 +177,15 @@ describe('parseApp', () => {
   })
 
   // -------------------------------------------------------------------------
-  // startPageMap filters non-string values
+  // startPageByRole filters non-string values
   // -------------------------------------------------------------------------
 
-  it('filters non-string values from role-based startPage map', () => {
+  it('filters non-string values and default from role-based startPage map', () => {
     const result = parseApp({
       appName: 'App',
       startPage: { default: 'page1', bad: 42, also_bad: null },
       pages: {},
     })
-    expect(result.startPageMap).toEqual({ default: 'page1' })
+    expect(result.startPageByRole).toEqual({})
   })
 })

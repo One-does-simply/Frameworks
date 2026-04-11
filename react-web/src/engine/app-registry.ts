@@ -1,5 +1,5 @@
 import type PocketBase from 'pocketbase'
-import { info, error } from './log-service.ts'
+import { logInfo, logError } from './log-service.ts'
 
 /**
  * Manages the `_ods_apps` PocketBase collection — the central registry
@@ -62,15 +62,15 @@ export class AppRegistry {
           updateRule: '',
           deleteRule: '',
         })
-        info('AppRegistry', 'Created _ods_apps collection')
+        logInfo('AppRegistry', 'Created _ods_apps collection')
       } catch (e) {
-        error('AppRegistry', 'Failed to create _ods_apps collection', e)
+        logError('AppRegistry', 'Failed to create _ods_apps collection', e)
         // May already exist from a previous session — try to verify
         try {
           await this.pb.collection(COLLECTION_NAME).getList(1, 1, { requestKey: null })
-          info('AppRegistry', '_ods_apps collection already exists')
+          logInfo('AppRegistry', '_ods_apps collection already exists')
         } catch (e2) {
-          error('AppRegistry', '_ods_apps collection is unusable', e2)
+          logError('AppRegistry', '_ods_apps collection is unusable', e2)
         }
       }
     }
@@ -98,7 +98,7 @@ export class AppRegistry {
         return (b.created || '').localeCompare(a.created || '')
       })
     } catch (e) {
-      error('AppRegistry', 'listApps failed', e)
+      logError('AppRegistry', 'listApps failed', e)
       return []
     }
   }
@@ -171,7 +171,7 @@ export class AppRegistry {
     } catch (e: unknown) {
       // PocketBase ClientResponseError has a `data` field with per-field errors
       const pbErr = e as { data?: Record<string, unknown>; response?: unknown }
-      error('AppRegistry', 'Failed to save app', { error: e, data: pbErr.data, response: pbErr.response })
+      logError('AppRegistry', 'Failed to save app', { error: e, data: pbErr.data, response: pbErr.response })
       throw e
     }
   }
@@ -182,7 +182,7 @@ export class AppRegistry {
       await this.pb.collection(COLLECTION_NAME).update(appId, { specJson: JSON.parse(specJson) })
       return true
     } catch (e) {
-      error('AppRegistry', 'Failed to update app', e)
+      logError('AppRegistry', 'Failed to update app', e)
       return false
     }
   }

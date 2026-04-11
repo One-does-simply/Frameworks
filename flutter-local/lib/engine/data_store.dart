@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -25,6 +26,16 @@ import 'settings_store.dart';
 ///   - Tables are created lazily (on first submit or when explicit fields
 ///     are declared) and columns are added non-destructively via ALTER TABLE.
 ///   - Each app gets its own database file, named by sanitized appName.
+/// Generates a 15-character random alphanumeric string matching PocketBase's
+/// ID format, enabling portable data between Flutter and React.
+String _generateId() {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  final rng = math.Random.secure();
+  return String.fromCharCodes(
+    List.generate(15, (_) => chars.codeUnitAt(rng.nextInt(chars.length))),
+  );
+}
+
 class DataStore {
   Database? _db;
 
@@ -88,7 +99,7 @@ class DataStore {
     // Create the table with all declared fields plus framework columns.
     final columnDefs = fields.map((f) => '"${f.name}" TEXT').join(', ');
     final sql =
-        'CREATE TABLE "$tableName" (_id INTEGER PRIMARY KEY AUTOINCREMENT, $columnDefs, _createdAt TEXT)';
+        'CREATE TABLE "$tableName" (_id TEXT PRIMARY KEY, $columnDefs, _createdAt TEXT)';
     await db.execute(sql);
     _knownTables.add(tableName);
     logInfo('DataStore', 'Created table "$tableName" with fields: ${fields.map((f) => f.name).join(', ')}');
@@ -140,12 +151,15 @@ class DataStore {
     }
   }
 
-  /// Inserts a single row, automatically adding a `_createdAt` timestamp.
-  Future<int> insert(String tableName, Map<String, dynamic> data) async {
+  /// Inserts a single row, automatically adding a `_createdAt` timestamp
+  /// and generating a PocketBase-style 15-character string ID.
+  Future<String> insert(String tableName, Map<String, dynamic> data) async {
     final db = _db!;
     final row = Map<String, dynamic>.from(data);
+    final id = _generateId();
+    row['_id'] = id;
     row['_createdAt'] = DateTime.now().toIso8601String();
-    final id = await db.insert(tableName, row);
+    await db.insert(tableName, row);
     logDebug('DataStore', 'INSERT into "$tableName": $data → id=$id');
     return id;
   }
@@ -388,7 +402,7 @@ class DataStore {
 
       // Insert rows, recreating the table schema from column names if needed.
       for (final row in entry.value) {
-        // Strip _id so SQLite auto-generates new IDs.
+        // Strip _id so new IDs are generated on insert.
         final cleanRow = Map<String, dynamic>.from(row)..remove('_id');
 
         // Ensure table exists with all columns from this row.
@@ -400,6 +414,7 @@ class DataStore {
           await ensureTable(tableName, cols);
         }
 
+        cleanRow['_id'] = _generateId();
         await db.insert(tableName, cleanRow);
       }
     }
@@ -428,6 +443,7 @@ class DataStore {
       final cleanRow = Map<String, dynamic>.from(row)
         ..remove('_id')
         ..putIfAbsent('_createdAt', () => DateTime.now().toIso8601String());
+      cleanRow['_id'] = _generateId();
       await _db!.insert(tableName, cleanRow);
       count++;
     }
@@ -452,8 +468,9 @@ class DataStore {
       if (existing.isEmpty) {
         await db.execute('''
           CREATE TABLE "_ods_users" (
-            _id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
+            _id TEXT PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            username TEXT,
             password_hash TEXT NOT NULL,
             salt TEXT NOT NULL,
             display_name TEXT,
@@ -472,8 +489,8 @@ class DataStore {
       if (existing.isEmpty) {
         await db.execute('''
           CREATE TABLE "_ods_user_roles" (
-            _id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
+            _id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
             role TEXT NOT NULL,
             _createdAt TEXT,
             UNIQUE(user_id, role)
@@ -486,37 +503,41 @@ class DataStore {
   }
 
   /// Creates a new user and returns their ID.
-  Future<int> createUser({
-    required String username,
+  Future<String> createUser({
+    required String email,
     required String passwordHash,
     required String salt,
+    String? username,
     String? displayName,
   }) async {
     final db = _db!;
-    final id = await db.insert('_ods_users', {
-      'username': username,
+    final id = _generateId();
+    await db.insert('_ods_users', {
+      '_id': id,
+      'email': email,
+      'username': username ?? email,
       'password_hash': passwordHash,
       'salt': salt,
-      'display_name': displayName ?? username,
+      'display_name': displayName ?? username ?? email,
       '_createdAt': DateTime.now().toIso8601String(),
     });
-    logInfo('DataStore', 'Created user "$username" (id=$id)');
+    logInfo('DataStore', 'Created user "$email" (id=$id)');
     return id;
   }
 
-  /// Looks up a user by username. Returns null if not found.
-  Future<Map<String, dynamic>?> getUserByUsername(String username) async {
+  /// Looks up a user by email. Returns null if not found.
+  Future<Map<String, dynamic>?> getUserByEmail(String email) async {
     final db = _db!;
     final rows = await db.query(
       '_ods_users',
-      where: 'username = ?',
-      whereArgs: [username],
+      where: 'email = ?',
+      whereArgs: [email],
     );
     return rows.isNotEmpty ? rows.first : null;
   }
 
   /// Returns all roles for a given user ID.
-  Future<List<String>> getUserRoles(int userId) async {
+  Future<List<String>> getUserRoles(String userId) async {
     final db = _db!;
     final rows = await db.query(
       '_ods_user_roles',
@@ -527,10 +548,11 @@ class DataStore {
   }
 
   /// Assigns a role to a user. Silently ignores duplicates.
-  Future<void> assignRole(int userId, String role) async {
+  Future<void> assignRole(String userId, String role) async {
     final db = _db!;
     try {
       await db.insert('_ods_user_roles', {
+        '_id': _generateId(),
         'user_id': userId,
         'role': role,
         '_createdAt': DateTime.now().toIso8601String(),
@@ -542,7 +564,7 @@ class DataStore {
   }
 
   /// Removes a role from a user.
-  Future<void> removeRole(int userId, String role) async {
+  Future<void> removeRole(String userId, String role) async {
     final db = _db!;
     await db.delete(
       '_ods_user_roles',
@@ -558,7 +580,7 @@ class DataStore {
     final users = await db.query('_ods_users', orderBy: '_id ASC');
     final result = <Map<String, dynamic>>[];
     for (final user in users) {
-      final userId = user['_id'] as int;
+      final userId = user['_id'] as String;
       final roles = await getUserRoles(userId);
       result.add({...user, 'roles': roles});
     }
@@ -566,7 +588,7 @@ class DataStore {
   }
 
   /// Deletes a user and all their role assignments.
-  Future<void> deleteUser(int userId) async {
+  Future<void> deleteUser(String userId) async {
     final db = _db!;
     await db.delete('_ods_user_roles', where: 'user_id = ?', whereArgs: [userId]);
     await db.delete('_ods_users', where: '_id = ?', whereArgs: [userId]);
@@ -574,7 +596,7 @@ class DataStore {
   }
 
   /// Updates a user's password hash and salt.
-  Future<void> updateUserPassword(int userId, String passwordHash, String salt) async {
+  Future<void> updateUserPassword(String userId, String passwordHash, String salt) async {
     final db = _db!;
     await db.update(
       '_ods_users',
@@ -586,7 +608,7 @@ class DataStore {
   }
 
   /// Updates a user's display name.
-  Future<void> updateUserDisplayName(int userId, String displayName) async {
+  Future<void> updateUserDisplayName(String userId, String displayName) async {
     final db = _db!;
     await db.update(
       '_ods_users',

@@ -139,7 +139,7 @@ class DataExporter {
 
       // CREATE TABLE
       buffer.writeln('CREATE TABLE IF NOT EXISTS "$tableName" (');
-      buffer.writeln('  _id INTEGER PRIMARY KEY AUTOINCREMENT,');
+      buffer.writeln('  _id TEXT PRIMARY KEY,');
       for (var i = 0; i < columnList.length; i++) {
         final comma = i < columnList.length - 1 ? ',' : '';
         buffer.writeln('  "${columnList[i]}" TEXT$comma');

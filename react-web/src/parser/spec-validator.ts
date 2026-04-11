@@ -66,8 +66,8 @@ export function validate(app: OdsApp): ValidationResult {
   if (!app.pages[app.startPage]) {
     result.error(`startPage "${app.startPage}" does not match any defined page`)
   }
-  for (const [role, pageId] of Object.entries(app.startPageMap)) {
-    if (role !== 'default' && !app.pages[pageId]) {
+  for (const [role, pageId] of Object.entries(app.startPageByRole)) {
+    if (!app.pages[pageId]) {
       result.error(`startPage for role "${role}" references unknown page "${pageId}"`)
     }
   }

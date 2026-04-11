@@ -10,7 +10,7 @@
  */
 
 import type { DataService } from './data-service.ts'
-import { warn } from './log-service.ts'
+import { logWarn } from './log-service.ts'
 import type { OdsApp } from '@/models/ods-app.ts'
 import { isLocal, tableName } from '@/models/ods-data-source.ts'
 
@@ -68,9 +68,16 @@ function validateTableName(name: string): boolean {
   return VALID_TABLE_NAME.test(name) && !DANGEROUS_NAMES.has(name)
 }
 
-/** Compute a simple integrity signature from the tables data. */
-function computeSignature(tables: Record<string, Record<string, unknown>[]>): string {
-  return btoa(JSON.stringify(tables)).slice(0, 32)
+const SIGNING_KEY = 'ods-backup-integrity-v1'
+
+/** Compute an HMAC-SHA256 integrity signature from the tables data. */
+async function computeSignature(tables: Record<string, Record<string, unknown>[]>): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(JSON.stringify(tables))
+  const keyData = encoder.encode(SIGNING_KEY)
+  const key = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const signature = await crypto.subtle.sign('HMAC', key, data)
+  return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
 /** Strip dangerous field names from a row object. */
@@ -103,7 +110,7 @@ export async function runAutoBackup(
     pruneBackups(app.appName, settings.retention)
   } catch (e) {
     // Best-effort — don't break the app if backup fails
-    warn('BackupService', 'Auto-backup failed', e)
+    logWarn('BackupService', 'Auto-backup failed', e)
   }
 }
 
@@ -126,7 +133,7 @@ async function createSnapshot(
     appName: app.appName,
     timestamp: new Date().toISOString(),
     tables,
-    signature: computeSignature(tables),
+    signature: await computeSignature(tables),
   }
 }
 
@@ -203,10 +210,17 @@ export async function restoreBackup(
 
   // Verify integrity signature if present.
   if (backup.signature) {
-    const expected = computeSignature(backup.tables)
-    if (backup.signature !== expected) {
-      return 'Backup integrity check failed — file may have been tampered with.'
+    // Backward compatibility: old short base64 signatures (length < 64) are accepted with a warning.
+    if (backup.signature.length < 64) {
+      console.warn('[BackupService] Accepting unsigned/legacy backup — old signature format detected.')
+    } else {
+      const expected = await computeSignature(backup.tables)
+      if (backup.signature !== expected) {
+        return 'Backup integrity check failed — file may have been tampered with.'
+      }
     }
+  } else {
+    console.warn('[BackupService] Accepting unsigned backup — no signature field present.')
   }
 
   // Validate table names and row counts.

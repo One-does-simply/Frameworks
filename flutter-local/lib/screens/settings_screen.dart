@@ -611,7 +611,7 @@ class _InlineUserListState extends State<_InlineUserList> {
   }
 
   Future<void> _addUser() async {
-    final usernameController = TextEditingController();
+    final emailController = TextEditingController();
     final passwordController = TextEditingController();
     String selectedRole = 'user';
 
@@ -624,8 +624,9 @@ class _InlineUserListState extends State<_InlineUserList> {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
-                controller: usernameController,
-                decoration: const InputDecoration(labelText: 'Username', border: OutlineInputBorder()),
+                controller: emailController,
+                decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
+                keyboardType: TextInputType.emailAddress,
                 autofocus: true,
               ),
               const SizedBox(height: 12),
@@ -654,9 +655,9 @@ class _InlineUserListState extends State<_InlineUserList> {
       ),
     );
 
-    if (result == true && usernameController.text.isNotEmpty && passwordController.text.isNotEmpty) {
+    if (result == true && emailController.text.isNotEmpty && passwordController.text.isNotEmpty) {
       await widget.authService.registerUser(
-        username: usernameController.text.trim(),
+        email: emailController.text.trim(),
         password: passwordController.text,
         role: selectedRole,
       );
@@ -681,7 +682,7 @@ class _InlineUserListState extends State<_InlineUserList> {
       ),
     );
     if (confirmed == true) {
-      await widget.authService.deleteUser(user['_id'] as int);
+      await widget.authService.deleteUser(user['_id'] as String);
       _loadUsers();
     }
   }
@@ -705,7 +706,7 @@ class _InlineUserListState extends State<_InlineUserList> {
       ),
     );
     if (newPassword != null && newPassword.isNotEmpty) {
-      await widget.authService.changePassword(user['_id'] as int, newPassword);
+      await widget.authService.changePassword(user['_id'] as String, newPassword);
     }
   }
 

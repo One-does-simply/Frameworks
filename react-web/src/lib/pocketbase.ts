@@ -1,5 +1,5 @@
 import PocketBase from 'pocketbase'
-import { warn, error as logError } from '@/engine/log-service.ts'
+import { logWarn, logError } from '@/engine/log-service.ts'
 
 /** PocketBase client singleton. URL configurable via VITE_POCKETBASE_URL env var. */
 const pb = new PocketBase(
@@ -25,7 +25,7 @@ pb.send = async function (path: string, options?: Record<string, unknown>) {
     const status = (e as { status?: number })?.status
     const msg = (e as { message?: string })?.message ?? String(e)
     if (status && status >= 400 && status < 500) {
-      warn('PocketBase', `HTTP ${status} on ${path}: ${msg}`)
+      logWarn('PocketBase', `HTTP ${status} on ${path}: ${msg}`)
     } else if (status && status >= 500) {
       logError('PocketBase', `HTTP ${status} on ${path}: ${msg}`, e)
     }

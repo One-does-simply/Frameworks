@@ -42,7 +42,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   }
 
   Future<void> _showAddUserDialog() async {
-    final usernameController = TextEditingController();
+    final emailController = TextEditingController();
     final passwordController = TextEditingController();
     String selectedRole = 'user';
 
@@ -55,8 +55,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
-                controller: usernameController,
-                decoration: const InputDecoration(labelText: 'Username'),
+                controller: emailController,
+                decoration: const InputDecoration(labelText: 'Email'),
+                keyboardType: TextInputType.emailAddress,
                 autofocus: true,
               ),
               const SizedBox(height: 12),
@@ -95,9 +96,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     );
 
     if (result == true && mounted) {
-      final username = usernameController.text.trim();
+      final email = emailController.text.trim();
       final password = passwordController.text;
-      if (username.isEmpty || password.isEmpty) {
+      if (email.isEmpty || password.isEmpty) {
         // Do nothing
       } else if (password.length < 8) {
         if (mounted) {
@@ -107,7 +108,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         }
       } else {
         final userId = await widget.authService.registerUser(
-          username: username,
+          email: email,
           password: password,
           role: selectedRole,
         );
@@ -115,18 +116,18 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           await _loadUsers();
         } else if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to create user. Username may be taken.')),
+            const SnackBar(content: Text('Failed to create user. Email may be taken.')),
           );
         }
       }
     }
 
-    usernameController.dispose();
+    emailController.dispose();
     passwordController.dispose();
   }
 
   Future<void> _confirmDeleteUser(Map<String, dynamic> user) async {
-    final userId = user['_id'] as int;
+    final userId = user['_id'] as String;
     final username = user['username'] as String;
 
     // Can't delete yourself.
@@ -166,7 +167,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   }
 
   Future<void> _showChangePasswordDialog(Map<String, dynamic> user) async {
-    final userId = user['_id'] as int;
+    final userId = user['_id'] as String;
     final username = user['username'] as String;
     final passwordController = TextEditingController();
 

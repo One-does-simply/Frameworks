@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { error } from '@/engine/log-service.ts'
+import { logError } from '@/engine/log-service.ts'
 import { Code, FolderArchive } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -57,7 +57,7 @@ export function GenerateCodeDialog({ open, onOpenChange, app: appProp }: Generat
       toast.success(`Generated ${fileCount} files — download started.`)
       onOpenChange(false)
     } catch (err) {
-      error('CodeGen', 'Code generation failed', err)
+      logError('CodeGen', 'Code generation failed', err)
       toast.error('Code generation failed. Check the console for details.')
     } finally {
       setIsGenerating(false)

@@ -9,8 +9,8 @@ import '../engine/auth_service.dart';
 /// just sets `"multiUser": true` and the framework takes care of the rest.
 class AdminSetupScreen extends StatefulWidget {
   final AuthService authService;
-  /// Called with (username, password) after the admin account is created.
-  final void Function(String username, String password) onSetupComplete;
+  /// Called with (email, password) after the admin account is created.
+  final void Function(String email, String password) onSetupComplete;
   final VoidCallback? onSkip;
 
   const AdminSetupScreen({
@@ -25,7 +25,7 @@ class AdminSetupScreen extends StatefulWidget {
 }
 
 class _AdminSetupScreenState extends State<AdminSetupScreen> {
-  final _usernameController = TextEditingController(text: 'admin');
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
   bool _isLoading = false;
@@ -34,19 +34,19 @@ class _AdminSetupScreenState extends State<AdminSetupScreen> {
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
     super.dispose();
   }
 
   Future<void> _handleSetup() async {
-    final username = _usernameController.text.trim();
+    final email = _emailController.text.trim();
     final password = _passwordController.text;
     final confirm = _confirmController.text;
 
-    if (username.isEmpty) {
-      setState(() => _error = 'Please enter a username');
+    if (email.isEmpty) {
+      setState(() => _error = 'Please enter an email address');
       return;
     }
     if (password.isEmpty) {
@@ -67,16 +67,16 @@ class _AdminSetupScreenState extends State<AdminSetupScreen> {
       _error = null;
     });
 
-    final success = await widget.authService.setupAdmin(username, password);
+    final success = await widget.authService.setupAdmin(email, password);
 
     if (!mounted) return;
 
     if (success) {
-      widget.onSetupComplete(username, password);
+      widget.onSetupComplete(email, password);
     } else {
       setState(() {
         _isLoading = false;
-        _error = 'Setup failed. Username may already be taken.';
+        _error = 'Setup failed. Email may already be taken.';
       });
     }
   }
@@ -124,11 +124,12 @@ class _AdminSetupScreenState extends State<AdminSetupScreen> {
                   ),
                   const SizedBox(height: 32),
                   TextField(
-                    controller: _usernameController,
+                    controller: _emailController,
                     decoration: const InputDecoration(
-                      labelText: 'Admin Username',
-                      prefixIcon: Icon(Icons.person_outline),
+                      labelText: 'Admin Email',
+                      prefixIcon: Icon(Icons.email_outlined),
                     ),
+                    keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
                     autofocus: true,
                   ),

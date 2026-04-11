@@ -7,7 +7,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { toast } from 'sonner'
-import { warn } from '@/engine/log-service.ts'
+import { logWarn } from '@/engine/log-service.ts'
 import { Loader2, Check, Rocket, ArrowRight } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -75,7 +75,7 @@ export function OnboardingScreen({ onComplete, onInstall }: OnboardingScreenProp
           await onInstall(entry.name, specJson, entry.description)
           installed++
         } catch (err) {
-          warn('Onboarding', 'Failed to install example', err)
+          logWarn('Onboarding', 'Failed to install example', err)
         }
       }
     }

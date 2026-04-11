@@ -304,17 +304,6 @@ class LogService {
     return file.path;
   }
 
-  // -------------------------------------------------------------------------
-  // Password validation (shared utility, matching React version)
-  // -------------------------------------------------------------------------
-
-  /// Validate a password against requirements.
-  /// Returns null if valid, or an error message string.
-  static String? validatePassword(String password) {
-    if (password.length < 8) return 'Password must be at least 8 characters.';
-    if (password.length > 72) return 'Password must be 72 characters or fewer.';
-    return null;
-  }
 }
 
 // ---------------------------------------------------------------------------

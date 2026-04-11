@@ -11,7 +11,7 @@ import type { AuthService } from './auth-service.ts'
 import type { DataService } from './data-service.ts'
 import { runAutoBackup } from './backup-service.ts'
 import { applyBranding, resetBranding } from './branding-service.ts'
-import { warn, error } from './log-service.ts'
+import { logWarn, logError } from './log-service.ts'
 
 // ---------------------------------------------------------------------------
 // Record cursor — step-through navigation for forms with recordSource
@@ -149,6 +149,19 @@ const initialState = {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Check startPageByRole for the first matching role, fall back to app.startPage. */
+export function startPageForRoles(roles: string[], app: OdsApp): string {
+  for (const role of roles) {
+    const page = app.startPageByRole[role]
+    if (page) return page
+  }
+  return app.startPage
+}
+
+// ---------------------------------------------------------------------------
 // Store creation
 // ---------------------------------------------------------------------------
 
@@ -208,14 +221,12 @@ export const useAppStore = create<AppState>()((set, get) => ({
         authService.setSuperAdmin(true)
       }
 
-      // Resolve role-based start page from startPageMap.
-      let startPageId = app.startPage
-      if (pbSuperAdminAvailable && app.startPageMap.admin) {
-        startPageId = app.startPageMap.admin
-      } else if (authService.isLoggedIn) {
-        const matchedRole = authService.currentRoles.find(r => app.startPageMap[r])
-        if (matchedRole) startPageId = app.startPageMap[matchedRole]
-      }
+      // Resolve role-based start page from startPageByRole.
+      const startPageId = pbSuperAdminAvailable
+        ? startPageForRoles(['admin'], app)
+        : authService.isLoggedIn
+          ? startPageForRoles(authService.currentRoles, app)
+          : app.startPage
 
       set({
         app,
@@ -267,7 +278,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     const targetPage = app.pages[pageId]
     const isMultiUser = app.auth.multiUser
     if (isMultiUser && authService && !authService.hasAccess(targetPage.roles)) {
-      warn('AppStore', `Navigation blocked — user lacks role for page "${pageId}"`)
+      logWarn('AppStore', `Navigation blocked — user lacks role for page "${pageId}"`)
       return
     }
 
@@ -416,13 +427,13 @@ export const useAppStore = create<AppState>()((set, get) => ({
           ownerId,
         })
       } catch (e) {
-        error('ActionHandler', 'Action exception', e)
+        logError('ActionHandler', 'Action exception', e)
         set({ lastActionError: `Action failed: ${e instanceof Error ? e.message : String(e)}` })
         return
       }
 
       if (result.error) {
-        warn('ActionHandler', 'Action error', result.error)
+        logWarn('ActionHandler', 'Action error', result.error)
         set({ lastActionError: result.error })
         return // Stop executing further actions in the chain.
       }
@@ -491,7 +502,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
       await dataService.delete(tableName(ds), matchField, matchValue)
       set({ recordGeneration: get().recordGeneration + 1, lastMessage: `Deleted record` })
     } catch (e) {
-      warn('AppStore', 'Delete row action error', e)
+      logWarn('AppStore', 'Delete row action error', e)
       set({ lastActionError: `Delete failed: ${e}` })
     }
   },
@@ -566,7 +577,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
         lastMessage: `Copied "${originalName}" → "${copyName}" with ${matchingChildren.length} items`,
       })
     } catch (e) {
-      warn('AppStore', 'CopyRows error', e)
+      logWarn('AppStore', 'CopyRows error', e)
       set({ lastActionError: `Copy failed: ${e}` })
     }
   },
@@ -628,7 +639,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
       set({ recordGeneration: get().recordGeneration + 1 })
     } catch (e) {
-      warn('AppStore', 'Toggle error', e)
+      logWarn('AppStore', 'Toggle error', e)
       set({ lastActionError: `Toggle failed: ${e}` })
     }
   },
@@ -699,7 +710,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
       set({ recordGeneration: get().recordGeneration + 1 })
     } catch (e) {
-      warn('AppStore', 'Cascade rename error', e)
+      logWarn('AppStore', 'Cascade rename error', e)
       set({ lastActionError: `Cascade rename failed: ${e}` })
     }
   },
@@ -762,7 +773,7 @@ async function handleFirstRecord(
   // Find the form component to get its recordSource.
   const form = findFormComponent(formId, app)
   if (!form || !form.recordSource) {
-    warn('AppStore', `firstRecord — form "${formId}" has no recordSource`)
+    logWarn('AppStore', `firstRecord — form "${formId}" has no recordSource`)
     return undefined
   }
 
@@ -780,7 +791,7 @@ async function handleFirstRecord(
       rows = await dataService.query(tableName(ds))
     }
   } catch (e) {
-    warn('AppStore', 'firstRecord query failed', e)
+    logWarn('AppStore', 'firstRecord query failed', e)
     return action.onEnd
   }
 
@@ -948,6 +959,6 @@ async function handleCascade(
       }
     }
   } catch (e) {
-    warn('AppStore', 'Cascade rename failed', e)
+    logWarn('AppStore', 'Cascade rename failed', e)
   }
 }

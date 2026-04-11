@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
-import { warn } from '@/engine/log-service.ts'
+import { logWarn } from '@/engine/log-service.ts'
 import { Loader2, Check, BookOpen } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -85,7 +85,7 @@ export function ExampleCatalogDialog({
           await onInstall(entry.name, specJson, entry.description)
           installed++
         } catch (err) {
-          warn('ExampleCatalog', 'Failed to install example', err)
+          logWarn('ExampleCatalog', 'Failed to install example', err)
         }
       }
     }

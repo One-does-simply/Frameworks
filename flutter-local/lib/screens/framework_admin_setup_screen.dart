@@ -21,7 +21,7 @@ class FrameworkAdminSetupScreen extends StatefulWidget {
 }
 
 class _FrameworkAdminSetupScreenState extends State<FrameworkAdminSetupScreen> {
-  final _usernameController = TextEditingController(text: 'admin');
+  final _emailController = TextEditingController();
   final _displayNameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
@@ -30,7 +30,7 @@ class _FrameworkAdminSetupScreenState extends State<FrameworkAdminSetupScreen> {
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _emailController.dispose();
     _displayNameController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
@@ -38,13 +38,13 @@ class _FrameworkAdminSetupScreenState extends State<FrameworkAdminSetupScreen> {
   }
 
   Future<void> _handleSetup() async {
-    final username = _usernameController.text.trim();
+    final email = _emailController.text.trim();
     final password = _passwordController.text;
     final confirm = _confirmController.text;
     final displayName = _displayNameController.text.trim();
 
-    if (username.isEmpty) {
-      setState(() => _error = 'Username is required');
+    if (email.isEmpty) {
+      setState(() => _error = 'Email is required');
       return;
     }
     if (password.length < 8) {
@@ -58,7 +58,7 @@ class _FrameworkAdminSetupScreenState extends State<FrameworkAdminSetupScreen> {
 
     setState(() { _error = null; _loading = true; });
     final success = await widget.authService.setupAdmin(
-      username: username,
+      email: email,
       password: password,
       displayName: displayName.isNotEmpty ? displayName : null,
     );
@@ -124,8 +124,9 @@ class _FrameworkAdminSetupScreenState extends State<FrameworkAdminSetupScreen> {
                         ],
 
                         TextField(
-                          controller: _usernameController,
-                          decoration: const InputDecoration(labelText: 'Username'),
+                          controller: _emailController,
+                          decoration: const InputDecoration(labelText: 'Email'),
+                          keyboardType: TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
                           enabled: !_loading,
                         ),

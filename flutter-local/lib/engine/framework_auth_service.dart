@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -6,6 +8,15 @@ import 'auth_service.dart' show LoginResult;
 import 'log_service.dart';
 import 'password_hasher.dart';
 import 'settings_store.dart';
+
+/// Generates a 15-character random alphanumeric string matching PocketBase's ID format.
+String _generateFwId() {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  final rng = math.Random.secure();
+  return String.fromCharCodes(
+    List.generate(15, (_) => chars.codeUnitAt(rng.nextInt(chars.length))),
+  );
+}
 
 /// Framework-level authentication service with its own SQLite database.
 ///
@@ -18,7 +29,7 @@ class FrameworkAuthService extends ChangeNotifier {
   bool _isInitialized = false;
 
   // Session state
-  int? _currentUserId;
+  String? _currentUserId;
   String? _currentUsername;
   String? _currentDisplayName;
   List<String> _currentRoles = [];
@@ -38,7 +49,7 @@ class FrameworkAuthService extends ChangeNotifier {
   bool get isLoggedIn => _currentUserId != null;
   bool get isGuest => !isLoggedIn;
   bool get isAdmin => _currentRoles.contains('admin');
-  int? get currentUserId => _currentUserId;
+  String? get currentUserId => _currentUserId;
   String get currentUsername => _currentUsername ?? 'guest';
   String get currentDisplayName => _currentDisplayName ?? 'Guest';
   List<String> get currentRoles => isGuest ? const ['guest'] : _currentRoles;
@@ -57,8 +68,9 @@ class FrameworkAuthService extends ChangeNotifier {
     _db = await databaseFactoryFfi.openDatabase(dbPath);
     await _db!.execute('''
       CREATE TABLE IF NOT EXISTS _ods_fw_users (
-        _id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
+        _id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        username TEXT,
         password_hash TEXT NOT NULL,
         salt TEXT NOT NULL,
         display_name TEXT,
@@ -67,8 +79,8 @@ class FrameworkAuthService extends ChangeNotifier {
     ''');
     await _db!.execute('''
       CREATE TABLE IF NOT EXISTS _ods_fw_user_roles (
-        _id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
+        _id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
         role TEXT NOT NULL,
         UNIQUE(user_id, role)
       )
@@ -88,8 +100,9 @@ class FrameworkAuthService extends ChangeNotifier {
 
   /// Create the initial admin account.
   Future<bool> setupAdmin({
-    required String username,
+    required String email,
     required String password,
+    String? username,
     String? displayName,
   }) async {
     final db = _db!;
@@ -97,24 +110,27 @@ class FrameworkAuthService extends ChangeNotifier {
     final hash = PasswordHasher.hash(password, salt);
 
     try {
-      final id = await db.insert('_ods_fw_users', {
-        'username': username,
+      final id = _generateFwId();
+      await db.insert('_ods_fw_users', {
+        '_id': id,
+        'email': email,
+        'username': username ?? email,
         'password_hash': hash,
         'salt': salt,
-        'display_name': displayName ?? username,
+        'display_name': displayName ?? username ?? email,
         '_createdAt': DateTime.now().toIso8601String(),
       });
-      await db.insert('_ods_fw_user_roles', {'user_id': id, 'role': 'admin'});
-      await db.insert('_ods_fw_user_roles', {'user_id': id, 'role': 'user'});
+      await db.insert('_ods_fw_user_roles', {'_id': _generateFwId(), 'user_id': id, 'role': 'admin'});
+      await db.insert('_ods_fw_user_roles', {'_id': _generateFwId(), 'user_id': id, 'role': 'user'});
 
       _isAdminSetUp = true;
       // Auto-login
       _currentUserId = id;
-      _currentUsername = username;
-      _currentDisplayName = displayName ?? username;
+      _currentUsername = username ?? email;
+      _currentDisplayName = displayName ?? username ?? email;
       _currentRoles = ['admin', 'user'];
       _lastActivity = DateTime.now();
-      logInfo('FrameworkAuthService', '[SECURITY] admin_setup: $username (id=$id)');
+      logInfo('FrameworkAuthService', '[SECURITY] admin_setup: $email (id=$id)');
       notifyListeners();
       return true;
     } catch (e) {
@@ -123,9 +139,9 @@ class FrameworkAuthService extends ChangeNotifier {
     }
   }
 
-  /// Checks whether the given username is currently rate-limited.
-  int _checkRateLimit(String username) {
-    final key = username.toLowerCase();
+  /// Checks whether the given email is currently rate-limited.
+  int _checkRateLimit(String email) {
+    final key = email.toLowerCase();
     final attempts = _failedAttempts[key];
     if (attempts == null) return 0;
     final cutoff = DateTime.now().subtract(_lockoutWindow);
@@ -138,12 +154,12 @@ class FrameworkAuthService extends ChangeNotifier {
     return 0;
   }
 
-  void _recordFailedAttempt(String username) {
-    _failedAttempts.putIfAbsent(username.toLowerCase(), () => []).add(DateTime.now());
+  void _recordFailedAttempt(String email) {
+    _failedAttempts.putIfAbsent(email.toLowerCase(), () => []).add(DateTime.now());
   }
 
-  void _clearFailedAttempts(String username) {
-    _failedAttempts.remove(username.toLowerCase());
+  void _clearFailedAttempts(String email) {
+    _failedAttempts.remove(email.toLowerCase());
   }
 
   /// Checks whether the current session has timed out due to inactivity.
@@ -159,12 +175,12 @@ class FrameworkAuthService extends ChangeNotifier {
     }
   }
 
-  /// Log in with username and password. Returns a [LoginResult].
-  Future<LoginResult> login(String username, String password) async {
+  /// Log in with email and password. Returns a [LoginResult].
+  Future<LoginResult> login(String email, String password) async {
     // Rate limit check.
-    final lockoutMinutes = _checkRateLimit(username);
+    final lockoutMinutes = _checkRateLimit(email);
     if (lockoutMinutes > 0) {
-      logWarn('FrameworkAuthService', '[SECURITY] login_rate_limited: $username');
+      logWarn('FrameworkAuthService', '[SECURITY] login_rate_limited: $email');
       return LoginResult(
         success: false,
         error: 'Too many failed attempts. Try again in $lockoutMinutes minute${lockoutMinutes == 1 ? '' : 's'}.',
@@ -174,24 +190,24 @@ class FrameworkAuthService extends ChangeNotifier {
     final db = _db!;
     final rows = await db.query(
       '_ods_fw_users',
-      where: 'username = ?',
-      whereArgs: [username],
+      where: 'email = ?',
+      whereArgs: [email],
     );
     if (rows.isEmpty) {
-      _recordFailedAttempt(username);
-      logInfo('FrameworkAuthService', '[SECURITY] login_failed: $username (user not found)');
+      _recordFailedAttempt(email);
+      logInfo('FrameworkAuthService', '[SECURITY] login_failed: $email (user not found)');
       return const LoginResult(success: false);
     }
 
     final user = rows.first;
     if (!PasswordHasher.verify(password, user['salt'] as String, user['password_hash'] as String)) {
-      _recordFailedAttempt(username);
-      logInfo('FrameworkAuthService', '[SECURITY] login_failed: $username (bad password)');
+      _recordFailedAttempt(email);
+      logInfo('FrameworkAuthService', '[SECURITY] login_failed: $email (bad password)');
       return const LoginResult(success: false);
     }
 
-    _clearFailedAttempts(username);
-    final userId = user['_id'] as int;
+    _clearFailedAttempts(email);
+    final userId = user['_id'] as String;
     final roleRows = await db.query(
       '_ods_fw_user_roles',
       where: 'user_id = ?',
@@ -199,11 +215,11 @@ class FrameworkAuthService extends ChangeNotifier {
     );
 
     _currentUserId = userId;
-    _currentUsername = user['username'] as String;
+    _currentUsername = user['username'] as String? ?? email;
     _currentDisplayName = user['display_name'] as String? ?? _currentUsername;
     _currentRoles = roleRows.map((r) => r['role'] as String).toList();
     _lastActivity = DateTime.now();
-    logInfo('FrameworkAuthService', '[SECURITY] login_success: $username');
+    logInfo('FrameworkAuthService', '[SECURITY] login_success: $email');
     notifyListeners();
     return const LoginResult(success: true);
   }
@@ -220,10 +236,11 @@ class FrameworkAuthService extends ChangeNotifier {
   }
 
   /// Register a new user.
-  Future<int?> registerUser({
-    required String username,
+  Future<String?> registerUser({
+    required String email,
     required String password,
     required String role,
+    String? username,
     String? displayName,
   }) async {
     final db = _db!;
@@ -231,21 +248,24 @@ class FrameworkAuthService extends ChangeNotifier {
     final hash = PasswordHasher.hash(password, salt);
 
     try {
-      final id = await db.insert('_ods_fw_users', {
-        'username': username,
+      final id = _generateFwId();
+      await db.insert('_ods_fw_users', {
+        '_id': id,
+        'email': email,
+        'username': username ?? email,
         'password_hash': hash,
         'salt': salt,
-        'display_name': displayName ?? username,
+        'display_name': displayName ?? username ?? email,
         '_createdAt': DateTime.now().toIso8601String(),
       });
-      await db.insert('_ods_fw_user_roles', {'user_id': id, 'role': role});
+      await db.insert('_ods_fw_user_roles', {'_id': _generateFwId(), 'user_id': id, 'role': role});
       if (role != 'user' && role != 'guest') {
-        await db.insert('_ods_fw_user_roles', {'user_id': id, 'role': 'user'});
+        await db.insert('_ods_fw_user_roles', {'_id': _generateFwId(), 'user_id': id, 'role': 'user'});
       }
-      logInfo('FrameworkAuthService', '[SECURITY] user_created: $username role=$role (id=$id)');
+      logInfo('FrameworkAuthService', '[SECURITY] user_created: $email role=$role (id=$id)');
       return id;
     } catch (e) {
-      logError('FrameworkAuthService', '[SECURITY] user_creation_failed: $username', e);
+      logError('FrameworkAuthService', '[SECURITY] user_creation_failed: $email', e);
       return null;
     }
   }
@@ -263,8 +283,9 @@ class FrameworkAuthService extends ChangeNotifier {
       );
       result.add({
         '_id': user['_id'],
-        'username': user['username'],
-        'display_name': user['display_name'] ?? user['username'],
+        'email': user['email'],
+        'username': user['username'] ?? user['email'],
+        'display_name': user['display_name'] ?? user['username'] ?? user['email'],
         'roles': roles.map((r) => r['role'] as String).toList(),
       });
     }
@@ -272,14 +293,14 @@ class FrameworkAuthService extends ChangeNotifier {
   }
 
   /// Delete a user by ID.
-  Future<void> deleteUser(int userId) async {
+  Future<void> deleteUser(String userId) async {
     final db = _db!;
     await db.delete('_ods_fw_user_roles', where: 'user_id = ?', whereArgs: [userId]);
     await db.delete('_ods_fw_users', where: '_id = ?', whereArgs: [userId]);
   }
 
   /// Update a user's display name and/or roles.
-  Future<bool> updateUser(int userId, {String? displayName, List<String>? roles}) async {
+  Future<bool> updateUser(String userId, {String? displayName, List<String>? roles}) async {
     final db = _db!;
     try {
       if (displayName != null) {
@@ -293,7 +314,7 @@ class FrameworkAuthService extends ChangeNotifier {
       if (roles != null) {
         await db.delete('_ods_fw_user_roles', where: 'user_id = ?', whereArgs: [userId]);
         for (final role in roles) {
-          await db.insert('_ods_fw_user_roles', {'user_id': userId, 'role': role});
+          await db.insert('_ods_fw_user_roles', {'_id': _generateFwId(), 'user_id': userId, 'role': role});
         }
         logInfo('FrameworkAuthService', '[SECURITY] roles_changed: user=$userId roles=$roles');
       }
@@ -305,7 +326,7 @@ class FrameworkAuthService extends ChangeNotifier {
   }
 
   /// Change a user's password.
-  Future<bool> changePassword(int userId, String newPassword) async {
+  Future<bool> changePassword(String userId, String newPassword) async {
     final db = _db!;
     final rows = await db.query('_ods_fw_users', where: '_id = ?', whereArgs: [userId]);
     if (rows.isEmpty) return false;

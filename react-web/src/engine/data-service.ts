@@ -2,7 +2,7 @@ import type PocketBase from 'pocketbase'
 import type { OdsFieldDefinition } from '../models/ods-field.ts'
 import type { OdsDataSource } from '../models/ods-data-source.ts'
 import { isLocal, tableName } from '../models/ods-data-source.ts'
-import { debug, info, warn, error } from './log-service.ts'
+import { logDebug, logInfo, logWarn, logError } from './log-service.ts'
 
 // ---------------------------------------------------------------------------
 // Field name validation — prevents filter injection and prototype pollution
@@ -51,7 +51,7 @@ export class DataService {
   initialize(appName: string) {
     this.appPrefix = appName.replace(/[^\w]/g, '_').toLowerCase()
     this.knownCollections.clear()
-    info('DataService', `Initialized for app "${appName}" (prefix: ${this.appPrefix})`)
+    logInfo('DataService', `Initialized for app "${appName}" (prefix: ${this.appPrefix})`)
   }
 
   /**
@@ -62,11 +62,11 @@ export class DataService {
     try {
       await this.pb.collection('_superusers').authWithPassword(email, password)
       this._isAdminAuthenticated = true
-      info('DataService', 'PocketBase admin authenticated')
+      logInfo('DataService', 'PocketBase admin authenticated')
       console.info('[SECURITY] Admin auth success:', email)
       return true
     } catch (e) {
-      warn('DataService', `PocketBase admin auth failed: ${e}`)
+      logWarn('DataService', `PocketBase admin auth failed: ${e}`)
       console.info('[SECURITY] Admin auth failure:', email)
       return false
     }
@@ -85,7 +85,7 @@ export class DataService {
     const collectionName = record?.['collectionName'] ?? record?.['collectionId'] ?? ''
     if (collectionName === '_superusers' || collectionName === '_admins') {
       this._isAdminAuthenticated = true
-      info('DataService', 'PocketBase superadmin session detected from auth store')
+      logInfo('DataService', 'PocketBase superadmin session detected from auth store')
       console.info('[SECURITY] Admin auth restore: superadmin session detected')
       return true
     }
@@ -94,10 +94,10 @@ export class DataService {
     try {
       await this.pb.collection('_superusers').authRefresh()
       this._isAdminAuthenticated = true
-      info('DataService', 'PocketBase admin session refreshed')
+      logInfo('DataService', 'PocketBase admin session refreshed')
       return true
     } catch {
-      info('DataService', 'tryRestoreAdminAuth: authRefresh failed, not a superadmin session')
+      logInfo('DataService', 'tryRestoreAdminAuth: authRefresh failed, not a superadmin session')
       return false
     }
   }
@@ -125,7 +125,7 @@ export class DataService {
       // Check if collection exists AND is usable (try a simple query).
       await this.pb.collection(name).getList(1, 1, { requestKey: null })
       this.knownCollections.add(name)
-      debug('DataService', `Collection "${name}" already exists`)
+      logDebug('DataService', `Collection "${name}" already exists`)
     } catch {
       // Collection doesn't exist or is broken — (re)create it.
       try {
@@ -156,9 +156,9 @@ export class DataService {
           deleteRule: '',
         })
         this.knownCollections.add(name)
-        info('DataService', `Created collection "${name}" with ${fields.length} fields`)
+        logInfo('DataService', `Created collection "${name}" with ${fields.length} fields`)
       } catch (createErr) {
-        error('DataService', `Failed to create collection "${name}"`, createErr)
+        logError('DataService', `Failed to create collection "${name}"`, createErr)
         throw createErr
       }
     }
@@ -183,7 +183,7 @@ export class DataService {
           for (const row of ds.seedData) {
             await this.insert(table, row)
           }
-          info('DataService', `Seeded ${ds.seedData.length} rows into "${table}"`)
+          logInfo('DataService', `Seeded ${ds.seedData.length} rows into "${table}"`)
         }
       }
     }
@@ -198,10 +198,10 @@ export class DataService {
     const name = this.collectionName(table)
     try {
       const record = await this.pb.collection(name).create(data)
-      debug('DataService', `INSERT into "${name}": id=${record.id}`)
+      logDebug('DataService', `INSERT into "${name}": id=${record.id}`)
       return record.id
     } catch (e) {
-      error('DataService', `INSERT failed for "${name}"`, { error: e, data })
+      logError('DataService', `INSERT failed for "${name}"`, { error: e, data })
       throw e
     }
   }
@@ -230,10 +230,10 @@ export class DataService {
       for (const record of records) {
         await this.pb.collection(name).update(record.id, updateData)
       }
-      debug('DataService', `UPDATE "${name}" WHERE ${matchField}="${matchValue}" → ${records.length} rows`)
+      logDebug('DataService', `UPDATE "${name}" WHERE ${matchField}="${matchValue}" → ${records.length} rows`)
       return records.length
     } catch (e) {
-      warn('DataService', `UPDATE error on "${name}"`, e)
+      logWarn('DataService', `UPDATE error on "${name}"`, e)
       return 0
     }
   }
@@ -255,10 +255,10 @@ export class DataService {
       for (const record of records) {
         await this.pb.collection(name).delete(record.id)
       }
-      debug('DataService', `DELETE from "${name}" WHERE ${matchField}="${matchValue}" → ${records.length} rows`)
+      logDebug('DataService', `DELETE from "${name}" WHERE ${matchField}="${matchValue}" → ${records.length} rows`)
       return records.length
     } catch (e) {
-      warn('DataService', `DELETE error on "${name}"`, e)
+      logWarn('DataService', `DELETE error on "${name}"`, e)
       return 0
     }
   }
@@ -270,10 +270,10 @@ export class DataService {
       const records = await this.pb.collection(name).getFullList({
         requestKey: null,
       })
-      debug('DataService', `SELECT from "${name}": ${records.length} rows`)
+      logDebug('DataService', `SELECT from "${name}": ${records.length} rows`)
       return records.map(r => this.normalizeRecord(r))
     } catch (e) {
-      error('DataService', `SELECT failed for "${name}"`, e)
+      logError('DataService', `SELECT failed for "${name}"`, e)
       return []
     }
   }
@@ -297,7 +297,7 @@ export class DataService {
         filter: filterStr,
         requestKey: null,
       })
-      debug('DataService', `SELECT FILTERED from "${name}" WHERE ${filterStr}: ${records.length} rows`)
+      logDebug('DataService', `SELECT FILTERED from "${name}" WHERE ${filterStr}: ${records.length} rows`)
       return records.map(r => this.normalizeRecord(r))
     } catch {
       return []
@@ -323,7 +323,7 @@ export class DataService {
         filter: `${ownerField} = "${this.escapeFilter(ownerId)}"`,
         requestKey: null,
       })
-      debug('DataService', `SELECT OWNED from "${name}" WHERE ${ownerField}="${ownerId}": ${records.length} rows`)
+      logDebug('DataService', `SELECT OWNED from "${name}" WHERE ${ownerField}="${ownerId}": ${records.length} rows`)
       return records.map(r => this.normalizeRecord(r))
     } catch {
       return []

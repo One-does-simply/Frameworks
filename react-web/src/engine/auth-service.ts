@@ -1,5 +1,5 @@
 import type PocketBase from 'pocketbase'
-import { warn, error } from './log-service.ts'
+import { logWarn, logError } from './log-service.ts'
 
 /**
  * Authentication and role-based access control using PocketBase auth.
@@ -215,7 +215,7 @@ export class AuthService {
         (p) => p.name === providerName,
       )
       if (!provider) {
-        warn('AuthService', `OAuth2 provider "${providerName}" not found`)
+        logWarn('AuthService', `OAuth2 provider "${providerName}" not found`)
         return
       }
 
@@ -231,7 +231,7 @@ export class AuthService {
 
       window.location.href = authUrl
     } catch (e) {
-      error('AuthService', 'OAuth2 redirect failed', e)
+      logError('AuthService', 'OAuth2 redirect failed', e)
     }
   }
 
@@ -247,7 +247,7 @@ export class AuthService {
       const codeVerifier = sessionStorage.getItem('ods_oauth2_codeVerifier') ?? ''
 
       if (state !== savedState) {
-        warn('AuthService', 'OAuth2 state mismatch')
+        logWarn('AuthService', 'OAuth2 state mismatch')
         return false
       }
 
@@ -279,7 +279,7 @@ export class AuthService {
 
       return true
     } catch (e) {
-      error('AuthService', 'OAuth2 code exchange failed', e)
+      logError('AuthService', 'OAuth2 code exchange failed', e)
       return false
     }
   }
@@ -326,7 +326,7 @@ export class AuthService {
       // Reject if email matches PocketBase superadmin — they are separate identity stores
       const pbAdminEmail = (this.pb.authStore.record?.['email'] as string) ?? ''
       if (pbAdminEmail && email.toLowerCase() === pbAdminEmail.toLowerCase()) {
-        warn('AuthService', 'Cannot create app user with same email as PocketBase superadmin')
+        logWarn('AuthService', 'Cannot create app user with same email as PocketBase superadmin')
         return false
       }
 
@@ -348,7 +348,7 @@ export class AuthService {
       console.info('[SECURITY] Admin setup success:', email)
       return true
     } catch (e) {
-      error('AuthService', 'Admin setup failed', e)
+      logError('AuthService', 'Admin setup failed', e)
       console.info('[SECURITY] Admin setup failure:', email)
       return false
     }
@@ -365,7 +365,7 @@ export class AuthService {
       // Reject if email matches PocketBase superadmin
       const pbAdminEmail = (this.pb.authStore.record?.['email'] as string) ?? ''
       if (pbAdminEmail && params.email.toLowerCase() === pbAdminEmail.toLowerCase()) {
-        warn('AuthService', 'Cannot register with PocketBase superadmin email')
+        logWarn('AuthService', 'Cannot register with PocketBase superadmin email')
         return null
       }
 
@@ -390,7 +390,7 @@ export class AuthService {
       console.info('[SECURITY] User registration success:', params.email)
       return record.id
     } catch (e) {
-      error('AuthService', 'Registration failed', e)
+      logError('AuthService', 'Registration failed', e)
       console.info('[SECURITY] User registration failure:', params.email)
       return null
     }

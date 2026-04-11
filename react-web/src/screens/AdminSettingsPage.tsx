@@ -48,8 +48,7 @@ import {
   clearLogs,
   exportLogsAsText,
   getLogCount,
-  warn,
-  error,
+  logError,
   type LogSettings,
   type LogLevel,
 } from '@/engine/log-service.ts'
@@ -190,7 +189,7 @@ export function AdminSettingsPage() {
       })
       setOauthProviders(providers)
     } catch (e) {
-      error('AdminSettings', 'Failed to load OAuth2 providers', e)
+      logError('AdminSettings', 'Failed to load OAuth2 providers', e)
       setOauthProviders([])
     }
     setIsLoadingOAuth(false)
@@ -288,7 +287,7 @@ export function AdminSettingsPage() {
       setProviderClientSecret('')
       await loadOAuthProviders()
     } catch (e) {
-      error('AdminSettings', 'OAuth2 save error', e)
+      logError('AdminSettings', 'OAuth2 save error', e)
       toast.error(`Failed to configure provider: ${e instanceof Error ? e.message : e}`)
     }
   }
@@ -304,7 +303,7 @@ export function AdminSettingsPage() {
       toast.success(`${providerId} ${enabled ? 'enabled' : 'disabled'}`)
       await loadOAuthProviders()
     } catch (e) {
-      error('AdminSettings', 'OAuth2 toggle error', e)
+      logError('AdminSettings', 'OAuth2 toggle error', e)
       toast.error(`Failed to update provider: ${e instanceof Error ? e.message : e}`)
     }
   }

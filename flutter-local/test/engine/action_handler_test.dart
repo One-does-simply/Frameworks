@@ -478,9 +478,9 @@ class _FakeDataStore extends DataStore {
   }
 
   @override
-  Future<int> insert(String tableName, Map<String, dynamic> data) async {
+  Future<String> insert(String tableName, Map<String, dynamic> data) async {
     insertCalls.add((tableName, Map<String, dynamic>.from(data)));
-    return insertCalls.length;
+    return 'fake_id_${insertCalls.length}';
   }
 
   @override

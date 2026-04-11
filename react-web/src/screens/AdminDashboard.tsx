@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router'
 import { AppRegistry, type AppRecord } from '@/engine/app-registry.ts'
-import { error } from '@/engine/log-service.ts'
+import { logError } from '@/engine/log-service.ts'
 import { parseSpec, isOk } from '@/parser/spec-parser.ts'
 import { loadFromFile, loadFromUrl, loadFromText } from '@/engine/spec-loader.ts'
 import pb from '@/lib/pocketbase.ts'
@@ -189,7 +189,7 @@ export function AdminDashboard() {
     } catch (e) {
       setSaving(false)
       const msg = e instanceof Error ? e.message : String(e)
-      error('AdminDashboard', 'Save app error', e)
+      logError('AdminDashboard', 'Save app error', e)
       setLocalError(`Failed to save app: ${msg}`)
     }
   }

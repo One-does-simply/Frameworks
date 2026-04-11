@@ -317,7 +317,7 @@ class _FrameworkUserListState extends State<_FrameworkUserList> {
   }
 
   Future<void> _addUser() async {
-    final usernameCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
     final displayNameCtrl = TextEditingController();
     final passwordCtrl = TextEditingController();
     String selectedRole = 'user';
@@ -331,8 +331,9 @@ class _FrameworkUserListState extends State<_FrameworkUserList> {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
-                controller: usernameCtrl,
-                decoration: const InputDecoration(labelText: 'Username', border: OutlineInputBorder()),
+                controller: emailCtrl,
+                decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
+                keyboardType: TextInputType.emailAddress,
                 autofocus: true,
               ),
               const SizedBox(height: 12),
@@ -369,7 +370,7 @@ class _FrameworkUserListState extends State<_FrameworkUserList> {
       ),
     );
 
-    if (result == true && usernameCtrl.text.trim().isNotEmpty && passwordCtrl.text.isNotEmpty) {
+    if (result == true && emailCtrl.text.trim().isNotEmpty && passwordCtrl.text.isNotEmpty) {
       if (passwordCtrl.text.length < 8) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -378,7 +379,7 @@ class _FrameworkUserListState extends State<_FrameworkUserList> {
         }
       } else {
         await widget.authService.registerUser(
-          username: usernameCtrl.text.trim(),
+          email: emailCtrl.text.trim(),
           password: passwordCtrl.text,
           role: selectedRole,
           displayName: displayNameCtrl.text.trim().isNotEmpty ? displayNameCtrl.text.trim() : null,
@@ -428,7 +429,7 @@ class _FrameworkUserListState extends State<_FrameworkUserList> {
     if (result == true) {
       final newRoles = selectedRole == 'admin' ? ['admin', 'user'] : ['user'];
       await widget.authService.updateUser(
-        user['_id'] as int,
+        user['_id'] as String,
         displayName: displayNameCtrl.text.trim().isNotEmpty ? displayNameCtrl.text.trim() : null,
         roles: newRoles,
       );
@@ -466,7 +467,7 @@ class _FrameworkUserListState extends State<_FrameworkUserList> {
           );
         }
       } else {
-        await widget.authService.changePassword(user['_id'] as int, newPassword);
+        await widget.authService.changePassword(user['_id'] as String, newPassword);
       }
     }
   }
@@ -490,7 +491,7 @@ class _FrameworkUserListState extends State<_FrameworkUserList> {
       ),
     );
     if (confirmed == true) {
-      await widget.authService.deleteUser(user['_id'] as int);
+      await widget.authService.deleteUser(user['_id'] as String);
       _loadUsers();
     }
   }
