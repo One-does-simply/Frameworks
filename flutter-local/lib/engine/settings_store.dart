@@ -203,7 +203,9 @@ class SettingsStore extends ChangeNotifier {
             _brandingOverrides[entry.key] = Map<String, String>.from(entry.value as Map);
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('SettingsStore: failed to load settings: $e');
+      }
     }
     _initialized = true;
     notifyListeners();

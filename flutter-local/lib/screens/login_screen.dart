@@ -50,16 +50,16 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
 
-    final success = await widget.authService.login(username, password);
+    final result = await widget.authService.login(username, password);
 
     if (!mounted) return;
 
-    if (success) {
+    if (result.success) {
       widget.onLoginSuccess();
     } else {
       setState(() {
         _isLoading = false;
-        _error = 'Invalid username or password';
+        _error = result.error ?? 'Invalid username or password';
       });
     }
   }

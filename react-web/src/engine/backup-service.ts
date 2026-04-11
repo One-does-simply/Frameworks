@@ -52,6 +52,36 @@ interface BackupSnapshot {
   appName: string
   timestamp: string
   tables: Record<string, Record<string, unknown>[]>
+  /** Simple integrity signature for tamper detection. */
+  signature?: string
+}
+
+// ---------------------------------------------------------------------------
+// Validation helpers
+// ---------------------------------------------------------------------------
+
+const VALID_TABLE_NAME = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+const DANGEROUS_NAMES = new Set(['__proto__', 'constructor', 'prototype'])
+const DANGEROUS_FIELDS = new Set(['__proto__', 'constructor', 'prototype'])
+
+function validateTableName(name: string): boolean {
+  return VALID_TABLE_NAME.test(name) && !DANGEROUS_NAMES.has(name)
+}
+
+/** Compute a simple integrity signature from the tables data. */
+function computeSignature(tables: Record<string, Record<string, unknown>[]>): string {
+  return btoa(JSON.stringify(tables)).slice(0, 32)
+}
+
+/** Strip dangerous field names from a row object. */
+function sanitizeRow(row: Record<string, unknown>): Record<string, unknown> {
+  const clean: Record<string, unknown> = Object.create(null)
+  for (const [key, value] of Object.entries(row)) {
+    if (!DANGEROUS_FIELDS.has(key)) {
+      clean[key] = value
+    }
+  }
+  return clean
 }
 
 // ---------------------------------------------------------------------------
@@ -96,6 +126,7 @@ async function createSnapshot(
     appName: app.appName,
     timestamp: new Date().toISOString(),
     tables,
+    signature: computeSignature(tables),
   }
 }
 
@@ -161,7 +192,8 @@ export async function restoreBackup(
     return 'Invalid JSON — could not parse backup file.'
   }
 
-  if (!backup.odsBackup && !backup.tables) {
+  // Validate backup structure.
+  if (!backup.odsBackup) {
     return 'This does not appear to be a valid ODS backup file.'
   }
 
@@ -169,9 +201,37 @@ export async function restoreBackup(
     return 'Backup file has no tables data.'
   }
 
+  // Verify integrity signature if present.
+  if (backup.signature) {
+    const expected = computeSignature(backup.tables)
+    if (backup.signature !== expected) {
+      return 'Backup integrity check failed — file may have been tampered with.'
+    }
+  }
+
+  // Validate table names and row counts.
+  let totalRows = 0
+  for (const [tbl, rows] of Object.entries(backup.tables)) {
+    if (!validateTableName(tbl)) {
+      return `Invalid table name in backup: "${tbl}"`
+    }
+    if (!Array.isArray(rows)) {
+      return `Table "${tbl}" has invalid row data.`
+    }
+    totalRows += rows.length
+  }
+
+  // Reject unreasonably large backups (over 100k rows).
+  if (totalRows > 100_000) {
+    return `Backup too large: ${totalRows} rows (max 100,000).`
+  }
+
   // Clear existing data and re-insert
   try {
     for (const [tbl, rows] of Object.entries(backup.tables)) {
+      // Skip dangerous table names (prototype pollution protection).
+      if (DANGEROUS_NAMES.has(tbl)) continue
+
       // Delete all existing rows
       const existing = await dataService.query(tbl)
       for (const row of existing) {
@@ -181,9 +241,9 @@ export async function restoreBackup(
         }
       }
 
-      // Insert backup rows
+      // Insert backup rows with sanitized fields.
       for (const row of rows) {
-        const insertRow = { ...row }
+        const insertRow = sanitizeRow(row)
         delete insertRow['_id']
         delete insertRow['id']
         delete insertRow['collectionId']
@@ -195,6 +255,7 @@ export async function restoreBackup(
     return `Restore failed: ${e instanceof Error ? e.message : String(e)}`
   }
 
+  console.info('[SECURITY] Backup restore:', { tableCount: Object.keys(backup.tables).length, totalRows })
   return null
 }
 

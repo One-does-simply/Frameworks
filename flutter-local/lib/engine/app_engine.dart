@@ -662,14 +662,32 @@ class AppEngine extends ChangeNotifier {
   /// Executes a row action (e.g., "Mark Done") using the row's own data to
   /// identify the record and the action's `values` map to set new values.
   /// Bypasses form state entirely — the list component drives this directly.
+  ///
+  /// When ownership is enabled on the data source and the user is not an admin,
+  /// the row's owner field must match the current user ID.
   Future<void> executeRowAction({
     required String dataSourceId,
     required String matchField,
     required String matchValue,
     required Map<String, String> values,
+    Map<String, dynamic>? rowData,
   }) async {
     final ds = _app?.dataSources[dataSourceId];
     if (ds == null || !ds.isLocal) return;
+
+    // Ownership check: verify current user owns this row before allowing update.
+    if (isMultiUser && ds.ownership.enabled && !_authService.isAdmin) {
+      final currentUserId = _authService.currentUserId?.toString();
+      final rowOwner = rowData?[ds.ownership.ownerField]?.toString();
+      if (currentUserId == null || rowOwner != currentUserId) {
+        logWarn('AppEngine', '[SECURITY] permission_denied: '
+            'user ${_authService.currentUsername} attempted row update on "$dataSourceId" '
+            'owned by $rowOwner');
+        _lastActionError = 'You do not have permission to modify this record.';
+        notifyListeners();
+        return;
+      }
+    }
 
     try {
       await _dataStore.update(ds.tableName, values, matchField, matchValue);
@@ -680,13 +698,31 @@ class AppEngine extends ChangeNotifier {
   }
 
   /// Executes a delete row action, removing the matched record from storage.
+  ///
+  /// When ownership is enabled on the data source and the user is not an admin,
+  /// the row's owner field must match the current user ID.
   Future<void> executeDeleteRowAction({
     required String dataSourceId,
     required String matchField,
     required String matchValue,
+    Map<String, dynamic>? rowData,
   }) async {
     final ds = _app?.dataSources[dataSourceId];
     if (ds == null || !ds.isLocal) return;
+
+    // Ownership check: verify current user owns this row before allowing delete.
+    if (isMultiUser && ds.ownership.enabled && !_authService.isAdmin) {
+      final currentUserId = _authService.currentUserId?.toString();
+      final rowOwner = rowData?[ds.ownership.ownerField]?.toString();
+      if (currentUserId == null || rowOwner != currentUserId) {
+        logWarn('AppEngine', '[SECURITY] permission_denied: '
+            'user ${_authService.currentUsername} attempted row delete on "$dataSourceId" '
+            'owned by $rowOwner');
+        _lastActionError = 'You do not have permission to delete this record.';
+        notifyListeners();
+        return;
+      }
+    }
 
     try {
       await _dataStore.delete(ds.tableName, matchField, matchValue);
@@ -711,6 +747,10 @@ class AppEngine extends ChangeNotifier {
     if (parentDs == null || childDs == null) return;
     if (oldValue == newValue) return;
 
+    // NOTE: Ideally this entire cascade rename should run inside a single
+    // database transaction to ensure atomicity. The DataStore currently does
+    // not expose a transaction API, so a failure mid-rename could leave data
+    // in an inconsistent state. TODO: Add transaction support to DataStore.
     try {
       // Update parent.
       await _dataStore.update(
@@ -897,6 +937,7 @@ class AppEngine extends ChangeNotifier {
   /// Restores app data from a backup map, replacing all existing data.
   /// Triggers a UI rebuild so lists refresh with the restored data.
   Future<void> restoreData(Map<String, dynamic> backup) async {
+    logInfo('AppEngine', '[SECURITY] backup_restore: initiated by ${_authService.currentUsername}');
     final tablesRaw = backup['tables'] as Map<String, dynamic>?;
     if (tablesRaw != null) {
       final tables = tablesRaw.map<String, List<Map<String, dynamic>>>(
@@ -975,7 +1016,8 @@ class AppEngine extends ChangeNotifier {
         );
       }
       return await _dataStore.query(ds.tableName);
-    } catch (_) {
+    } catch (e) {
+      logError('AppEngine', 'queryDataSource failed for "$dataSourceId": $e');
       return [];
     }
   }

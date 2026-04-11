@@ -12,6 +12,9 @@
  * Throws if the file cannot be read.
  */
 export async function loadFromFile(file: File): Promise<string> {
+  if (file.size > 10_000_000) {
+    throw new Error('File too large (max 10MB)')
+  }
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {

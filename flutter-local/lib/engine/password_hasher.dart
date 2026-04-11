@@ -2,14 +2,23 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
-/// Simple password hashing with SHA-256 + salt for the local Flutter POC.
+/// Password hashing with PBKDF2-SHA256 for the local Flutter framework.
 ///
 /// ODS Ethos: This is the local-only auth layer. Web frameworks will swap in
 /// OpenID/Supabase. The PasswordHasher class abstracts the algorithm so it
 /// can be replaced without changing callers.
 ///
-/// Uses Dart's built-in SHA-256 via dart:convert to avoid adding dependencies.
+/// Uses a pure-Dart SHA-256 implementation to avoid adding dependencies.
+/// PBKDF2 with 100,000 iterations provides strong key stretching.
+///
+/// Hash format: "v2:salt:hash" (PBKDF2-SHA256, 100k rounds)
+/// Legacy format: "salt:hash" (SHA-256, 1000 rounds) — supported for
+/// backward compatibility in verify() only.
 class PasswordHasher {
+  static const int _pbkdf2Iterations = 100000;
+  static const int _dkLen = 32; // 256-bit derived key
+  static const String _v2Prefix = 'v2';
+
   /// Generates a random 22-character base64url salt.
   static String generateSalt() {
     final random = Random.secure();
@@ -20,10 +29,42 @@ class PasswordHasher {
     return base64Url.encode(bytes);
   }
 
-  /// Hashes a password with the given salt using SHA-256.
+  /// Hashes a password using PBKDF2-SHA256 with 100,000 iterations.
+  /// Returns a string in the format "v2:salt:hash".
   static String hash(String password, String salt) {
+    final derived = _pbkdf2(password, salt, _pbkdf2Iterations, _dkLen);
+    return '$_v2Prefix:$salt:${base64Url.encode(derived)}';
+  }
+
+  /// Verifies a password against a stored hash string.
+  ///
+  /// Supports both current (v2) and legacy formats for backward compatibility:
+  ///   - "v2:salt:hash" — PBKDF2-SHA256, 100k rounds
+  ///   - "salt:hash" — legacy SHA-256, 1000 rounds (will still verify)
+  ///
+  /// When called with (password, salt, storedHash) where storedHash does NOT
+  /// contain a "v2:" prefix, falls back to legacy verification.
+  static bool verify(String password, String salt, String storedHash) {
+    if (storedHash.startsWith('$_v2Prefix:')) {
+      // New v2 format: "v2:salt:hash" — salt and hash are embedded.
+      final parts = storedHash.split(':');
+      if (parts.length != 3) return false;
+      final embeddedSalt = parts[1];
+      final embeddedHash = parts[2];
+      final derived = _pbkdf2(password, embeddedSalt, _pbkdf2Iterations, _dkLen);
+      final candidateHash = base64Url.encode(derived);
+      return _constantTimeEquals(candidateHash, embeddedHash);
+    } else {
+      // Legacy format: plain "hash" string (salt passed separately).
+      final candidateHash = _legacyHash(password, salt);
+      return _constantTimeEquals(candidateHash, storedHash);
+    }
+  }
+
+  /// Legacy hash for backward compatibility with existing stored passwords.
+  /// SHA-256 with 1000 rounds (the old algorithm).
+  static String _legacyHash(String password, String salt) {
     final input = utf8.encode('$salt:$password');
-    // Use multiple rounds for basic key stretching.
     var digest = _sha256(input);
     for (int i = 0; i < 999; i++) {
       digest = _sha256([...digest, ...input]);
@@ -31,9 +72,74 @@ class PasswordHasher {
     return base64Url.encode(digest);
   }
 
-  /// Verifies a password against a stored hash and salt.
-  static bool verify(String password, String salt, String storedHash) {
-    return hash(password, salt) == storedHash;
+  /// Constant-time string comparison to prevent timing attacks.
+  /// Always compares all bytes regardless of where a mismatch occurs.
+  static bool _constantTimeEquals(String a, String b) {
+    final aBytes = utf8.encode(a);
+    final bBytes = utf8.encode(b);
+    if (aBytes.length != bBytes.length) {
+      // Still do a full comparison to avoid leaking length info via timing.
+      int result = aBytes.length ^ bBytes.length;
+      for (int i = 0; i < aBytes.length; i++) {
+        result |= aBytes[i] ^ bBytes[i % bBytes.length];
+      }
+      return result == 0;
+    }
+    int result = 0;
+    for (int i = 0; i < aBytes.length; i++) {
+      result |= aBytes[i] ^ bBytes[i];
+    }
+    return result == 0;
+  }
+
+  /// PBKDF2 implementation using HMAC-SHA256.
+  static List<int> _pbkdf2(String password, String salt, int iterations, int dkLen) {
+    final passwordBytes = utf8.encode(password);
+    final saltBytes = utf8.encode(salt);
+    final numBlocks = (dkLen + 31) ~/ 32; // Each block is 32 bytes (SHA-256 output)
+    final dk = <int>[];
+
+    for (int blockIndex = 1; blockIndex <= numBlocks; blockIndex++) {
+      // U1 = HMAC(password, salt || INT_32_BE(blockIndex))
+      final blockBytes = [
+        (blockIndex >> 24) & 0xff,
+        (blockIndex >> 16) & 0xff,
+        (blockIndex >> 8) & 0xff,
+        blockIndex & 0xff,
+      ];
+      var u = hmacSha256(passwordBytes, [...saltBytes, ...blockBytes]);
+      final result = List<int>.from(u);
+
+      for (int i = 1; i < iterations; i++) {
+        u = hmacSha256(passwordBytes, u);
+        for (int j = 0; j < result.length; j++) {
+          result[j] ^= u[j];
+        }
+      }
+      dk.addAll(result);
+    }
+
+    return dk.sublist(0, dkLen);
+  }
+
+  /// HMAC-SHA256 implementation. Public so other modules (e.g., BackupManager)
+  /// can compute message authentication codes.
+  static List<int> hmacSha256(List<int> key, List<int> message) {
+    const blockSize = 64;
+
+    // Keys longer than block size are hashed first.
+    var k = key.length > blockSize ? _sha256(key) : List<int>.from(key);
+
+    // Pad key to block size.
+    while (k.length < blockSize) {
+      k.add(0);
+    }
+
+    final ipad = List<int>.generate(blockSize, (i) => k[i] ^ 0x36);
+    final opad = List<int>.generate(blockSize, (i) => k[i] ^ 0x5c);
+
+    final inner = _sha256([...ipad, ...message]);
+    return _sha256([...opad, ...inner]);
   }
 
   /// Pure-Dart SHA-256 implementation.

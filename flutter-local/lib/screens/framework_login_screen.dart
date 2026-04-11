@@ -44,13 +44,16 @@ class _FrameworkLoginScreenState extends State<FrameworkLoginScreen> {
     }
 
     setState(() { _error = null; _loading = true; });
-    final success = await widget.authService.login(username, password);
+    final result = await widget.authService.login(username, password);
     if (!mounted) return;
 
-    if (success) {
+    if (result.success) {
       widget.onLoginSuccess();
     } else {
-      setState(() { _error = 'Invalid username or password'; _loading = false; });
+      setState(() {
+        _error = result.error ?? 'Invalid username or password';
+        _loading = false;
+      });
     }
   }
 

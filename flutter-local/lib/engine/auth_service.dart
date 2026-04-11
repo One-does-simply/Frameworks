@@ -25,6 +25,15 @@ class AuthService extends ChangeNotifier {
   bool _isAdminSetUp = false;
   bool _isInitialized = false;
 
+  // Rate limiting: track failed login attempts per email.
+  static const int _maxFailedAttempts = 5;
+  static const Duration _lockoutWindow = Duration(minutes: 5);
+  final Map<String, List<DateTime>> _failedAttempts = {};
+
+  // Session timeout tracking.
+  DateTime? _lastActivity;
+  static const Duration _sessionTimeout = Duration(minutes: 30);
+
   AuthService(this._dataStore);
 
   /// Inject framework-level auth state so per-app auth checks (hasAccess,
@@ -93,31 +102,100 @@ class AuthService extends ChangeNotifier {
   // Authentication operations
   // ---------------------------------------------------------------------------
 
+  /// Checks whether the given username is currently rate-limited.
+  /// Returns the number of minutes remaining if locked out, or 0 if not.
+  int _checkRateLimit(String username) {
+    final key = username.toLowerCase();
+    final attempts = _failedAttempts[key];
+    if (attempts == null) return 0;
+
+    // Remove attempts outside the lockout window.
+    final cutoff = DateTime.now().subtract(_lockoutWindow);
+    attempts.removeWhere((t) => t.isBefore(cutoff));
+
+    if (attempts.length >= _maxFailedAttempts) {
+      final oldestRelevant = attempts.first;
+      final unlockTime = oldestRelevant.add(_lockoutWindow);
+      final remaining = unlockTime.difference(DateTime.now()).inMinutes + 1;
+      return remaining > 0 ? remaining : 0;
+    }
+    return 0;
+  }
+
+  /// Records a failed login attempt for rate limiting.
+  void _recordFailedAttempt(String username) {
+    final key = username.toLowerCase();
+    _failedAttempts.putIfAbsent(key, () => []).add(DateTime.now());
+  }
+
+  /// Clears failed login attempts after a successful login.
+  void _clearFailedAttempts(String username) {
+    _failedAttempts.remove(username.toLowerCase());
+  }
+
   /// Attempts to log in with the given credentials.
-  /// Returns true on success, false on failure.
-  Future<bool> login(String username, String password) async {
+  /// Returns a [LoginResult] indicating success or the reason for failure.
+  Future<LoginResult> login(String username, String password) async {
+    // Rate limit check.
+    final lockoutMinutes = _checkRateLimit(username);
+    if (lockoutMinutes > 0) {
+      logWarn('AuthService', '[SECURITY] login_rate_limited: $username');
+      return LoginResult(
+        success: false,
+        error: 'Too many failed attempts. Try again in $lockoutMinutes minute${lockoutMinutes == 1 ? '' : 's'}.',
+      );
+    }
+
     final user = await _dataStore.getUserByUsername(username);
-    if (user == null) return false;
+    if (user == null) {
+      _recordFailedAttempt(username);
+      logInfo('AuthService', '[SECURITY] login_failed: $username (user not found)');
+      return const LoginResult(success: false);
+    }
 
     final storedHash = user['password_hash'] as String;
     final salt = user['salt'] as String;
 
-    if (!PasswordHasher.verify(password, salt, storedHash)) return false;
+    if (!PasswordHasher.verify(password, salt, storedHash)) {
+      _recordFailedAttempt(username);
+      logInfo('AuthService', '[SECURITY] login_failed: $username (bad password)');
+      return const LoginResult(success: false);
+    }
 
+    _clearFailedAttempts(username);
     _currentUserId = user['_id'] as int;
     _currentUsername = user['username'] as String;
     _currentDisplayName = user['display_name'] as String?;
     _currentRoles = await _dataStore.getUserRoles(_currentUserId!);
+    _lastActivity = DateTime.now();
+    logInfo('AuthService', '[SECURITY] login_success: $username');
     notifyListeners();
-    return true;
+    return const LoginResult(success: true);
+  }
+
+  /// Checks whether the current session has timed out due to inactivity.
+  /// Returns true if the session has been idle for more than 30 minutes.
+  bool checkSessionTimeout() {
+    if (!isLoggedIn || _lastActivity == null) return false;
+    return DateTime.now().difference(_lastActivity!) > _sessionTimeout;
+  }
+
+  /// Records user activity to reset the session timeout timer.
+  /// Call this on meaningful user interactions (navigation, form submission, etc.).
+  void recordActivity() {
+    if (isLoggedIn) {
+      _lastActivity = DateTime.now();
+    }
   }
 
   /// Logs out the current user, reverting to guest state.
   void logout() {
+    logInfo('AuthService', '[SECURITY] logout: ${_currentUsername ?? 'unknown'}');
     _currentUserId = null;
     _currentUsername = null;
     _currentDisplayName = null;
     _currentRoles = [];
+    _lastActivity = null;
     notifyListeners();
   }
 
@@ -145,10 +223,12 @@ class AuthService extends ChangeNotifier {
       _currentUsername = username;
       _currentDisplayName = username;
       _currentRoles = ['admin', 'user'];
+      _lastActivity = DateTime.now();
+      logInfo('AuthService', '[SECURITY] admin_setup: $username (id=$userId)');
       notifyListeners();
       return true;
     } catch (e) {
-      logError('AuthService', 'Admin setup failed', e);
+      logError('AuthService', '[SECURITY] admin_setup_failed', e);
       return false;
     }
   }
@@ -178,10 +258,11 @@ class AuthService extends ChangeNotifier {
         await _dataStore.assignRole(userId, 'user');
       }
 
+      logInfo('AuthService', '[SECURITY] user_created: $username role=$role (id=$userId)');
       notifyListeners();
       return userId;
     } catch (e) {
-      logError('AuthService', 'Registration failed', e);
+      logError('AuthService', '[SECURITY] user_creation_failed: $username', e);
       return null;
     }
   }
@@ -213,6 +294,7 @@ class AuthService extends ChangeNotifier {
   /// Assigns a role to a user.
   Future<void> assignRole(int userId, String role) async {
     await _dataStore.assignRole(userId, role);
+    logInfo('AuthService', '[SECURITY] role_assigned: user=$userId role=$role');
     // Refresh current user's roles if they were affected.
     if (userId == _currentUserId) {
       _currentRoles = await _dataStore.getUserRoles(userId);
@@ -223,6 +305,7 @@ class AuthService extends ChangeNotifier {
   /// Removes a role from a user.
   Future<void> removeRole(int userId, String role) async {
     await _dataStore.removeRole(userId, role);
+    logInfo('AuthService', '[SECURITY] role_removed: user=$userId role=$role');
     if (userId == _currentUserId) {
       _currentRoles = await _dataStore.getUserRoles(userId);
     }
@@ -237,5 +320,15 @@ class AuthService extends ChangeNotifier {
     _currentRoles = [];
     _isAdminSetUp = false;
     _isInitialized = false;
+    _lastActivity = null;
+    _failedAttempts.clear();
   }
+}
+
+/// Result of a login attempt.
+class LoginResult {
+  final bool success;
+  final String? error;
+
+  const LoginResult({required this.success, this.error});
 }

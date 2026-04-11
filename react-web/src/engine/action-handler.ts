@@ -234,7 +234,8 @@ async function handleUpdate(
   )
 
   if (rowsAffected === 0) {
-    return { submitted: false, error: `No matching record found for ${matchField} = "${matchValue}"` }
+    console.warn('ActionHandler: No matching record found for', matchField, '=', matchValue)
+    return { submitted: false, error: 'Record not found' }
   }
 
   return {

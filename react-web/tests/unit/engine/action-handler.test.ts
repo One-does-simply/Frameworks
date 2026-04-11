@@ -223,7 +223,7 @@ describe('ActionHandler', () => {
         dataService: fake,
       });
       expect(result.error).toBeDefined();
-      expect(result.error).toContain('No matching');
+      expect(result.error).toContain('Record not found');
     });
   });
 

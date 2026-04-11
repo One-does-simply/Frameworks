@@ -236,7 +236,7 @@ void main() {
         formStates: {'myForm': {'name': 'Alice', '_id': '999'}},
       );
       expect(result.error, isNotNull);
-      expect(result.error, contains('No matching'));
+      expect(result.error, contains('Record not found'));
     });
   });
 

@@ -43,6 +43,9 @@ import {
 export function DebugPanel() {
   const [collapsed, setCollapsed] = useState(false)
 
+  // Never render the debug panel in production builds.
+  if (!import.meta.env.DEV) return null
+
   return (
     <div className="border-t bg-zinc-950 text-zinc-200">
       {/* Header bar — always visible */}

@@ -225,6 +225,18 @@ function downloadCsv(
   }
 }
 
+/** Escape a SQL identifier (table or column name) by doubling any internal double quotes. */
+function sqlIdentifier(name: string): string {
+  // Validate: only allow safe identifier characters.
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+    // Fall back to escaping double quotes within the identifier.
+    return `"${name.replace(/"/g, '""')}"`
+  }
+  return `"${name}"`
+}
+
+// NOTE: Exported SQL is for reference and data portability only — not for direct
+// use in production databases without review. Always validate before executing.
 function downloadSql(
   safeName: string,
   tables: Record<string, Record<string, unknown>[]>,
@@ -232,6 +244,7 @@ function downloadSql(
   const lines: string[] = []
   lines.push(`-- ODS Data Export: ${safeName}`)
   lines.push(`-- Exported at: ${new Date().toISOString()}`)
+  lines.push('-- WARNING: This SQL is for reference only. Review before executing in production.')
   lines.push('')
 
   for (const [tblName, rows] of Object.entries(tables)) {
@@ -248,20 +261,20 @@ function downloadSql(
     }
     const columns = Array.from(columnSet)
 
-    // CREATE TABLE
-    lines.push(`CREATE TABLE IF NOT EXISTS "${tblName}" (`)
-    lines.push(columns.map((col) => `  "${col}" TEXT`).join(',\n'))
+    // CREATE TABLE — use escaped identifiers
+    lines.push(`CREATE TABLE IF NOT EXISTS ${sqlIdentifier(tblName)} (`)
+    lines.push(columns.map((col) => `  ${sqlIdentifier(col)} TEXT`).join(',\n'))
     lines.push(');')
     lines.push('')
 
-    // INSERT statements
+    // INSERT statements — use escaped identifiers and properly escaped values
     for (const row of rows) {
       const values = columns.map((col) => {
         const val = row[col]
         if (val == null) return 'NULL'
         return `'${String(val).replace(/'/g, "''")}'`
       })
-      lines.push(`INSERT INTO "${tblName}" (${columns.map((c) => `"${c}"`).join(', ')}) VALUES (${values.join(', ')});`)
+      lines.push(`INSERT INTO ${sqlIdentifier(tblName)} (${columns.map((c) => sqlIdentifier(c)).join(', ')}) VALUES (${values.join(', ')});`)
     }
     lines.push('')
   }

@@ -21,6 +21,10 @@ export class AuthService {
   private _isSuperAdmin = false
   /** Cached list of OAuth2 providers configured in PocketBase. */
   private _oauthProviders: OAuthProvider[] = []
+  /** Rate limiting: login attempts per email. */
+  private _loginAttempts: Map<string, number[]> = new Map()
+  /** Session activity tracking. */
+  private _lastActivity: number = Date.now()
 
   constructor(pb: PocketBase) {
     this.pb = pb
@@ -69,11 +73,19 @@ export class AuthService {
     if (this._isSuperAdmin) return ['admin', 'user']
     if (this.isGuest) return ['guest']
     const roles = this.pb.authStore.record?.['roles']
-    if (Array.isArray(roles)) return roles as string[]
-    if (typeof roles === 'string') {
-      try { return JSON.parse(roles) } catch { return ['user'] }
+    let parsed: unknown[]
+    if (Array.isArray(roles)) {
+      parsed = roles
+    } else if (typeof roles === 'string') {
+      try { parsed = JSON.parse(roles) } catch { return ['user'] }
+      if (!Array.isArray(parsed)) return ['user']
+    } else {
+      return ['user']
     }
-    return ['user']
+    // Validate: only allow strings, normalize to lowercase.
+    return parsed
+      .filter((r): r is string => typeof r === 'string')
+      .map(r => r.toLowerCase())
   }
 
   get isAdmin(): boolean {
@@ -164,10 +176,28 @@ export class AuthService {
 
   /** Attempt to log in with email + password. Returns true on success. */
   async login(email: string, password: string): Promise<boolean> {
+    // Rate limiting: max 5 attempts per email in 5 minutes.
+    const now = Date.now()
+    const fiveMinutes = 5 * 60 * 1000
+    const key = email.toLowerCase()
+    const attempts = (this._loginAttempts.get(key) ?? []).filter(t => now - t < fiveMinutes)
+
+    if (attempts.length >= 5) {
+      console.info('[SECURITY] Rate limit triggered:', key)
+      throw new Error('Too many attempts. Try again later.')
+    }
+
     try {
       await this.pb.collection('users').authWithPassword(email, password)
+      // Clear attempts on success.
+      this._loginAttempts.delete(key)
+      console.info('[SECURITY] Login success:', key)
       return true
     } catch {
+      // Record failed attempt.
+      attempts.push(now)
+      this._loginAttempts.set(key, attempts)
+      console.info('[SECURITY] Login failure:', key)
       return false
     }
   }
@@ -189,11 +219,11 @@ export class AuthService {
         return
       }
 
-      // Save provider state for the callback
-      localStorage.setItem('ods_oauth2_provider', providerName)
-      localStorage.setItem('ods_oauth2_state', provider.state as string)
-      localStorage.setItem('ods_oauth2_codeVerifier', provider.codeVerifier as string)
-      localStorage.setItem('ods_oauth2_returnUrl', window.location.href)
+      // Save provider state for the callback (sessionStorage for security)
+      sessionStorage.setItem('ods_oauth2_provider', providerName)
+      sessionStorage.setItem('ods_oauth2_state', provider.state as string)
+      sessionStorage.setItem('ods_oauth2_codeVerifier', provider.codeVerifier as string)
+      sessionStorage.setItem('ods_oauth2_returnUrl', window.location.href)
 
       // Redirect to provider — use our app's callback URL (not PB's built-in one)
       const redirectUrl = `${window.location.origin}/oauth2-callback`
@@ -212,9 +242,9 @@ export class AuthService {
    */
   async completeOAuth2(code: string, state: string): Promise<boolean> {
     try {
-      const savedProvider = localStorage.getItem('ods_oauth2_provider') ?? ''
-      const savedState = localStorage.getItem('ods_oauth2_state') ?? ''
-      const codeVerifier = localStorage.getItem('ods_oauth2_codeVerifier') ?? ''
+      const savedProvider = sessionStorage.getItem('ods_oauth2_provider') ?? ''
+      const savedState = sessionStorage.getItem('ods_oauth2_state') ?? ''
+      const codeVerifier = sessionStorage.getItem('ods_oauth2_codeVerifier') ?? ''
 
       if (state !== savedState) {
         warn('AuthService', 'OAuth2 state mismatch')
@@ -242,10 +272,10 @@ export class AuthService {
         await this.pb.collection('users').authRefresh()
       }
 
-      // Clean up localStorage
-      localStorage.removeItem('ods_oauth2_provider')
-      localStorage.removeItem('ods_oauth2_state')
-      localStorage.removeItem('ods_oauth2_codeVerifier')
+      // Clean up sessionStorage
+      sessionStorage.removeItem('ods_oauth2_provider')
+      sessionStorage.removeItem('ods_oauth2_state')
+      sessionStorage.removeItem('ods_oauth2_codeVerifier')
 
       return true
     } catch (e) {
@@ -254,11 +284,32 @@ export class AuthService {
     }
   }
 
-  /** Get the saved return URL after OAuth2 callback. */
+  /** Get the saved return URL after OAuth2 callback. Validates same-origin. */
   static getOAuth2ReturnUrl(): string | null {
-    const url = localStorage.getItem('ods_oauth2_returnUrl')
-    localStorage.removeItem('ods_oauth2_returnUrl')
+    const url = sessionStorage.getItem('ods_oauth2_returnUrl')
+    sessionStorage.removeItem('ods_oauth2_returnUrl')
+    if (!url) return null
+    // Validate that the return URL has the same origin before redirecting.
+    try {
+      if (new URL(url).origin !== window.location.origin) {
+        console.info('[SECURITY] OAuth2 return URL origin mismatch, ignoring:', url)
+        return null
+      }
+    } catch {
+      return null
+    }
     return url
+  }
+
+  /** Record user activity for session timeout tracking. */
+  recordActivity(): void {
+    this._lastActivity = Date.now()
+  }
+
+  /** Returns true if the session has been idle for more than 30 minutes. */
+  isSessionExpired(): boolean {
+    const thirtyMinutes = 30 * 60 * 1000
+    return Date.now() - this._lastActivity > thirtyMinutes
   }
 
   /** Log out the current user. */
@@ -294,9 +345,11 @@ export class AuthService {
       // Auto-login as the new admin
       await this.pb.collection('users').authWithPassword(email, password)
       this._isAdminSetUp = true
+      console.info('[SECURITY] Admin setup success:', email)
       return true
     } catch (e) {
       error('AuthService', 'Admin setup failed', e)
+      console.info('[SECURITY] Admin setup failure:', email)
       return false
     }
   }
@@ -334,9 +387,11 @@ export class AuthService {
         roles: JSON.stringify(roles),
       })
 
+      console.info('[SECURITY] User registration success:', params.email)
       return record.id
     } catch (e) {
       error('AuthService', 'Registration failed', e)
+      console.info('[SECURITY] User registration failure:', params.email)
       return null
     }
   }
@@ -424,6 +479,8 @@ export class AuthService {
     this._isInitialized = false
     this._isSuperAdmin = false
     this._oauthProviders = []
+    this._loginAttempts.clear()
+    this._lastActivity = Date.now()
   }
 }
 

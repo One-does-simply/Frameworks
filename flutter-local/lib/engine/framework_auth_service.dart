@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'auth_service.dart' show LoginResult;
 import 'log_service.dart';
 import 'password_hasher.dart';
 import 'settings_store.dart';
@@ -21,6 +22,15 @@ class FrameworkAuthService extends ChangeNotifier {
   String? _currentUsername;
   String? _currentDisplayName;
   List<String> _currentRoles = [];
+
+  // Rate limiting: track failed login attempts per email.
+  static const int _maxFailedAttempts = 5;
+  static const Duration _lockoutWindow = Duration(minutes: 5);
+  final Map<String, List<DateTime>> _failedAttempts = {};
+
+  // Session timeout tracking.
+  DateTime? _lastActivity;
+  static const Duration _sessionTimeout = Duration(minutes: 30);
 
   // Getters
   bool get isInitialized => _isInitialized;
@@ -103,29 +113,84 @@ class FrameworkAuthService extends ChangeNotifier {
       _currentUsername = username;
       _currentDisplayName = displayName ?? username;
       _currentRoles = ['admin', 'user'];
+      _lastActivity = DateTime.now();
+      logInfo('FrameworkAuthService', '[SECURITY] admin_setup: $username (id=$id)');
       notifyListeners();
       return true;
     } catch (e) {
-      logError('FrameworkAuthService', 'setupAdmin failed', e);
+      logError('FrameworkAuthService', '[SECURITY] admin_setup_failed', e);
       return false;
     }
   }
 
-  /// Log in with username and password. Returns true on success.
-  Future<bool> login(String username, String password) async {
+  /// Checks whether the given username is currently rate-limited.
+  int _checkRateLimit(String username) {
+    final key = username.toLowerCase();
+    final attempts = _failedAttempts[key];
+    if (attempts == null) return 0;
+    final cutoff = DateTime.now().subtract(_lockoutWindow);
+    attempts.removeWhere((t) => t.isBefore(cutoff));
+    if (attempts.length >= _maxFailedAttempts) {
+      final unlockTime = attempts.first.add(_lockoutWindow);
+      final remaining = unlockTime.difference(DateTime.now()).inMinutes + 1;
+      return remaining > 0 ? remaining : 0;
+    }
+    return 0;
+  }
+
+  void _recordFailedAttempt(String username) {
+    _failedAttempts.putIfAbsent(username.toLowerCase(), () => []).add(DateTime.now());
+  }
+
+  void _clearFailedAttempts(String username) {
+    _failedAttempts.remove(username.toLowerCase());
+  }
+
+  /// Checks whether the current session has timed out due to inactivity.
+  bool checkSessionTimeout() {
+    if (!isLoggedIn || _lastActivity == null) return false;
+    return DateTime.now().difference(_lastActivity!) > _sessionTimeout;
+  }
+
+  /// Records user activity to reset the session timeout timer.
+  void recordActivity() {
+    if (isLoggedIn) {
+      _lastActivity = DateTime.now();
+    }
+  }
+
+  /// Log in with username and password. Returns a [LoginResult].
+  Future<LoginResult> login(String username, String password) async {
+    // Rate limit check.
+    final lockoutMinutes = _checkRateLimit(username);
+    if (lockoutMinutes > 0) {
+      logWarn('FrameworkAuthService', '[SECURITY] login_rate_limited: $username');
+      return LoginResult(
+        success: false,
+        error: 'Too many failed attempts. Try again in $lockoutMinutes minute${lockoutMinutes == 1 ? '' : 's'}.',
+      );
+    }
+
     final db = _db!;
     final rows = await db.query(
       '_ods_fw_users',
       where: 'username = ?',
       whereArgs: [username],
     );
-    if (rows.isEmpty) return false;
+    if (rows.isEmpty) {
+      _recordFailedAttempt(username);
+      logInfo('FrameworkAuthService', '[SECURITY] login_failed: $username (user not found)');
+      return const LoginResult(success: false);
+    }
 
     final user = rows.first;
     if (!PasswordHasher.verify(password, user['salt'] as String, user['password_hash'] as String)) {
-      return false;
+      _recordFailedAttempt(username);
+      logInfo('FrameworkAuthService', '[SECURITY] login_failed: $username (bad password)');
+      return const LoginResult(success: false);
     }
 
+    _clearFailedAttempts(username);
     final userId = user['_id'] as int;
     final roleRows = await db.query(
       '_ods_fw_user_roles',
@@ -137,16 +202,20 @@ class FrameworkAuthService extends ChangeNotifier {
     _currentUsername = user['username'] as String;
     _currentDisplayName = user['display_name'] as String? ?? _currentUsername;
     _currentRoles = roleRows.map((r) => r['role'] as String).toList();
+    _lastActivity = DateTime.now();
+    logInfo('FrameworkAuthService', '[SECURITY] login_success: $username');
     notifyListeners();
-    return true;
+    return const LoginResult(success: true);
   }
 
   /// Log out the current user.
   void logout() {
+    logInfo('FrameworkAuthService', '[SECURITY] logout: ${_currentUsername ?? 'unknown'}');
     _currentUserId = null;
     _currentUsername = null;
     _currentDisplayName = null;
     _currentRoles = [];
+    _lastActivity = null;
     notifyListeners();
   }
 
@@ -173,9 +242,10 @@ class FrameworkAuthService extends ChangeNotifier {
       if (role != 'user' && role != 'guest') {
         await db.insert('_ods_fw_user_roles', {'user_id': id, 'role': 'user'});
       }
+      logInfo('FrameworkAuthService', '[SECURITY] user_created: $username role=$role (id=$id)');
       return id;
     } catch (e) {
-      logError('FrameworkAuthService', 'registerUser failed', e);
+      logError('FrameworkAuthService', '[SECURITY] user_creation_failed: $username', e);
       return null;
     }
   }
@@ -225,6 +295,7 @@ class FrameworkAuthService extends ChangeNotifier {
         for (final role in roles) {
           await db.insert('_ods_fw_user_roles', {'user_id': userId, 'role': role});
         }
+        logInfo('FrameworkAuthService', '[SECURITY] roles_changed: user=$userId roles=$roles');
       }
       return true;
     } catch (e) {

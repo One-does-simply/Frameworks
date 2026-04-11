@@ -190,7 +190,8 @@ class ActionHandler {
     );
 
     if (rowsAffected == 0) {
-      return ActionResult(error: 'No matching record found for $matchField = "$matchValue"');
+      logDebug('ActionHandler', 'Update found no match: $matchField = "$matchValue"');
+      return const ActionResult(error: 'Record not found');
     }
 
     return ActionResult(

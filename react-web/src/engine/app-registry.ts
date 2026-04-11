@@ -142,9 +142,15 @@ export class AppRegistry {
       if (attempt > 100) throw new Error('Could not generate unique slug')
     }
 
+    // Validate spec size before parsing.
+    if (specJson.length > 2_000_000) {
+      throw new Error(`Spec too large (${(specJson.length / 1_000_000).toFixed(1)}MB). Maximum is 2MB.`)
+    }
+
     try {
       // PocketBase json fields expect a parsed object, not a string.
       const specObj = JSON.parse(specJson)
+      console.info('[SECURITY] Spec upload:', { name, size: specJson.length })
       const record = await this.pb.collection(COLLECTION_NAME).create({
         name,
         slug,

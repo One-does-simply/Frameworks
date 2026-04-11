@@ -112,7 +112,9 @@ class LogService {
       try {
         final data = jsonDecode(await _settingsFile!.readAsString());
         _settings = LogSettings.fromJson(data as Map<String, dynamic>);
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('LogService: failed to load settings: $e');
+      }
     }
 
     // Load stored logs
@@ -123,7 +125,8 @@ class LogService {
             .cast<Map<String, dynamic>>()
             .map(LogEntry.fromJson)
             .toList();
-      } catch (_) {
+      } catch (e) {
+        debugPrint('LogService: failed to load stored logs: $e');
         _stored = [];
       }
     }
@@ -199,7 +202,9 @@ class LogService {
       await _logFile!.writeAsString(
         jsonEncode(_stored.map((e) => e.toJson()).toList()),
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('LogService: failed to flush logs to storage: $e');
+    }
   }
 
   void _pruneOldEntries() {

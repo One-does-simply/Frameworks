@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -49,6 +50,11 @@ class _DebugPanelState extends State<DebugPanel>
     // Watch the engine so the panel updates when navigation or form state
     // changes (e.g., after a submit clears form data).
     final engine = context.watch<AppEngine>();
+
+    // Security: only show debug panel in debug mode or for admin users.
+    if (!kDebugMode && !engine.authService.isAdmin) {
+      return const SizedBox.shrink();
+    }
 
     return Container(
       color: Colors.grey.shade900,

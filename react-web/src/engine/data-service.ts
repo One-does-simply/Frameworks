@@ -4,6 +4,23 @@ import type { OdsDataSource } from '../models/ods-data-source.ts'
 import { isLocal, tableName } from '../models/ods-data-source.ts'
 import { debug, info, warn, error } from './log-service.ts'
 
+// ---------------------------------------------------------------------------
+// Field name validation — prevents filter injection and prototype pollution
+// ---------------------------------------------------------------------------
+
+const VALID_FIELD_NAME = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+const RESERVED_NAMES = new Set(['__proto__', 'constructor', 'prototype'])
+
+/** Validates that a field/table name is safe. Throws on invalid input. */
+function validateFieldName(name: string): void {
+  if (!VALID_FIELD_NAME.test(name)) {
+    throw new Error(`Invalid field name: "${name}" — must match /^[a-zA-Z_][a-zA-Z0-9_]*$/`)
+  }
+  if (RESERVED_NAMES.has(name)) {
+    throw new Error(`Reserved field name: "${name}"`)
+  }
+}
+
 /**
  * PocketBase-backed data service for ODS apps.
  *
@@ -46,9 +63,11 @@ export class DataService {
       await this.pb.collection('_superusers').authWithPassword(email, password)
       this._isAdminAuthenticated = true
       info('DataService', 'PocketBase admin authenticated')
+      console.info('[SECURITY] Admin auth success:', email)
       return true
     } catch (e) {
       warn('DataService', `PocketBase admin auth failed: ${e}`)
+      console.info('[SECURITY] Admin auth failure:', email)
       return false
     }
   }
@@ -67,6 +86,7 @@ export class DataService {
     if (collectionName === '_superusers' || collectionName === '_admins') {
       this._isAdminAuthenticated = true
       info('DataService', 'PocketBase superadmin session detected from auth store')
+      console.info('[SECURITY] Admin auth restore: superadmin session detected')
       return true
     }
 
@@ -84,6 +104,7 @@ export class DataService {
 
   /** Returns the prefixed collection name for isolation between apps. */
   collectionName(table: string): string {
+    validateFieldName(table)
     return `${this.appPrefix}_${table}`
   }
 
@@ -110,6 +131,11 @@ export class DataService {
       try {
         // Try to delete a broken collection first (silently ignore if not found).
         try { await this.pb.collections.delete(name) } catch { /* ignore */ }
+
+        // Validate all field names before creating the collection.
+        for (const f of fields) {
+          validateFieldName(f.name)
+        }
 
         const pbFields = fields.map(f => ({
           name: f.name,
@@ -187,6 +213,7 @@ export class DataService {
     matchField: string,
     matchValue: string,
   ): Promise<number> {
+    validateFieldName(matchField)
     const name = this.collectionName(table)
     try {
       const records = await this.pb.collection(name).getFullList({
@@ -215,6 +242,7 @@ export class DataService {
     matchField: string,
     matchValue: string,
   ): Promise<number> {
+    validateFieldName(matchField)
     const name = this.collectionName(table)
     try {
       const records = await this.pb.collection(name).getFullList({
@@ -251,6 +279,10 @@ export class DataService {
     table: string,
     filter: Record<string, string>,
   ): Promise<Record<string, unknown>[]> {
+    // Validate all filter field names before building the query.
+    for (const k of Object.keys(filter)) {
+      validateFieldName(k)
+    }
     const name = this.collectionName(table)
     const filterStr = Object.entries(filter)
       .map(([k, v]) => `${k} = "${this.escapeFilter(v)}"`)
@@ -276,6 +308,7 @@ export class DataService {
     isAdmin: boolean,
     adminOverride: boolean,
   ): Promise<Record<string, unknown>[]> {
+    validateFieldName(ownerField)
     if (!ownerId || (isAdmin && adminOverride)) {
       return this.query(table)
     }
@@ -375,6 +408,6 @@ export class DataService {
 
   /** Escape a value for use in PocketBase filter strings. */
   private escapeFilter(value: string): string {
-    return value.replace(/"/g, '\\"')
+    return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
   }
 }
