@@ -182,9 +182,15 @@ async function handleUpdate(
     if (!ds) return { submitted: false, error: 'Unknown dataSource' }
     if (!isLocal(ds)) return { submitted: false, error: 'External dataSources not supported in local mode' }
 
+    // Strip framework-managed and match fields so a crafted spec can't rewrite them.
+    const safeData = { ...(action.withData as Record<string, unknown>) }
+    delete safeData[matchField]
+    delete safeData['_id']
+    delete safeData['_createdAt']
+
     const rowsAffected = await dataService.update(
       tableName(ds),
-      action.withData as Record<string, unknown>,
+      safeData,
       matchField,
       action.target,
     )

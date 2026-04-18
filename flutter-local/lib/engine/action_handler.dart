@@ -142,9 +142,15 @@ class ActionHandler {
       if (!ds.isLocal) {
         return const ActionResult(error: 'External dataSources not supported in local mode');
       }
+      // Strip framework-managed and match fields so a crafted spec can't rewrite them.
+      final safeData = Map<String, dynamic>.from(action.withData!);
+      safeData.remove(action.matchField);
+      safeData.remove('_id');
+      safeData.remove('_createdAt');
+
       final rowsAffected = await dataStore.update(
         ds.tableName,
-        Map<String, dynamic>.from(action.withData!),
+        safeData,
         action.matchField!,
         action.target!,
       );
