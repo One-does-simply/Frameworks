@@ -99,14 +99,14 @@ Static or dynamic text content.
 ```json
 {
   "component": "text",
-  "content": "Hello, {{userName}}!",
+  "content": "Total tasks: {COUNT(tasks)}",
   "format": "markdown"
 }
 ```
 
 | Field | Default | Values |
 |-------|---------|--------|
-| `content` | — | Text with `{{field}}` interpolation |
+| `content` | — | Literal text. Supports aggregate references like `{COUNT(ds)}`, `{SUM(ds, field)}` |
 | `format` | `"plain"` | `"plain"`, `"markdown"` |
 
 ### form
@@ -478,8 +478,12 @@ User-configurable app settings:
 
 ## Formulas & Expressions
 
-- Field interpolation: `{fieldName}` in formulas, `{{fieldName}}` in text
-- Math: `{quantity} * {unitPrice}`
-- Aggregates: `{COUNT(dataSource)}`, `{SUM(dataSource.field)}`, `{AVG(dataSource.field)}`
-- Magic values: `NOW` (current date), `+7d` (relative date)
-- Ternary: `{{status}} == "done" ? "Complete" : "Pending"`
+Used in computed fields, summary values, and text content.
+
+- **Field interpolation**: `{fieldName}` resolves to the field's current value
+- **Math**: `{quantity} * {unitPrice}` — `+`, `-`, `*`, `/`, parentheses, decimals, negatives
+- **Aggregates** (use in summary/text content): `{COUNT(dataSource)}`, `{SUM(dataSource, field)}`, `{AVG(dataSource, field)}`, `{MIN(dataSource, field)}`, `{MAX(dataSource, field)}`
+- **Magic values**: `NOW` (current date), `+7d` (relative date; also `-3d`, `+1m`, etc.)
+- **Ternary**: `{status} == "done" ? "Complete" : "Pending"` — supports operators `==`, `!=`, `>`, `<`, `>=`, `<=`
+  - String comparison for `==` / `!=`; numeric for `>`, `<`, `>=`, `<=`
+- **Note**: Text component content does NOT support `{field}` interpolation directly — only aggregate references. Use a computed field for field-based display.

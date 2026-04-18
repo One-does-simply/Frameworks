@@ -270,10 +270,15 @@ class AppEngine extends ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   /// Navigates to a page, pushing the current page onto the back stack.
-  /// Silently ignores requests to navigate to unknown page IDs.
+  /// Logs a warning and ignores requests to navigate to unknown page IDs.
   /// Blocks navigation to role-restricted pages the user can't access.
   void navigateTo(String pageId) {
-    if (_app == null || !_app!.pages.containsKey(pageId)) return;
+    if (_app == null || !_app!.pages.containsKey(pageId)) {
+      if (_app != null) {
+        logWarn('AppEngine', 'Navigate to unknown page "$pageId"');
+      }
+      return;
+    }
 
     // Role-based navigation guard.
     final targetPage = _app!.pages[pageId]!;

@@ -272,7 +272,11 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
   navigateTo: (pageId: string) => {
     const { app, currentPageId, navigationStack, authService } = get()
-    if (!app || !app.pages[pageId]) return
+    if (!app) return
+    if (!app.pages[pageId]) {
+      logWarn('AppStore', `Navigate to unknown page "${pageId}"`)
+      return
+    }
 
     // Role-based navigation guard.
     const targetPage = app.pages[pageId]
@@ -481,6 +485,11 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
       if (result.message) {
         set({ lastMessage: result.message })
+      } else if (action.action === 'showMessage') {
+        // showMessage explicitly invoked — always set lastMessage (even empty string)
+        // so consumers can detect the action fired. Default to '' when the result
+        // carries no message.
+        set({ lastMessage: result.message ?? '' })
       }
 
       // Bump record generation so data-bound components re-fetch.

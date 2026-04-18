@@ -50,6 +50,9 @@ class ActionHandler {
       case 'update':
         return await _handleUpdate(action, app, formStates);
 
+      case 'delete':
+        return await _handleDelete(action, app);
+
       case 'showMessage':
         return ActionResult(message: action.message ?? '');
 
@@ -285,6 +288,44 @@ class ActionHandler {
     );
   }
 
+  /// Handles the "delete" action: removes a row matched by [matchField].
+  ///
+  /// Spec-driven delete (distinct from [AppEngine.executeDeleteRowAction],
+  /// which is the list-row UX helper). Requires [action.dataSource],
+  /// [action.matchField], and [action.target]. Follows the same error
+  /// handling pattern as `_handleUpdate`'s withData branch.
+  Future<ActionResult> _handleDelete(OdsAction action, OdsApp app) async {
+    if (action.dataSource == null ||
+        action.matchField == null ||
+        action.target == null) {
+      return const ActionResult(
+        error: 'Delete action missing dataSource, matchField, or target',
+      );
+    }
+
+    final ds = app.dataSources[action.dataSource];
+    if (ds == null) {
+      return const ActionResult(error: 'Unknown dataSource');
+    }
+    if (!ds.isLocal) {
+      return const ActionResult(
+        error: 'External dataSources not supported in local mode',
+      );
+    }
+
+    final rowsAffected = await dataStore.delete(
+      ds.tableName,
+      action.matchField!,
+      action.target!,
+    );
+    if (rowsAffected == 0) {
+      logDebug('ActionHandler',
+          'Delete found no match: ${action.matchField} = "${action.target}"');
+      return const ActionResult(error: 'Record not found');
+    }
+    return const ActionResult(submitted: true);
+  }
+
   /// Evaluates computed fields from an action and merges them into the data
   /// map. Also adds field definitions for computed columns so the table schema
   /// includes them.
@@ -348,6 +389,29 @@ class ActionHandler {
       if (field.required && value.isEmpty) {
         errors.add('Required: ${field.label ?? field.name}');
         continue;
+      }
+
+      // Type-level checks that apply even without an explicit `validation`
+      // block. `required` is handled above; empty values skip type checks.
+      if (value.isNotEmpty) {
+        // Gap G1: number fields must be parseable as a double.
+        if (field.type == 'number' && double.tryParse(value) == null) {
+          errors.add('${field.label ?? field.name}: Must be a number');
+          continue;
+        }
+
+        // Bug #11: select fields with an explicit static options list must
+        // receive a value that appears in that list (enum enforcement).
+        if (field.type == 'select' &&
+            field.options != null &&
+            field.options!.isNotEmpty &&
+            !field.options!.contains(value)) {
+          errors.add(
+            '${field.label ?? field.name}: '
+            'Value must be one of: ${field.options!.join(', ')}',
+          );
+          continue;
+        }
       }
 
       // Check validation rules.

@@ -11,12 +11,20 @@ class ExpressionEvaluator {
   static final _fieldPattern = RegExp(r'\{(\w+)\}');
 
   /// Pattern for ternary comparison expressions.
-  /// Matches: `<left> == <right> ? '<trueVal>' : '<falseVal>'`
+  /// Matches: `<left> <op> <right> ? '<trueVal>' : '<falseVal>'`
   ///
   /// Uses possessive-style bounded groups to avoid catastrophic backtracking:
   /// left/right are non-whitespace tokens (no greedy `.+?` over arbitrary input).
+  ///
+  /// Left/right operands use `\S*` (not `\S+`) so that resolved field values
+  /// that are empty (e.g., an unset `{field}` substituted to "") still match
+  /// and evaluate correctly — Bug #9.
+  ///
+  /// Supports operators `==`, `!=`, `>`, `<`, `>=`, `<=`. Equality operators
+  /// compare as strings; relational operators parse both sides as doubles
+  /// (NaN → falsy branch).
   static final _ternaryPattern = RegExp(
-    r"^(\S+)\s*==\s*(\S+)\s*\?\s*'([^']*)'\s*:\s*'([^']*)'\s*$",
+    r"^(\S*)\s*(==|!=|>=|<=|>|<)\s*(\S*)\s*\?\s*'([^']*)'\s*:\s*'([^']*)'\s*$",
   );
 
   /// Evaluates an expression given the current form field values.
@@ -42,11 +50,56 @@ class ExpressionEvaluator {
     // Check for ternary comparison pattern.
     final ternaryMatch = _ternaryPattern.firstMatch(substituted);
     if (ternaryMatch != null) {
-      final left = ternaryMatch.group(1)!.trim();
-      final right = ternaryMatch.group(2)!.trim();
-      final trueVal = ternaryMatch.group(3)!;
-      final falseVal = ternaryMatch.group(4)!;
-      return left == right ? trueVal : falseVal;
+      final leftRaw = ternaryMatch.group(1)!.trim();
+      final op = ternaryMatch.group(2)!;
+      final rightRaw = ternaryMatch.group(3)!.trim();
+      final trueVal = ternaryMatch.group(4)!;
+      final falseVal = ternaryMatch.group(5)!;
+
+      // Strip surrounding single or double quotes for string comparisons.
+      String stripQuotes(String s) {
+        if (s.length >= 2) {
+          final first = s[0];
+          final last = s[s.length - 1];
+          if ((first == "'" && last == "'") ||
+              (first == '"' && last == '"')) {
+            return s.substring(1, s.length - 1);
+          }
+        }
+        return s;
+      }
+
+      bool outcome;
+      if (op == '==' || op == '!=') {
+        final a = stripQuotes(leftRaw);
+        final b = stripQuotes(rightRaw);
+        outcome = op == '==' ? a == b : a != b;
+      } else {
+        // Relational: parse as doubles; if either side fails, falsy branch.
+        final a = double.tryParse(leftRaw);
+        final b = double.tryParse(rightRaw);
+        if (a == null || b == null || a.isNaN || b.isNaN) {
+          outcome = false;
+        } else {
+          switch (op) {
+            case '>':
+              outcome = a > b;
+              break;
+            case '<':
+              outcome = a < b;
+              break;
+            case '>=':
+              outcome = a >= b;
+              break;
+            case '<=':
+              outcome = a <= b;
+              break;
+            default:
+              outcome = false;
+          }
+        }
+      }
+      return outcome ? trueVal : falseVal;
     }
 
     // Try math evaluation if it looks numeric. Pass the *substituted* string

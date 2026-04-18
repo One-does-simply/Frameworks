@@ -303,6 +303,27 @@ function validateFields(
       continue
     }
 
+    // Type-level guards (apply to any non-empty value regardless of validation rules).
+    // Required-empty is already handled above; skip type guards for empty values
+    // so users can leave optional fields blank.
+    if (value !== '') {
+      // Number type: must parse to a finite number.
+      if (field.type === 'number') {
+        const parsed = parseFloat(value)
+        if (isNaN(parsed) || !isFinite(parsed)) {
+          errors.push(`${field.label ?? field.name}: Must be a number`)
+          continue
+        }
+      }
+      // Select type: value must be one of the options (when options is a non-empty list).
+      if (field.type === 'select' && Array.isArray(field.options) && field.options.length > 0) {
+        if (!field.options.includes(value)) {
+          errors.push(`${field.label ?? field.name}: Value must be one of: ${field.options.join(', ')}`)
+          continue
+        }
+      }
+    }
+
     // Check validation rules.
     if (field.validation && value !== '') {
       const error = validateField(field.validation, value, field.type)
