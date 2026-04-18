@@ -58,7 +58,8 @@ class AuthService extends ChangeNotifier {
   bool get isInitialized => _isInitialized;
   bool get isLoggedIn => _currentUserId != null;
   bool get isGuest => _currentUserId == null;
-  bool get isAdmin => _currentRoles.contains('admin');
+  bool get isAdmin =>
+      _currentRoles.any((r) => r.toLowerCase() == 'admin');
   bool get isAdminSetUp => _isAdminSetUp;
 
   String? get currentUserId => _currentUserId;
@@ -82,7 +83,8 @@ class AuthService extends ChangeNotifier {
   bool hasAccess(List<String>? requiredRoles) {
     if (requiredRoles == null || requiredRoles.isEmpty) return true;
     if (isAdmin) return true;
-    return currentRoles.any((r) => requiredRoles.contains(r));
+    final normalized = requiredRoles.map((r) => r.toLowerCase()).toList();
+    return currentRoles.any((r) => normalized.contains(r.toLowerCase()));
   }
 
   // ---------------------------------------------------------------------------

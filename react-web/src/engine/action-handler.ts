@@ -198,7 +198,12 @@ async function handleUpdate(
       console.warn('ActionHandler: No matching record found for', matchField, '=', action.target)
       return { submitted: false, error: 'Record not found' }
     }
-    return { submitted: true }
+    return {
+      submitted: true,
+      cascade: action.cascade,
+      cascadeMatchField: matchField,
+      cascadeOldValue: action.target,
+    }
   }
 
   const formId = action.target

@@ -119,8 +119,8 @@ class ActionHandler {
       storedData[ds.ownership.ownerField] = ownerId;
     }
 
-    await dataStore.insert(ds.tableName, storedData);
-    return const ActionResult(submitted: true);
+    final insertedId = await dataStore.insert(ds.tableName, storedData);
+    return ActionResult(submitted: true, insertedId: insertedId);
   }
 
   /// Handles the "update" action: validates required fields, finds the
@@ -148,6 +148,33 @@ class ActionHandler {
       safeData.remove('_id');
       safeData.remove('_createdAt');
 
+      // For cascade: read the current (old) value of the parent field BEFORE
+      // applying the update. The parent field is the sole key of withData
+      // (after stripping match/framework keys). If there are multiple keys,
+      // fall back to the matchField.
+      String? cascadeParentField;
+      String? cascadeOldValue;
+      if (action.cascade != null && action.cascade!.isNotEmpty) {
+        cascadeParentField = safeData.length == 1
+            ? safeData.keys.first
+            : action.matchField;
+        if (cascadeParentField != null) {
+          try {
+            final existingRows = await dataStore.queryWithFilter(
+              ds.tableName,
+              {action.matchField!: action.target!},
+            );
+            if (existingRows.isNotEmpty) {
+              cascadeOldValue =
+                  existingRows.first[cascadeParentField]?.toString();
+            }
+          } catch (e) {
+            logDebug('ActionHandler',
+                'Cascade old-value lookup failed: $e');
+          }
+        }
+      }
+
       final rowsAffected = await dataStore.update(
         ds.tableName,
         safeData,
@@ -158,7 +185,12 @@ class ActionHandler {
         logDebug('ActionHandler', 'withData update found no match: ${action.matchField} = "${action.target}"');
         return const ActionResult(error: 'Record not found');
       }
-      return const ActionResult(submitted: true);
+      return ActionResult(
+        submitted: true,
+        cascade: action.cascade,
+        cascadeMatchField: cascadeParentField,
+        cascadeOldValue: cascadeOldValue,
+      );
     }
 
     final formId = action.target;
@@ -213,6 +245,26 @@ class ActionHandler {
       await dataStore.ensureTable(ds.tableName, storedFields);
     }
 
+    // For cascade: capture the current (old) parent field value from the row
+    // BEFORE applying the update, so cascade can find/rewrite children even
+    // when the rename is form-driven (e.g., form state holds the new value).
+    String? cascadeOldValueFromRow;
+    if (action.cascade != null && action.cascade!.isNotEmpty) {
+      try {
+        final existingRows = await dataStore.queryWithFilter(
+          ds.tableName,
+          {matchField: matchValue},
+        );
+        if (existingRows.isNotEmpty) {
+          cascadeOldValueFromRow =
+              existingRows.first[matchField]?.toString();
+        }
+      } catch (e) {
+        logDebug('ActionHandler',
+            'Cascade old-value lookup failed: $e');
+      }
+    }
+
     final rowsAffected = await dataStore.update(
       ds.tableName,
       storedData,
@@ -229,7 +281,7 @@ class ActionHandler {
       submitted: true,
       cascade: action.cascade,
       cascadeMatchField: matchField,
-      cascadeOldValue: matchValue,
+      cascadeOldValue: cascadeOldValueFromRow ?? matchValue,
     );
   }
 
@@ -367,6 +419,11 @@ class ActionResult {
   final String? cascadeMatchField;
   final String? cascadeOldValue;
 
+  /// The `_id` of the row inserted by a successful submit. Consumed by the
+  /// engine to resolve `{_id}` placeholders in subsequent chained actions
+  /// (e.g., `populateData: {id: '{_id}'}`).
+  final String? insertedId;
+
   const ActionResult({
     this.navigateTo,
     this.submitted = false,
@@ -377,5 +434,6 @@ class ActionResult {
     this.cascade,
     this.cascadeMatchField,
     this.cascadeOldValue,
+    this.insertedId,
   });
 }

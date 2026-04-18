@@ -75,7 +75,10 @@ void main() {
       expect(a.onEnd!.target, 'resultsPage');
     });
 
-    test('action with filter and cascade maps', () {
+    test('action with filter and cascade maps (legacy flat-key converted)',
+        () {
+      // Legacy flat-key cascade form is converted to the React-aligned
+      // nested form {childDsId: fieldName} for forward compatibility.
       final a = OdsAction.fromJson({
         'action': 'firstRecord',
         'target': 'quizForm',
@@ -86,10 +89,19 @@ void main() {
         },
       });
       expect(a.filter, {'listId': '{selectedList}'});
-      expect(a.cascade, {
-        'childDataSource': 'childItems',
-        'childLinkField': 'parentName',
+      expect(a.cascade, {'childItems': 'parentName'});
+    });
+
+    test('action with React-style nested cascade map', () {
+      final a = OdsAction.fromJson({
+        'action': 'update',
+        'target': 'c1',
+        'cascade': {
+          'tasks': 'category',
+          'notes': 'cat',
+        },
       });
+      expect(a.cascade, {'tasks': 'category', 'notes': 'cat'});
     });
 
     test('action with preserveFields', () {

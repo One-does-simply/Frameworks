@@ -371,6 +371,11 @@ class AppEngine extends ChangeNotifier {
     final formSnapshot = _formStates.map(
       (k, v) => MapEntry(k, Map<String, String>.from(v)),
     );
+
+    // Tracks the _id of the most recently inserted row (from a submit) so
+    // later actions in the same chain can reference it via {_id} placeholders.
+    String? lastInsertedId;
+
     for (final action in actions) {
       // Per-action confirmation: show a dialog before executing.
       if (action.confirm != null && confirmFn != null) {
@@ -389,12 +394,24 @@ class AppEngine extends ChangeNotifier {
         continue;
       }
 
-      final result = await _actionHandler.execute(
-        action: action,
-        app: _app!,
-        formStates: formSnapshot,
-        ownerId: isMultiUser ? _authService.currentUserId?.toString() : null,
-      );
+      // Wrap the action handler in try/catch so thrown exceptions do not
+      // escape executeActions. Graceful degradation: log, set the error,
+      // and break the chain.
+      ActionResult result;
+      try {
+        result = await _actionHandler.execute(
+          action: action,
+          app: _app!,
+          formStates: formSnapshot,
+          ownerId: isMultiUser ? _authService.currentUserId?.toString() : null,
+        );
+      } catch (e, st) {
+        logError('AppEngine', 'Action threw exception', e);
+        logDebug('AppEngine', st.toString());
+        _lastActionError = e.toString();
+        notifyListeners();
+        return; // Stop executing further actions in the chain.
+      }
 
       if (result.error != null) {
         logError('AppEngine', 'Action error', result.error);
@@ -406,6 +423,12 @@ class AppEngine extends ChangeNotifier {
       if (result.message != null) {
         _lastMessage = result.message;
         notifyListeners();
+      }
+
+      // Capture the inserted row's _id on successful submit so later actions
+      // in the chain can use {_id} placeholders to reference it.
+      if (result.submitted && result.insertedId != null) {
+        lastInsertedId = result.insertedId;
       }
 
       // Clear the form after a successful submit so fields reset.
@@ -431,32 +454,29 @@ class AppEngine extends ChangeNotifier {
       }
 
       // Handle cascade rename: update linked children when a parent field changes.
-      if (result.cascade != null) {
-        final childDsId = result.cascade!['childDataSource'];
-        final childField = result.cascade!['childLinkField'];
-        final parentField = result.cascade!['parentField'];
-        final newValue = formSnapshot[action.target]?[parentField];
-        if (childDsId != null && childField != null &&
-            parentField != null && newValue != null) {
-          // Find the old value from other form states (e.g., listContextForm
-          // still holds the pre-rename name from when the user navigated).
-          String? oldValue;
-          for (final entry in formSnapshot.entries) {
-            if (entry.key == action.target) continue;
-            final v = entry.value[parentField];
-            if (v != null && v != newValue) {
-              oldValue = v;
-              break;
-            }
-          }
-          if (oldValue != null && oldValue != newValue) {
-            await cascadeRename(
-              parentDataSourceId: action.dataSource!,
-              parentMatchField: parentField,
-              oldValue: oldValue,
-              newValue: newValue,
+      // New map shape (React-aligned): cascade = {childDsId: fieldName, ...}
+      if (result.cascade != null && result.cascade!.isNotEmpty) {
+        final parentField = result.cascadeMatchField;
+        final oldValue = result.cascadeOldValue;
+        // The new value is what the update wrote — read it from either the
+        // action's withData (direct update path) or the form state (form path).
+        String? newValue;
+        if (action.withData != null && parentField != null &&
+            action.withData!.containsKey(parentField)) {
+          newValue = action.withData![parentField]?.toString();
+        }
+        newValue ??= formSnapshot[action.target]?[parentField];
+
+        if (parentField != null && oldValue != null && newValue != null &&
+            oldValue != newValue) {
+          for (final entry in result.cascade!.entries) {
+            final childDsId = entry.key;
+            final childField = entry.value;
+            await _cascadeChildOnly(
               childDataSourceId: childDsId,
               childLinkField: childField,
+              oldValue: oldValue,
+              newValue: newValue,
             );
           }
         }
@@ -472,10 +492,14 @@ class AppEngine extends ChangeNotifier {
         for (final entry in result.populateData!.entries) {
           var value = entry.value?.toString() ?? '';
           // Resolve {fieldName} references from form state snapshot.
+          // Also resolve {_id} to the most recently inserted row's id.
           value = value.replaceAllMapped(
             RegExp(r'\{(\w+)\}'),
             (m) {
               final ref = m.group(1)!;
+              if (ref == '_id' && lastInsertedId != null) {
+                return lastInsertedId!;
+              }
               for (final fs in formSnapshot.values) {
                 if (fs.containsKey(ref)) return fs[ref]!;
               }
@@ -485,6 +509,59 @@ class AppEngine extends ChangeNotifier {
           state[entry.key] = value;
         }
       }
+
+      // Universal onEnd: after any successful NON-record action completes,
+      // fire onEnd as a follow-up action. Record actions chain onEnd via
+      // their own helper (above) — keep that working by skipping here.
+      if (action.onEnd != null && !action.isRecordAction) {
+        // Preserve the current message so the nested executeActions reset
+        // doesn't erase the primary action's message if the nested chain
+        // doesn't produce its own.
+        final preservedMessage = _lastMessage;
+        await executeActions([action.onEnd!], confirmFn: confirmFn);
+        // If the nested chain produced its own message/error, keep that.
+        // Otherwise, restore the primary action's message.
+        if (_lastMessage == null && preservedMessage != null) {
+          _lastMessage = preservedMessage;
+        }
+        // If the nested chain errored, stop the outer chain too.
+        if (_lastActionError != null) return;
+      }
+    }
+  }
+
+  /// Updates child rows whose link field equals [oldValue] to [newValue].
+  /// Used by cascade rename to sweep a single child table; the parent row is
+  /// assumed to have already been updated by the primary update action.
+  Future<void> _cascadeChildOnly({
+    required String childDataSourceId,
+    required String childLinkField,
+    required String oldValue,
+    required String newValue,
+  }) async {
+    final childDs = _app?.dataSources[childDataSourceId];
+    if (childDs == null) {
+      logWarn('AppEngine',
+          'Cascade: unknown child data source "$childDataSourceId"');
+      return;
+    }
+    if (oldValue == newValue) return;
+    try {
+      final children = await _dataStore.query(childDs.tableName);
+      for (final child in children) {
+        if (child[childLinkField]?.toString() == oldValue) {
+          final id = child['_id']?.toString() ?? '';
+          await _dataStore.update(
+            childDs.tableName,
+            {childLinkField: newValue},
+            '_id',
+            id,
+          );
+        }
+      }
+      notifyListeners();
+    } catch (e) {
+      logError('AppEngine', 'Cascade child update error', e);
     }
   }
 

@@ -109,7 +109,8 @@ export class AuthService {
     if (!requiredRoles || requiredRoles.length === 0) return true
     if (this._isSuperAdmin) return true
     if (this.isAdmin) return true
-    return this.currentRoles.some(r => requiredRoles.includes(r))
+    const normalized = requiredRoles.map(r => r.toLowerCase())
+    return this.currentRoles.some(r => normalized.includes(r))
   }
 
   // ---------------------------------------------------------------------------

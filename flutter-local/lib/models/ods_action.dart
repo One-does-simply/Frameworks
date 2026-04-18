@@ -84,8 +84,21 @@ class OdsAction {
   /// For "showMessage": the text to display in a snackbar notification.
   final String? message;
 
-  /// For "update": cascade changes to a child data source when a linked
-  /// field is renamed. Contains childDataSource and childLinkField.
+  /// For "update": cascade changes to linked child data sources when a
+  /// parent field is renamed.
+  ///
+  /// Shape (aligned with React): `{childDataSourceId: fieldName}` where each
+  /// key is the ID of a child data source and each value is the name of the
+  /// field in that child pointing to the parent. Multiple child data sources
+  /// are supported in a single cascade.
+  ///
+  /// The parent field being renamed is inferred from the update action's
+  /// `withData` (the sole key being updated) or the `matchField` for
+  /// form-submission updates.
+  ///
+  /// Backward-compat: specs using the old flat-key form
+  /// `{childDataSource, childLinkField, parentField}` are auto-converted by
+  /// [fromJson] with a warning log.
   final Map<String, String>? cascade;
 
   /// For "submit": field names to preserve after the form is cleared.
@@ -122,6 +135,7 @@ class OdsAction {
   factory OdsAction.fromJson(Map<String, dynamic> json) {
     final filterRaw = json['filter'] as Map<String, dynamic>?;
     final onEndRaw = json['onEnd'] as Map<String, dynamic>?;
+    final cascadeRaw = json['cascade'] as Map<String, dynamic>?;
 
     return OdsAction(
       action: json['action'] as String,
@@ -141,12 +155,35 @@ class OdsAction {
       filter: filterRaw?.map((k, v) => MapEntry(k, v is String ? v : v.toString())),
       onEnd: onEndRaw != null ? OdsAction.fromJson(onEndRaw) : null,
       message: json['message'] as String?,
-      cascade: (json['cascade'] as Map<String, dynamic>?)
-          ?.map((k, v) => MapEntry(k, v.toString())),
+      cascade: _parseCascade(cascadeRaw),
       preserveFields: (json['preserveFields'] as List<dynamic>?)
               ?.cast<String>() ??
           const [],
     );
+  }
+
+  /// Parses the cascade map from JSON.
+  ///
+  /// Accepts the React-style shape `{childDsId: fieldName, ...}`. Detects the
+  /// legacy flat-key form `{childDataSource, childLinkField, parentField}`
+  /// and auto-converts it to the new shape, emitting a warning.
+  static Map<String, String>? _parseCascade(Map<String, dynamic>? raw) {
+    if (raw == null) return null;
+    final flat = raw.containsKey('childDataSource') &&
+        raw.containsKey('childLinkField');
+    if (flat) {
+      // ignore: avoid_print
+      print('[WARN] OdsAction: cascade is using legacy flat-key form '
+          '(childDataSource/childLinkField/parentField). Convert to the '
+          'React-aligned nested form {childDsId: fieldName}.');
+      final childDs = raw['childDataSource']?.toString();
+      final childField = raw['childLinkField']?.toString();
+      if (childDs != null && childField != null) {
+        return {childDs: childField};
+      }
+      return null;
+    }
+    return raw.map((k, v) => MapEntry(k, v.toString()));
   }
 
   Map<String, dynamic> toJson() => {
@@ -161,6 +198,7 @@ class OdsAction {
         if (filter != null) 'filter': filter,
         if (onEnd != null) 'onEnd': onEnd!.toJson(),
         if (message != null) 'message': message,
+        if (cascade != null) 'cascade': cascade,
         if (preserveFields.isNotEmpty) 'preserveFields': preserveFields,
       };
 }

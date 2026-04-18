@@ -395,7 +395,13 @@ export const useAppStore = create<AppState>()((set, get) => ({
       formSnapshot[k] = { ...v }
     }
 
-    for (const action of actions) {
+    // Use a mutable queue so onEnd can be prepended after successful actions
+    // without recursing into executeActions (which would reset lastMessage).
+    const queue: OdsAction[] = [...actions]
+
+    while (queue.length > 0) {
+      const action = queue.shift()!
+
       // Per-action confirmation.
       if (action.confirm && confirmFn) {
         const proceed = await confirmFn(action.confirm)
@@ -406,9 +412,11 @@ export const useAppStore = create<AppState>()((set, get) => ({
       if (isRecordAction(action)) {
         const onEndAction = await handleRecordAction(get, set, action, formSnapshot)
         if (onEndAction) {
-          // The cursor hit the end — execute the onEnd action and stop this chain.
-          await get().executeActions([onEndAction])
-          return
+          // The cursor hit the end — run the onEnd action next (and stop
+          // after it completes; record-action onEnd replaces the rest of
+          // the chain, preserving existing semantics).
+          queue.length = 0
+          queue.push(onEndAction)
         }
         continue
       }
@@ -416,6 +424,39 @@ export const useAppStore = create<AppState>()((set, get) => ({
       const ownerId = app.auth.multiUser && authService
         ? authService.currentUserId
         : undefined
+
+      // If this is an update with cascade, query the target row BEFORE the
+      // update to capture the current value of the parent cascade field.
+      // This is more reliable than scanning other form states for the old
+      // value (which breaks for direct withData updates).
+      let cascadeOldValueFromRow: string | undefined
+      if (action.action === 'update' && action.cascade && action.dataSource && action.matchField) {
+        const parentField = action.cascade['parentField']
+        const ds = app.dataSources[action.dataSource]
+        if (parentField && ds && isLocal(ds)) {
+          // Resolve the matchValue: for withData form-less updates it is
+          // action.target; otherwise it is the form's matchField value.
+          let matchValue: string | undefined
+          if (action.withData && action.target) {
+            matchValue = action.target
+          } else if (action.target) {
+            matchValue = formSnapshot[action.target]?.[action.matchField]
+          }
+          if (matchValue) {
+            try {
+              const rows = await dataService.queryWithFilter(tableName(ds), {
+                [action.matchField]: matchValue,
+              })
+              if (rows.length > 0) {
+                const v = rows[0][parentField]
+                if (v != null) cascadeOldValueFromRow = String(v)
+              }
+            } catch (e) {
+              logWarn('AppStore', 'Cascade pre-query failed', e)
+            }
+          }
+        }
+      }
 
       let result: ActionResult
       try {
@@ -454,7 +495,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
 
       // Handle cascade rename.
       if (result.cascade) {
-        await handleCascade(get, result, action, formSnapshot)
+        await handleCascade(get, result, action, formSnapshot, cascadeOldValueFromRow)
       }
 
       if (result.navigateTo) {
@@ -483,6 +524,15 @@ export const useAppStore = create<AppState>()((set, get) => ({
             [result.populateForm]: newFormState,
           },
         })
+      }
+
+      // Universal onEnd: fire onEnd after any successful non-record action.
+      // Record actions have their own onEnd semantics handled above (fired
+      // when the cursor hits the end). For all other action types, onEnd
+      // runs as a follow-up chained action on success. Prepend to the queue
+      // so it runs next, before any remaining queued actions.
+      if (action.onEnd) {
+        queue.unshift(action.onEnd)
       }
     }
   },
@@ -918,6 +968,7 @@ async function handleCascade(
   result: ActionResult,
   action: OdsAction,
   formSnapshot: Record<string, Record<string, string>>,
+  preQueriedOldValue?: string,
 ): Promise<void> {
   const { dataService, app } = get()
   if (!dataService || !app || !result.cascade) return
@@ -925,18 +976,31 @@ async function handleCascade(
   const childDsId = result.cascade['childDataSource']
   const childField = result.cascade['childLinkField']
   const parentField = result.cascade['parentField']
-  const newValue = formSnapshot[action.target!]?.[parentField!]
 
-  if (!childDsId || !childField || !parentField || !newValue) return
+  if (!childDsId || !childField || !parentField) return
 
-  // Find the old value from other form states.
-  let oldValue: string | undefined
-  for (const [key, fs] of Object.entries(formSnapshot)) {
-    if (key === action.target) continue
-    const v = fs[parentField]
-    if (v && v !== newValue) {
-      oldValue = v
-      break
+  // Resolve the new value: prefer form state (for form-based updates);
+  // fall back to action.withData (for form-less direct updates).
+  let newValue: string | undefined = formSnapshot[action.target!]?.[parentField]
+  if (!newValue && action.withData && parentField in action.withData) {
+    const v = (action.withData as Record<string, unknown>)[parentField]
+    if (v != null) newValue = String(v)
+  }
+
+  if (!newValue) return
+
+  // Prefer the pre-queried old value (read from the row before update).
+  // Fall back to the legacy form-scan approach for backwards compat when
+  // the caller didn't supply it.
+  let oldValue: string | undefined = preQueriedOldValue
+  if (!oldValue) {
+    for (const [key, fs] of Object.entries(formSnapshot)) {
+      if (key === action.target) continue
+      const v = fs[parentField]
+      if (v && v !== newValue) {
+        oldValue = v
+        break
+      }
     }
   }
 
