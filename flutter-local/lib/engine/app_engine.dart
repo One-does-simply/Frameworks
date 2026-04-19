@@ -95,6 +95,7 @@ class AppEngine extends ChangeNotifier {
   /// Framework-level user info injected when [skipAppAuth] is true.
   List<String> frameworkRoles = const [];
   String frameworkUsername = '';
+  String frameworkEmail = '';
   String frameworkDisplayName = '';
 
   AppEngine() {
@@ -241,6 +242,7 @@ class AppEngine extends ChangeNotifier {
           // auth so hasAccess, isAdmin, etc. work without a second login.
           _authService.injectFrameworkAuth(
             username: frameworkUsername,
+            email: frameworkEmail,
             displayName: frameworkDisplayName,
             roles: frameworkRoles,
           );
@@ -1124,6 +1126,7 @@ class AppEngine extends ChangeNotifier {
     skipAppAuth = false;
     frameworkRoles = const [];
     frameworkUsername = '';
+    frameworkEmail = '';
     frameworkDisplayName = '';
     notifyListeners();
   }

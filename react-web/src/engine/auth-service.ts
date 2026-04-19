@@ -1,5 +1,5 @@
 import type PocketBase from 'pocketbase'
-import { logWarn, logError } from './log-service.ts'
+import { logInfo, logWarn, logError } from './log-service.ts'
 
 /**
  * Authentication and role-based access control using PocketBase auth.
@@ -169,6 +169,61 @@ export class AuthService {
     }
 
     this._isInitialized = true
+  }
+
+  /**
+   * Ensures the PocketBase `users` auth collection exists with the
+   * ODS-required extension fields (`username`, `displayName`, `roles`).
+   *
+   * PocketBase's `superuser upsert` CLI only creates `_superusers`, not
+   * `users` — so a fresh install has no place for the sign-up /
+   * setup-admin flows to write records. The admin session in this client
+   * is expected to have superadmin rights when this is called (the admin
+   * UI calls it right after login), so the collections API is available.
+   *
+   * Safe to call repeatedly; no-op if the collection already exists and
+   * is usable.
+   */
+  async ensureUsersCollection(): Promise<void> {
+    try {
+      // Probe: if the collection exists and responds, we're done.
+      await this.pb.collection('users').getList(1, 1, { requestKey: null })
+      return
+    } catch {
+      // Either missing or broken — fall through to create.
+    }
+
+    try {
+      await this.pb.collections.create({
+        name: 'users',
+        type: 'auth',
+        // Custom fields on top of PB's built-in auth fields (email,
+        // password, tokenKey, verified). The built-ins are added by PB
+        // automatically when type === 'auth'.
+        fields: [
+          { name: 'username', type: 'text', required: false },
+          { name: 'displayName', type: 'text', required: false },
+          { name: 'roles', type: 'json', required: false, maxSize: 2000 },
+        ],
+        // Rules mirror ODS's "framework handles RBAC at the application
+        // layer" posture. Anonymous signup allowed; only the user or a
+        // superadmin can mutate or see individual records.
+        listRule: 'id != ""',
+        viewRule: 'id != ""',
+        createRule: '',
+        updateRule: 'id = @request.auth.id',
+        deleteRule: null,
+      } as unknown as Record<string, unknown>)
+      logInfo('AuthService', 'Created users collection')
+    } catch (e) {
+      // Likely a benign race — another tab or the app's initialize() may
+      // have created it first. Re-probe; if still unusable, log.
+      try {
+        await this.pb.collection('users').getList(1, 1, { requestKey: null })
+      } catch {
+        logError('AuthService', 'Failed to create users collection', e)
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------

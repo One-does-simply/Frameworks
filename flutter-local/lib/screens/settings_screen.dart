@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../engine/app_engine.dart';
 import '../engine/auth_service.dart';
+import '../engine/framework_auth_service.dart';
 import '../engine/log_service.dart';
 import '../engine/color_helpers.dart';
 import '../engine/theme_resolver.dart';
@@ -17,8 +18,8 @@ import '../models/ods_app_setting.dart';
 import '../models/ods_branding.dart';
 import '../renderer/snackbar_helper.dart';
 import '../screens/app_tour_dialog.dart';
-import '../screens/user_management_screen.dart';
 import '../widgets/color_picker_widgets.dart';
+import '../widgets/framework_user_list.dart';
 import '../widgets/theme_picker_dialog.dart';
 
 /// Full-page settings screen for the Flutter Local framework.
@@ -265,10 +266,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ],
                     ),
                   ),
-                  if (engine.authService.isAdmin)
-                    _InlineUserList(
-                      authService: engine.authService,
-                      availableRoles: app.auth.allRoles,
+                  if (engine.authService.isAdmin && widget.settings.isMultiUserEnabled)
+                    FrameworkUserList(
+                      authService: context.read<FrameworkAuthService>(),
+                    )
+                  else if (engine.authService.isAdmin)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      child: Text(
+                        'Enable Multi-User Mode in Framework Settings to manage users across apps.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                     ),
                   ListTile(
                     leading: const Icon(Icons.logout),
@@ -581,203 +591,6 @@ class _AppSettingsSectionState extends State<_AppSettingsSection> {
 // Import target dialog
 // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Inline user list — shows users directly in settings
-// ---------------------------------------------------------------------------
-
-class _InlineUserList extends StatefulWidget {
-  final AuthService authService;
-  final List<String> availableRoles;
-  const _InlineUserList({required this.authService, required this.availableRoles});
-
-  @override
-  State<_InlineUserList> createState() => _InlineUserListState();
-}
-
-class _InlineUserListState extends State<_InlineUserList> {
-  List<Map<String, dynamic>> _users = [];
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUsers();
-  }
-
-  Future<void> _loadUsers() async {
-    setState(() => _isLoading = true);
-    final users = await widget.authService.listUsers();
-    if (mounted) setState(() { _users = users; _isLoading = false; });
-  }
-
-  Future<void> _addUser() async {
-    final emailController = TextEditingController();
-    final passwordController = TextEditingController();
-    String selectedRole = 'user';
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Add User'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: emailController,
-                decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
-                keyboardType: TextInputType.emailAddress,
-                autofocus: true,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: selectedRole,
-                decoration: const InputDecoration(labelText: 'Role', border: OutlineInputBorder()),
-                items: widget.availableRoles
-                    .where((r) => r != 'guest')
-                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
-                    .toList(),
-                onChanged: (v) => setDialogState(() => selectedRole = v ?? 'user'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Add')),
-          ],
-        ),
-      ),
-    );
-
-    if (result == true && emailController.text.isNotEmpty && passwordController.text.isNotEmpty) {
-      await widget.authService.registerUser(
-        email: emailController.text.trim(),
-        password: passwordController.text,
-        role: selectedRole,
-      );
-      _loadUsers();
-    }
-  }
-
-  Future<void> _deleteUser(Map<String, dynamic> user) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete User'),
-        content: Text('Delete "${user['username']}"? This cannot be undone.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      await widget.authService.deleteUser(user['_id'] as String);
-      _loadUsers();
-    }
-  }
-
-  Future<void> _resetPassword(Map<String, dynamic> user) async {
-    final controller = TextEditingController();
-    final newPassword = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Reset Password for ${user['username']}'),
-        content: TextField(
-          controller: controller,
-          obscureText: true,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'New Password', border: OutlineInputBorder()),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Reset')),
-        ],
-      ),
-    );
-    if (newPassword != null && newPassword.isNotEmpty) {
-      await widget.authService.changePassword(user['_id'] as String, newPassword);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    if (_isLoading) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    return Column(
-      children: [
-        // Add user button
-        ListTile(
-          leading: const Icon(Icons.person_add_outlined),
-          title: const Text('Add User'),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-          onTap: _addUser,
-        ),
-        // User list
-        ..._users.map((user) {
-          final username = user['username'] as String? ?? '?';
-          final displayName = user['display_name'] as String? ?? username;
-          final roles = (user['roles'] as List<dynamic>?)?.cast<String>() ?? [];
-          final isAdmin = roles.contains('admin');
-
-          return ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-            leading: CircleAvatar(
-              radius: 16,
-              backgroundColor: isAdmin ? colorScheme.primary : colorScheme.surfaceContainerHighest,
-              child: Text(
-                displayName[0].toUpperCase(),
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: isAdmin ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            title: Text(displayName, style: const TextStyle(fontSize: 14)),
-            subtitle: Text(
-              roles.join(', '),
-              style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.key, size: 18),
-                  tooltip: 'Reset Password',
-                  onPressed: () => _resetPassword(user),
-                ),
-                IconButton(
-                  icon: Icon(Icons.delete_outline, size: 18, color: colorScheme.error),
-                  tooltip: 'Delete',
-                  onPressed: () => _deleteUser(user),
-                ),
-              ],
-            ),
-          );
-        }),
-      ],
-    );
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Branding section — color picker and corner style

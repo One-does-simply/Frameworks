@@ -727,6 +727,7 @@ export function KanbanComponent({ model }: KanbanComponentProps) {
           return (
             <div
               key={status}
+              data-ods-kanban-column={status}
               className={`flex min-w-[280px] max-w-[320px] flex-shrink-0 flex-col rounded-xl border ${tint} ${
                 isDropTarget ? 'ring-2 ring-primary/50' : ''
               }`}
@@ -1041,6 +1042,7 @@ function KanbanCard({
   return (
     <div
       draggable
+      data-ods-kanban-card={rowId}
       onDragStart={(e) => onDragStart(e, rowId)}
       onDragEnd={onDragEnd}
       onClick={() => onClick(row)}

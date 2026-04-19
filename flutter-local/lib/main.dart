@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import 'debug/debug_panel.dart';
@@ -33,7 +34,7 @@ import 'screens/framework_login_screen.dart';
 import 'screens/framework_settings_screen.dart';
 import 'screens/quick_build_screen.dart';
 import 'screens/settings_screen.dart';
-import 'screens/user_management_screen.dart';
+import 'widgets/framework_user_list.dart';
 
 // ---------------------------------------------------------------------------
 // Entry point
@@ -47,14 +48,19 @@ Future<void> main() async {
     logError('Flutter', 'Unhandled error: ${details.exception}', details.stack?.toString());
   };
 
-  // Initialize logging service before app starts
+  // SettingsStore must initialize BEFORE anything that writes to disk so the
+  // bootstrap-chosen storage folder is known up-front.
+  final settings = SettingsStore();
+  await settings.initialize();
+
+  // Log service uses getOdsDirectory() which respects the bootstrap.
   await LogService.instance.initialize();
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AppEngine()),
-        ChangeNotifierProvider(create: (_) => SettingsStore()),
+        ChangeNotifierProvider<SettingsStore>.value(value: settings),
         ChangeNotifierProvider(create: (_) => FrameworkAuthService()),
       ],
       child: const OdsFrameworkApp(),
@@ -225,6 +231,103 @@ class _OdsFrameworkAppState extends State<OdsFrameworkApp> {
     }
 
     if (mounted) setState(() => _settingsReady = true);
+
+    // Brand new install: prompt the user to pick (or accept) a data folder.
+    if (!settings.hasPickedStorageFolder) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showFirstRunStoragePrompt();
+      });
+    }
+  }
+
+  Future<void> _showFirstRunStoragePrompt() async {
+    if (!mounted) return;
+    final settings = context.read<SettingsStore>();
+    if (settings.hasPickedStorageFolder) return;
+
+    final defaultDir = await settings.odsDirectory;
+    if (!mounted) return;
+
+    String chosenPath = defaultDir.path;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          icon: Icon(
+            Icons.folder_outlined,
+            size: 40,
+            color: Theme.of(ctx).colorScheme.primary,
+          ),
+          title: const Text('Choose Data Folder'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'ODS stores app databases, settings, backups, and logs in this '
+                  'folder. You can change it later from Framework Settings.',
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    chosenPath,
+                    style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                        ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.folder_open, size: 18),
+                    label: const Text('Browse...'),
+                    onPressed: () async {
+                      final picked = await FilePicker.platform.getDirectoryPath(
+                        dialogTitle: 'Choose ODS Data Folder',
+                      );
+                      if (picked != null) {
+                        setDialogState(() => chosenPath = picked);
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () async {
+                final current = await settings.odsDirectory;
+                final differs = !p.equals(current.path, chosenPath);
+                try {
+                  if (differs) {
+                    await settings.moveStorageFolder(chosenPath);
+                  } else {
+                    await settings.markStoragePromptShown();
+                  }
+                } catch (e) {
+                  debugPrint('First-run storage setup failed: $e');
+                  await settings.markStoragePromptShown();
+                }
+                if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
+              },
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -361,6 +464,7 @@ class _RegularUserHomeState extends State<_RegularUserHome> {
     engine.skipAppAuth = true;
     engine.frameworkRoles = fwAuth.currentRoles;
     engine.frameworkUsername = fwAuth.currentUsername;
+    engine.frameworkEmail = fwAuth.currentEmail;
     engine.frameworkDisplayName = fwAuth.currentDisplayName;
 
     final ok = await engine.loadSpec(target.specJson);
@@ -2952,17 +3056,22 @@ class _AppShellState extends State<AppShell> {
                     ],
                   ),
                 ),
-                if (engine.authService.isAdmin)
+                if (engine.authService.isAdmin && settings.isMultiUserEnabled)
                   ListTile(
                     leading: const Icon(Icons.people_outline),
                     title: const Text('Manage Users'),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 24),
                     onTap: () {
                       Navigator.pop(context);
+                      final fwAuth = context.read<FrameworkAuthService>();
                       Navigator.of(context).push(MaterialPageRoute(
-                        builder: (_) => UserManagementScreen(
-                          authService: engine.authService,
-                          availableRoles: app.auth.allRoles,
+                        builder: (_) => Scaffold(
+                          appBar: AppBar(title: const Text('Manage Users')),
+                          body: ListView(
+                            children: [
+                              FrameworkUserList(authService: fwAuth),
+                            ],
+                          ),
                         ),
                       ));
                     },

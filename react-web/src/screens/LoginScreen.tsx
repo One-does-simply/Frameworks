@@ -114,7 +114,9 @@ export function LoginScreen() {
       setLoading(false)
 
       if (loginSuccess) {
-        useAppStore.setState({ needsLogin: false })
+        // Clear both gates: the user is now logged in, and self-registration
+        // is a valid path even when no admin has been set up yet.
+        useAppStore.setState({ needsLogin: false, needsAdminSetup: false })
       } else {
         setError('Account created but login failed. Please try signing in.')
         setIsSignUp(false)

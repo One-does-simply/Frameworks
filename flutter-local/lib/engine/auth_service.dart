@@ -20,6 +20,7 @@ class AuthService extends ChangeNotifier {
   // Session state
   String? _currentUserId;
   String? _currentUsername;
+  String? _currentEmail;
   String? _currentDisplayName;
   List<String> _currentRoles = [];
   bool _isAdminSetUp = false;
@@ -40,11 +41,13 @@ class AuthService extends ChangeNotifier {
   /// isAdmin, etc.) work without a separate per-app login.
   void injectFrameworkAuth({
     required String username,
+    String email = '',
     required String displayName,
     required List<String> roles,
   }) {
     _currentUserId = 'framework'; // Sentinel: signals "logged in" without a real per-app user
     _currentUsername = username.isNotEmpty ? username : 'user';
+    _currentEmail = email;
     _currentDisplayName = displayName.isNotEmpty ? displayName : username.isNotEmpty ? username : 'User';
     _currentRoles = roles.isNotEmpty ? roles : const ['user'];
     _isAdminSetUp = true;
@@ -64,6 +67,7 @@ class AuthService extends ChangeNotifier {
 
   String? get currentUserId => _currentUserId;
   String get currentUsername => _currentUsername ?? 'guest';
+  String get currentEmail => _currentEmail ?? '';
   String get currentDisplayName => _currentDisplayName ?? 'Guest';
 
   /// Returns the current user's roles. Guests get ['guest'].
@@ -167,6 +171,7 @@ class AuthService extends ChangeNotifier {
     _clearFailedAttempts(email);
     _currentUserId = user['_id'] as String;
     _currentUsername = user['username'] as String? ?? email;
+    _currentEmail = user['email'] as String? ?? email;
     _currentDisplayName = user['display_name'] as String?;
     _currentRoles = await _dataStore.getUserRoles(_currentUserId!);
     _lastActivity = DateTime.now();
@@ -195,6 +200,7 @@ class AuthService extends ChangeNotifier {
     logInfo('AuthService', '[SECURITY] logout: ${_currentUsername ?? 'unknown'}');
     _currentUserId = null;
     _currentUsername = null;
+    _currentEmail = null;
     _currentDisplayName = null;
     _currentRoles = [];
     _lastActivity = null;
@@ -203,16 +209,26 @@ class AuthService extends ChangeNotifier {
 
   /// Creates the initial admin account. Called from the admin setup wizard.
   /// Returns true on success.
-  Future<bool> setupAdmin(String email, String password) async {
+  ///
+  /// Pass [displayName] to store a human-readable name separate from the
+  /// login email. Defaults to the email's local part when omitted.
+  Future<bool> setupAdmin(
+    String email,
+    String password, {
+    String? displayName,
+  }) async {
     try {
       final salt = PasswordHasher.generateSalt();
       final hash = PasswordHasher.hash(password, salt);
+      final resolvedName = (displayName != null && displayName.trim().isNotEmpty)
+          ? displayName.trim()
+          : email.split('@').first;
 
       final userId = await _dataStore.createUser(
         email: email,
         passwordHash: hash,
         salt: salt,
-        displayName: email,
+        displayName: resolvedName,
       );
 
       await _dataStore.assignRole(userId, 'admin');
@@ -223,7 +239,8 @@ class AuthService extends ChangeNotifier {
       // Auto-login as the new admin.
       _currentUserId = userId;
       _currentUsername = email;
-      _currentDisplayName = email;
+      _currentEmail = email;
+      _currentDisplayName = resolvedName;
       _currentRoles = ['admin', 'user'];
       _lastActivity = DateTime.now();
       logInfo('AuthService', '[SECURITY] admin_setup: $email (id=$userId)');
@@ -320,6 +337,7 @@ class AuthService extends ChangeNotifier {
   void reset() {
     _currentUserId = null;
     _currentUsername = null;
+    _currentEmail = null;
     _currentDisplayName = null;
     _currentRoles = [];
     _isAdminSetUp = false;

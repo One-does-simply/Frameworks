@@ -26,6 +26,7 @@ class AdminSetupScreen extends StatefulWidget {
 
 class _AdminSetupScreenState extends State<AdminSetupScreen> {
   final _emailController = TextEditingController();
+  final _nameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
   bool _isLoading = false;
@@ -35,6 +36,7 @@ class _AdminSetupScreenState extends State<AdminSetupScreen> {
   @override
   void dispose() {
     _emailController.dispose();
+    _nameController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
     super.dispose();
@@ -67,7 +69,12 @@ class _AdminSetupScreenState extends State<AdminSetupScreen> {
       _error = null;
     });
 
-    final success = await widget.authService.setupAdmin(email, password);
+    final displayName = _nameController.text.trim();
+    final success = await widget.authService.setupAdmin(
+      email,
+      password,
+      displayName: displayName.isNotEmpty ? displayName : null,
+    );
 
     if (!mounted) return;
 
@@ -124,6 +131,16 @@ class _AdminSetupScreenState extends State<AdminSetupScreen> {
                   ),
                   const SizedBox(height: 32),
                   TextField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Name',
+                      prefixIcon: Icon(Icons.person_outline),
+                    ),
+                    textInputAction: TextInputAction.next,
+                    autofocus: true,
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
                     controller: _emailController,
                     decoration: const InputDecoration(
                       labelText: 'Admin Email',
@@ -131,7 +148,6 @@ class _AdminSetupScreenState extends State<AdminSetupScreen> {
                     ),
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
-                    autofocus: true,
                   ),
                   const SizedBox(height: 16),
                   TextField(

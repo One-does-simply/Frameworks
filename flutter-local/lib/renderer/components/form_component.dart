@@ -274,6 +274,8 @@ class _OdsFieldWidgetState extends State<_OdsFieldWidget> {
       switch (prop) {
         case 'NAME':
           return engine.authService.currentDisplayName;
+        case 'EMAIL':
+          return engine.authService.currentEmail;
         case 'USERNAME':
           return engine.authService.currentUsername;
         default:

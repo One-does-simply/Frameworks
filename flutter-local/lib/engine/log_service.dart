@@ -3,7 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+
+import 'settings_store.dart';
 
 /// Logging service for ODS Flutter.
 ///
@@ -96,14 +97,11 @@ class LogService {
 
   LogSettings get settings => _settings;
 
-  /// Initialize the log service. Call once at app startup.
+  /// Initialize the log service. Call once at app startup, after
+  /// [SettingsStore.initialize] so the bootstrap-chosen folder is honored.
   Future<void> initialize() async {
     if (_initialized) return;
-    final docs = await getApplicationDocumentsDirectory();
-    final odsDir = Directory(p.join(docs.path, 'One Does Simply'));
-    if (!await odsDir.exists()) {
-      await odsDir.create(recursive: true);
-    }
+    final odsDir = await getOdsDirectory();
     _logFile = File(p.join(odsDir.path, 'ods_logs.json'));
     _settingsFile = File(p.join(odsDir.path, 'ods_log_settings.json'));
 
@@ -294,11 +292,7 @@ class LogService {
   Future<String> downloadLogs() async {
     final text = exportLogsAsText();
     final date = DateTime.now().toIso8601String().substring(0, 10);
-    final docs = await getApplicationDocumentsDirectory();
-    final odsDir = Directory(p.join(docs.path, 'One Does Simply'));
-    if (!await odsDir.exists()) {
-      await odsDir.create(recursive: true);
-    }
+    final odsDir = await getOdsDirectory();
     final file = File(p.join(odsDir.path, 'ods_logs_$date.txt'));
     await file.writeAsString(text);
     return file.path;

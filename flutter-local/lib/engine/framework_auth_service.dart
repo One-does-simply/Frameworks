@@ -31,6 +31,7 @@ class FrameworkAuthService extends ChangeNotifier {
   // Session state
   String? _currentUserId;
   String? _currentUsername;
+  String? _currentEmail;
   String? _currentDisplayName;
   List<String> _currentRoles = [];
 
@@ -51,6 +52,7 @@ class FrameworkAuthService extends ChangeNotifier {
   bool get isAdmin => _currentRoles.contains('admin');
   String? get currentUserId => _currentUserId;
   String get currentUsername => _currentUsername ?? 'guest';
+  String get currentEmail => _currentEmail ?? '';
   String get currentDisplayName => _currentDisplayName ?? 'Guest';
   List<String> get currentRoles => isGuest ? const ['guest'] : _currentRoles;
 
@@ -117,7 +119,9 @@ class FrameworkAuthService extends ChangeNotifier {
         'username': username ?? email,
         'password_hash': hash,
         'salt': salt,
-        'display_name': displayName ?? username ?? email,
+        'display_name': (displayName != null && displayName.trim().isNotEmpty)
+            ? displayName.trim()
+            : (username?.trim().isNotEmpty == true ? username!.trim() : email.split('@').first),
         '_createdAt': DateTime.now().toIso8601String(),
       });
       await db.insert('_ods_fw_user_roles', {'_id': _generateFwId(), 'user_id': id, 'role': 'admin'});
@@ -127,7 +131,10 @@ class FrameworkAuthService extends ChangeNotifier {
       // Auto-login
       _currentUserId = id;
       _currentUsername = username ?? email;
-      _currentDisplayName = displayName ?? username ?? email;
+      _currentEmail = email;
+      _currentDisplayName = (displayName != null && displayName.trim().isNotEmpty)
+          ? displayName.trim()
+          : (username?.trim().isNotEmpty == true ? username!.trim() : email.split('@').first);
       _currentRoles = ['admin', 'user'];
       _lastActivity = DateTime.now();
       logInfo('FrameworkAuthService', '[SECURITY] admin_setup: $email (id=$id)');
@@ -216,6 +223,7 @@ class FrameworkAuthService extends ChangeNotifier {
 
     _currentUserId = userId;
     _currentUsername = user['username'] as String? ?? email;
+    _currentEmail = user['email'] as String? ?? email;
     _currentDisplayName = user['display_name'] as String? ?? _currentUsername;
     _currentRoles = roleRows.map((r) => r['role'] as String).toList();
     _lastActivity = DateTime.now();
@@ -229,6 +237,7 @@ class FrameworkAuthService extends ChangeNotifier {
     logInfo('FrameworkAuthService', '[SECURITY] logout: ${_currentUsername ?? 'unknown'}');
     _currentUserId = null;
     _currentUsername = null;
+    _currentEmail = null;
     _currentDisplayName = null;
     _currentRoles = [];
     _lastActivity = null;
@@ -255,7 +264,9 @@ class FrameworkAuthService extends ChangeNotifier {
         'username': username ?? email,
         'password_hash': hash,
         'salt': salt,
-        'display_name': displayName ?? username ?? email,
+        'display_name': (displayName != null && displayName.trim().isNotEmpty)
+            ? displayName.trim()
+            : (username?.trim().isNotEmpty == true ? username!.trim() : email.split('@').first),
         '_createdAt': DateTime.now().toIso8601String(),
       });
       await db.insert('_ods_fw_user_roles', {'_id': _generateFwId(), 'user_id': id, 'role': role});

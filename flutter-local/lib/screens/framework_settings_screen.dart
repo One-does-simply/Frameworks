@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../engine/framework_auth_service.dart';
 import '../engine/settings_store.dart';
+import '../widgets/framework_user_list.dart';
 import '../widgets/theme_picker_dialog.dart';
 import 'framework_admin_setup_screen.dart';
 
@@ -29,6 +30,134 @@ class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
   bool get _isAdmin {
     final fwAuth = context.read<FrameworkAuthService>();
     return !settings.isMultiUserEnabled || fwAuth.isAdmin;
+  }
+
+  Future<void> _changeDataFolder() async {
+    final picked = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Choose ODS Data Folder',
+    );
+    if (picked == null || !mounted) return;
+
+    final currentDir = await settings.odsDirectory;
+    if (!mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.drive_file_move_outlined, size: 40),
+        title: const Text('Move Data?'),
+        content: SizedBox(
+          width: 460,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('All app databases, settings, logs, and backups will be copied to:'),
+              const SizedBox(height: 8),
+              _PathBox(path: picked),
+              const SizedBox(height: 12),
+              const Text('and removed from:'),
+              const SizedBox(height: 8),
+              _PathBox(path: currentDir.path),
+              const SizedBox(height: 12),
+              Text(
+                'Make sure no ODS app is open. The move cannot be undone.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(ctx).colorScheme.error,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Move')),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    await _runMove(() => settings.moveStorageFolder(picked));
+  }
+
+  Future<void> _resetDataFolder() async {
+    final legacyDir = await getLegacyOdsDirectory();
+    final currentDir = await settings.odsDirectory;
+    if (!mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.restore, size: 40),
+        title: const Text('Reset Data Folder?'),
+        content: SizedBox(
+          width: 460,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('All data will be moved back to the default location:'),
+              const SizedBox(height: 8),
+              _PathBox(path: legacyDir.path),
+              const SizedBox(height: 12),
+              const Text('and removed from:'),
+              const SizedBox(height: 8),
+              _PathBox(path: currentDir.path),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Reset')),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    await _runMove(() => settings.resetStorageFolder());
+  }
+
+  Future<void> _runMove(Future<void> Function() action) async {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: SizedBox(
+          height: 80,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ),
+    );
+
+    String? error;
+    try {
+      await action();
+    } catch (e) {
+      error = e.toString();
+    }
+
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop(); // dismiss spinner
+
+    if (error != null) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: const Icon(Icons.error_outline, size: 40),
+          title: const Text('Move Failed'),
+          content: Text(error!),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
+          ],
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Data folder updated')),
+      );
+    }
+    if (mounted) setState(() {});
   }
 
   @override
@@ -158,27 +287,16 @@ class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
                   ? IconButton(
                       icon: const Icon(Icons.clear, size: 18),
                       tooltip: 'Reset to default',
-                      onPressed: () {
-                        settings.setStorageFolder(null);
-                        setState(() {});
-                      },
+                      onPressed: () => _resetDataFolder(),
                     )
                   : null,
-              onTap: () async {
-                final picked = await FilePicker.platform.getDirectoryPath(
-                  dialogTitle: 'Choose ODS Data Folder',
-                );
-                if (picked != null) {
-                  settings.setStorageFolder(picked);
-                  setState(() {});
-                }
-              },
+              onTap: () => _changeDataFolder(),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: Text(
                 'All app databases, user data, backups, and settings are stored in this folder. '
-                'Changing this will not move existing data.',
+                'Changing this moves all existing data to the new location.',
                 style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             ),
@@ -243,7 +361,7 @@ class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
                   },
           ),
           if (settings.isMultiUserEnabled) ...[
-            _FrameworkUserList(authService: context.read<FrameworkAuthService>()),
+            FrameworkUserList(authService: context.read<FrameworkAuthService>()),
             ListTile(
               leading: const Icon(Icons.logout),
               title: const Text('Logout'),
@@ -288,301 +406,26 @@ class _FrameworkSettingsScreenState extends State<FrameworkSettingsScreen> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Framework user management — inline user list with add/edit/delete
-// ---------------------------------------------------------------------------
-
-class _FrameworkUserList extends StatefulWidget {
-  final FrameworkAuthService authService;
-  const _FrameworkUserList({required this.authService});
-
-  @override
-  State<_FrameworkUserList> createState() => _FrameworkUserListState();
-}
-
-class _FrameworkUserListState extends State<_FrameworkUserList> {
-  List<Map<String, dynamic>> _users = [];
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUsers();
-  }
-
-  Future<void> _loadUsers() async {
-    setState(() => _isLoading = true);
-    final users = await widget.authService.listUsers();
-    if (mounted) setState(() { _users = users; _isLoading = false; });
-  }
-
-  Future<void> _addUser() async {
-    final emailCtrl = TextEditingController();
-    final displayNameCtrl = TextEditingController();
-    final passwordCtrl = TextEditingController();
-    String selectedRole = 'user';
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Add User'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: emailCtrl,
-                decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
-                keyboardType: TextInputType.emailAddress,
-                autofocus: true,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: displayNameCtrl,
-                decoration: const InputDecoration(labelText: 'Display Name (optional)', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: passwordCtrl,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  helperText: 'Min. 8 characters',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: selectedRole,
-                decoration: const InputDecoration(labelText: 'Role', border: OutlineInputBorder()),
-                items: ['admin', 'user']
-                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
-                    .toList(),
-                onChanged: (v) => setDialogState(() => selectedRole = v ?? 'user'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Add')),
-          ],
-        ),
-      ),
-    );
-
-    if (result == true && emailCtrl.text.trim().isNotEmpty && passwordCtrl.text.isNotEmpty) {
-      if (passwordCtrl.text.length < 8) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Password must be at least 8 characters.')),
-          );
-        }
-      } else {
-        await widget.authService.registerUser(
-          email: emailCtrl.text.trim(),
-          password: passwordCtrl.text,
-          role: selectedRole,
-          displayName: displayNameCtrl.text.trim().isNotEmpty ? displayNameCtrl.text.trim() : null,
-        );
-        _loadUsers();
-      }
-    }
-  }
-
-  Future<void> _editUser(Map<String, dynamic> user) async {
-    final displayNameCtrl = TextEditingController(text: user['display_name'] as String? ?? '');
-    final roles = (user['roles'] as List<dynamic>?)?.cast<String>() ?? [];
-    String selectedRole = roles.contains('admin') ? 'admin' : 'user';
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text('Edit ${user['username']}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: displayNameCtrl,
-                autofocus: true,
-                decoration: const InputDecoration(labelText: 'Display Name', border: OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: selectedRole,
-                decoration: const InputDecoration(labelText: 'Role', border: OutlineInputBorder()),
-                items: ['admin', 'user']
-                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
-                    .toList(),
-                onChanged: (v) => setDialogState(() => selectedRole = v ?? 'user'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
-          ],
-        ),
-      ),
-    );
-
-    if (result == true) {
-      final newRoles = selectedRole == 'admin' ? ['admin', 'user'] : ['user'];
-      await widget.authService.updateUser(
-        user['_id'] as String,
-        displayName: displayNameCtrl.text.trim().isNotEmpty ? displayNameCtrl.text.trim() : null,
-        roles: newRoles,
-      );
-      _loadUsers();
-    }
-  }
-
-  Future<void> _resetPassword(Map<String, dynamic> user) async {
-    final controller = TextEditingController();
-    final newPassword = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Reset Password — ${user['username']}'),
-        content: TextField(
-          controller: controller,
-          obscureText: true,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'New Password',
-            helperText: 'Must be at least 8 characters',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Reset')),
-        ],
-      ),
-    );
-    if (newPassword != null && newPassword.isNotEmpty) {
-      if (newPassword.length < 8) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Password must be at least 8 characters.')),
-          );
-        }
-      } else {
-        await widget.authService.changePassword(user['_id'] as String, newPassword);
-      }
-    }
-  }
-
-  Future<void> _deleteUser(Map<String, dynamic> user) async {
-    if (user['_id'] == widget.authService.currentUserId) return; // Can't delete yourself
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete User'),
-        content: Text('Delete "${user['username']}"? This cannot be undone.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      await widget.authService.deleteUser(user['_id'] as String);
-      _loadUsers();
-    }
-  }
+class _PathBox extends StatelessWidget {
+  final String path;
+  const _PathBox({required this.path});
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    if (_isLoading) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    return Column(
-      children: [
-        // Add user
-        ListTile(
-          leading: const Icon(Icons.person_add_outlined),
-          title: const Text('Add User'),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-          onTap: _addUser,
-        ),
-        // User list
-        ..._users.map((user) {
-          final username = user['username'] as String? ?? '?';
-          final displayName = user['display_name'] as String? ?? username;
-          final roles = (user['roles'] as List<dynamic>?)?.cast<String>() ?? [];
-          final isAdmin = roles.contains('admin');
-          final isSelf = user['_id'] == widget.authService.currentUserId;
-
-          return ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-            leading: CircleAvatar(
-              radius: 16,
-              backgroundColor: isAdmin ? colorScheme.primary : colorScheme.surfaceContainerHighest,
-              child: Text(
-                displayName[0].toUpperCase(),
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: isAdmin ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            title: Row(
-              children: [
-                Text(displayName, style: const TextStyle(fontSize: 14)),
-                if (isSelf) ...[
-                  const SizedBox(width: 6),
-                  Text('(you)', style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant)),
-                ],
-              ],
-            ),
-            subtitle: Text(
-              roles.join(', '),
-              style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined, size: 18),
-                  tooltip: 'Edit',
-                  onPressed: () => _editUser(user),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.key, size: 18),
-                  tooltip: 'Reset Password',
-                  onPressed: () => _resetPassword(user),
-                ),
-                if (!isSelf)
-                  IconButton(
-                    icon: Icon(Icons.delete_outline, size: 18, color: colorScheme.error),
-                    tooltip: 'Delete',
-                    onPressed: () => _deleteUser(user),
-                  ),
-              ],
-            ),
-          );
-        }),
-      ],
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        path,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+      ),
     );
   }
 }
-
-// ---------------------------------------------------------------------------
-// Section header
-// ---------------------------------------------------------------------------
 
 class _SectionHeader extends StatelessWidget {
   final String label;

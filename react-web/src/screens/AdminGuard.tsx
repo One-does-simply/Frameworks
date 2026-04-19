@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Outlet } from 'react-router'
 import { DataService } from '@/engine/data-service.ts'
 import { AppRegistry } from '@/engine/app-registry.ts'
+import { AuthService } from '@/engine/auth-service.ts'
 import pb from '@/lib/pocketbase.ts'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,9 +25,11 @@ export function AdminGuard() {
     const ds = new DataService(pb)
     const restored = await ds.tryRestoreAdminAuth()
     if (restored) {
-      // Ensure _ods_apps collection exists
+      // Ensure framework-level collections exist (_ods_apps for the app
+      // registry, users for the per-app sign-up flow).
       const registry = new AppRegistry(pb)
       await registry.ensureCollection()
+      await new AuthService(pb).ensureUsersCollection()
       setStatus('authenticated')
     } else {
       setStatus('login')
@@ -48,6 +51,7 @@ export function AdminGuard() {
     if (success) {
       const registry = new AppRegistry(pb)
       await registry.ensureCollection()
+      await new AuthService(pb).ensureUsersCollection()
       setStatus('authenticated')
     } else {
       setAuthError(

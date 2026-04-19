@@ -6,9 +6,6 @@ const pb = new PocketBase(
   import.meta.env.VITE_POCKETBASE_URL ?? 'http://127.0.0.1:8090'
 )
 
-// Force fresh login on every page load — no persisted sessions.
-pb.authStore.clear()
-
 // Log PocketBase HTTP errors
 pb.afterSend = function (_response: Response, data: unknown) {
   // PocketBase SDK calls afterSend for all responses; errors are thrown separately.
